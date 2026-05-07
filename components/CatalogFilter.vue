@@ -1,9 +1,35 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	defineProps<{
-		activeFilters: string[]
+	type ActiveFilter = { id: string; label: string }
+
+	const props = withDefaults(
+		defineProps<{
+			activeFilters: Array<string | ActiveFilter>
+			productCount?: number
+			sort?: string
+		}>(),
+		{
+			productCount: 0,
+			sort: 'default'
+		}
+	)
+
+	const emit = defineEmits<{
+		(e: 'update:sort', value: string): void
+		(e: 'remove', id: string): void
+		(e: 'clear'): void
+		(e: 'open'): void
 	}>()
+
+	const normalizedActiveFilters = computed<ActiveFilter[]>(() =>
+		props.activeFilters.map((f) => (typeof f === 'string' ? { id: f, label: f } : f))
+	)
+
+	const sortLocal = computed({
+		get: () => props.sort ?? 'default',
+		set: (v: string) => emit('update:sort', v)
+	})
 </script>
 
 <template>
@@ -13,16 +39,17 @@
 				<div class="flex items-center gap-4 md:gap-8">
 					<button
 						class="flex items-center justify-between md:justify-normal gap-2 bg-[#215EA5] text-white px-5 py-2.5 rounded-full text-sm md:text-base hover:bg-[#124080] transition-all"
+						@click="emit('open')"
 					>
 						<Icon name="filter" class="w-4 h-4 md:w-5 md:h-5 text-white" />
 						Filtrele
 						<span
 							class="bg-white text-[#1853a0] w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-							>2</span
+							>{{ normalizedActiveFilters.length }}</span
 						>
 					</button>
 
-					<span class="text-[#4A5565] text-sm hidden sm:inline">128 ürün bulundu</span>
+					<span class="text-[#4A5565] text-sm hidden sm:inline">{{ productCount }} ürün bulundu</span>
 				</div>
 
 				<div class="hidden md:flex items-center gap-2">
@@ -30,11 +57,12 @@
 					<div class="relative min-w-[140px] md:min-w-[180px]">
 						<select
 							class="w-full bg-gray-50 border border-gray-200 rounded-full px-5 py-2.5 text-sm md:text-base font-semibold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
+							v-model="sortLocal"
 						>
-							<option>Varsayılan</option>
-							<option>En Yeniler</option>
-							<option>Düşük Fiyat</option>
-							<option>Yüksek Fiyat</option>
+							<option value="default">Varsayılan</option>
+							<option value="newest">En Yeniler</option>
+							<option value="price_asc">Düşük Fiyat</option>
+							<option value="price_desc">Yüksek Fiyat</option>
 						</select>
 						<Icon
 							name="arrowBottom"
@@ -45,21 +73,27 @@
 			</div>
 
 			<!-- Активные теги -->
-			<div class="hidden md:flex flex-wrap items-center mt-6 pt-4 border-t border-t-gray-200">
+			<div
+				v-if="normalizedActiveFilters.length"
+				class="hidden md:flex flex-wrap items-center mt-6 pt-4 border-t border-t-gray-200"
+			>
 				<span class="text-xs md:text-sm font-semibold text-[#4A5565] uppercase tracking-wider mr-2"
 					>Aktif Filtreler:</span
 				>
 				<div class="flex items-center gap-3">
 					<div
-						v-for="(filter, index) in activeFilters"
-						:key="index"
+						v-for="filter in normalizedActiveFilters"
+						:key="filter.id"
 						class="bg-[#215EA5B2] text-white px-4 py-2 rounded-full text-xs md:text-sm flex items-center gap-2 border border-[#1853a0]/20 hover:bg-[#124080] cursor-pointer transition-all"
+						@click="emit('remove', filter.id)"
 					>
-						{{ filter }}
+						{{ filter.label }}
 						<Icon name="close" class="w-3 h-3 md:w-4 md:h-4" />
 					</div>
 				</div>
-				<button class="text-[#4A5565] text-xs md:text-sm hover:underline ml-2">Tümünü Temizle</button>
+				<button class="text-[#4A5565] text-xs md:text-sm hover:underline ml-2" @click="emit('clear')">
+					Tümünü Temizle
+				</button>
 			</div>
 		</div>
 	</section>

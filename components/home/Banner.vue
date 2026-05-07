@@ -7,6 +7,9 @@
 	defineProps<{
 		pending?: boolean
 		breadcrumbs?: BreadcrumbItem[]
+		category?: {
+			title: string
+		}
 	}>()
 
 	const modules = [Pagination, Navigation, Autoplay]
@@ -52,6 +55,13 @@
 						>
 							Fotoğrafını yükle
 						</button>
+					</div>
+
+					<div
+						v-if="category?.title"
+						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold"
+					>
+						Çok Satılan Tablolar
 					</div>
 
 					<!-- Маленький элемент снизу справа -->

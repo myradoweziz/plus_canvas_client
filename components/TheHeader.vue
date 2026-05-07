@@ -23,7 +23,7 @@
 		:class="{ 'shadow-lg shadow-black/30': isScrolled }"
 		ref="headerRef"
 	>
-		<div class="max-w-[1400px] mx-auto px-4 md:px-10 py-2 md:py-2">
+		<div class="max-w-[1400px] mx-auto py-2 md:py-2">
 			<div class="hidden md:block">
 				<header-top />
 			</div>

@@ -13,10 +13,14 @@
 		product: Product
 		showButton?: boolean
 	}>()
+
+	const emit = defineEmits<{
+		(e: 'open-uploader'): void
+	}>()
 </script>
 
 <template>
-	<div class="group flex flex-col h-full rounded-2xl">
+	<div class="group flex flex-col h-full rounded-2xl cursor-pointer" @click.stop="emit('open-uploader')">
 		<!-- Картинка -->
 		<div class="relative w-full rounded-2xl overflow-hidden bg-gray-100 aspect-[4/5]">
 			<nuxt-link to="/">
@@ -36,7 +40,9 @@
 			</div>
 
 			<!-- Кнопки действий -->
-			<div class="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+			<div
+				class="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+			>
 				<button
 					class="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white flex items-center justify-center shadow-md hover:bg-[#1853a0] hover:text-white transition-all text-[#1853a0]"
 				>
@@ -53,7 +59,9 @@
 		<!-- Инфа -->
 		<div class="flex flex-col flex-grow pt-4">
 			<nuxt-link to="/">
-				<h3 class="text-[15px] md:text-[16px] font-semibold text-gray-900 leading-snug hover:text-[#1853a0] transition-colors">
+				<h3
+					class="text-[15px] md:text-[16px] font-semibold text-gray-900 leading-snug hover:text-[#1853a0] transition-colors"
+				>
 					{{ product.title }}
 				</h3>
 			</nuxt-link>
