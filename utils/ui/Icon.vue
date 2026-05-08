@@ -11,5 +11,5 @@
 </script>
 
 <template>
-	<span class="flex items-center justify-center" v-html="path" />
+	<span class="flex items-center justify-center cursor-pointer" v-html="path" />
 </template>
