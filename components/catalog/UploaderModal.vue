@@ -7,11 +7,22 @@
 
 	const emit = defineEmits<{
 		(e: 'close'): void
+		(e: 'go-next'): void
 	}>()
+
+	const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 	const fileInput = ref<HTMLInputElement | null>(null)
 	const isDragging = ref(false)
 	const uploadedImages = ref<{ id: number; url: string; progress: number; isUploading: boolean }[]>([])
+	const errorMessage = ref<string | null>(null)
+
+	const showError = (message: string) => {
+		errorMessage.value = message
+		window.setTimeout(() => {
+			if (errorMessage.value === message) errorMessage.value = null
+		}, 4000)
+	}
 
 	const openFileSelector = () => {
 		fileInput.value?.click()
@@ -56,12 +67,21 @@
 		}, 300)
 	}
 
+	const validateAndUpload = (file: File) => {
+		if (file.size > MAX_FILE_SIZE_BYTES) {
+			const sizeMb = (file.size / 1024 / 1024).toFixed(1)
+			showError(`Файл “${file.name}” слишком большой (${sizeMb} MB). Максимум 10 MB.`)
+			return
+		}
+		simulateUpload(file)
+	}
+
 	const handleDrop = (e: DragEvent) => {
 		e.preventDefault()
 		isDragging.value = false
 		const files = e.dataTransfer?.files
 		if (files) {
-			Array.from(files).forEach((file) => simulateUpload(file))
+			Array.from(files).forEach((file) => validateAndUpload(file))
 		}
 	}
 
@@ -69,9 +89,8 @@
 		const target = e.target as HTMLInputElement
 		const files = target.files
 		if (files) {
-			Array.from(files).forEach((file) => simulateUpload(file))
+			Array.from(files).forEach((file) => validateAndUpload(file))
 		}
-		// Clear value to allow re-selecting the same file
 		target.value = ''
 	}
 
@@ -81,6 +100,10 @@
 
 	const resetUpload = () => {
 		uploadedImages.value = []
+	}
+
+	const goNext = () => {
+		emit('go-next')
 	}
 </script>
 
@@ -101,7 +124,14 @@
 					</button>
 
 					<!-- Hidden File Input -->
-					<input type="file" ref="fileInput" class="hidden" @change="handleFileSelect" accept="image/*" multiple />
+					<input
+						type="file"
+						ref="fileInput"
+						class="hidden"
+						@change="handleFileSelect"
+						accept="image/png, image/jpeg, image/jpg, image/gif"
+						multiple
+					/>
 
 					<!-- Dynamic Content Area -->
 					<div class="w-full flex flex-col items-center">
@@ -160,7 +190,9 @@
 							<!-- Action Footer -->
 							<div class="mt-auto pt-10 flex gap-4 w-full justify-center">
 								<button
-									class="bg-[#2B7FFF] hover:bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-100 transition-all min-w-[200px]"
+									@click="goNext"
+									:disabled="uploadedImages.length === 0"
+									class="bg-[#2B7FFF] hover:bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-100 transition-all min-w-[200px] disabled:opacity-50 disabled:cursor-not-allowed"
 								>
 									Devam Et
 								</button>
@@ -220,6 +252,14 @@
 							<span class="font-bold text-[#2B7FFF]">İpucu:</span> En iyi sonuç için yüksek çözünürlüklü (300 DPI)
 							görüntüler kullanın.
 						</p>
+					</div>
+
+					<!-- Error Message -->
+					<div
+						v-if="errorMessage"
+						class="mt-4 w-full max-w-2xl bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-700 font-medium"
+					>
+						{{ errorMessage }}
 					</div>
 
 					<div class="mt-12 text-[10px] text-gray-300 font-bold uppercase tracking-[0.2em]">

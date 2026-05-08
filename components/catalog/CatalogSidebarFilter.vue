@@ -71,7 +71,7 @@
 			</div>
 		</div>
 
-		<div class="mt-8 p-5 px-6 bg-slate-100">
+		<div class="mt-8 p-5 px-6 bg-slate-50">
 			<div
 				v-for="main in mainCategories"
 				:key="main.id!"

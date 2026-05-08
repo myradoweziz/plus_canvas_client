@@ -335,6 +335,10 @@
 	const closeUploader = () => {
 		isUploaderOpen.value = false
 	}
+
+	const goNext = () => {
+		router.push(`/catalog/${catalogId}/products/${filteredProducts.value[0]?.id}`)
+	}
 </script>
 
 <template>
@@ -352,7 +356,7 @@
 		/>
 
 		<!-- Uploader Modal -->
-		<catalog-uploader-modal :is-open="isUploaderOpen" @close="closeUploader" />
+		<catalog-uploader-modal :is-open="isUploaderOpen" @close="closeUploader" @go-next="goNext" />
 
 		<!-- Mobile drawer filters -->
 		<Teleport to="body">

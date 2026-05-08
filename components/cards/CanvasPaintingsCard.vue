@@ -23,13 +23,11 @@
 	<div class="group flex flex-col h-full rounded-2xl cursor-pointer" @click.stop="emit('open-uploader')">
 		<!-- Картинка -->
 		<div class="relative w-full rounded-2xl overflow-hidden bg-gray-100 aspect-[4/5]">
-			<nuxt-link to="/">
-				<img
-					:src="product.image"
-					:alt="product.title"
-					class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-				/>
-			</nuxt-link>
+			<img
+				:src="product.image"
+				:alt="product.title"
+				class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+			/>
 
 			<!-- Бейдж скидки -->
 			<div
@@ -58,13 +56,11 @@
 
 		<!-- Инфа -->
 		<div class="flex flex-col flex-grow pt-4">
-			<nuxt-link to="/">
-				<h3
-					class="text-[15px] md:text-[16px] font-semibold text-gray-900 leading-snug hover:text-[#1853a0] transition-colors"
-				>
-					{{ product.title }}
-				</h3>
-			</nuxt-link>
+			<h3
+				class="text-[15px] md:text-[16px] font-semibold text-gray-900 leading-snug hover:text-[#1853a0] transition-colors"
+			>
+				{{ product.title }}
+			</h3>
 			<div class="flex items-center gap-2 mt-1.5 md:mt-2">
 				<span class="text-sm md:text-[14px] font-medium text-gray-400 line-through">₺{{ product.oldPrice }}</span>
 				<span class="text-lg md:text-[18px] font-bold text-[#1853a0]">₺{{ product.price }}</span>
