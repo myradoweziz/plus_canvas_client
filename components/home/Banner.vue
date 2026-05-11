@@ -35,10 +35,14 @@
 		:loop="true"
 	>
 		<SwiperSlide v-for="banner in banners" :key="banner.id">
-			<div class="relative w-full h-[350px] sm:h-[450px] md:h-[550px] lg:h-[650px]">
+			<div class="relative w-full sm:h-[350px] md:h-[550px] lg:h-[750px]">
 				<!-- Главная ссылка (фон и основная область) -->
 				<nuxt-link :to="banner.url" class="absolute inset-0 block">
-					<img :src="banner.image_url" alt="banner" class="w-full h-full object-cover object-center" />
+					<img
+						:src="banner.image_url"
+						alt="banner"
+						class="w-full h-full object-cover object-center max-md:object-cover"
+					/>
 					<div class="absolute inset-0 bg-black/40"></div>
 				</nuxt-link>
 
