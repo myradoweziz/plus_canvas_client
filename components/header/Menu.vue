@@ -19,7 +19,7 @@
 
 	const menu = [
 		{ id: 0, title: 'KİŞİYE ÖZEL KANVAS TABLO', link: '/catalog/1' },
-		{ id: 1, title: 'KATEGORİLER', link: '/categories' },
+		{ id: 1, title: 'KATEGORİLER', link: '/catalog' },
 		{ id: 2, title: 'GALERI', link: '/gallery' }
 	]
 </script>
@@ -37,7 +37,7 @@
 				<nuxt-link
 					:to="item.link"
 					class="font-medium text-sm uppercase flex items-center gap-2 hover:text-[#215EA5] hover:underline transition-all duration-300"
-					:class="route.path === item.link ? 'text-[#215EA5] underline' : 'text-[#101828]'"
+					:class="route.path.includes(item.link) ? 'text-[#215EA5] underline' : 'text-[#101828]'"
 				>
 					{{ item.title }}
 					<Icon
@@ -50,9 +50,7 @@
 					<!-- Animated underline for active/hover state -->
 					<span
 						class="absolute -bottom-1 left-0 h-[2px] bg-[#215EA5] transition-all duration-300"
-						:class="
-							route.path === item.link || (item.id === 1 && isCategoriesOpen) ? 'w-full' : 'w-0 group-hover:w-full'
-						"
+						:class="item.id === 1 && isCategoriesOpen ? 'w-full' : 'w-0 group-hover:w-full'"
 					></span>
 				</nuxt-link>
 

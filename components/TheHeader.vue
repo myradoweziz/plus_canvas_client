@@ -1,6 +1,12 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import type { ContactInfo } from '~/utils/types'
+
+	defineProps<{
+		contactInfo: ContactInfo
+	}>()
+
 	const headerRef = ref<HTMLElement | null>(null)
 	const isScrolled = ref(false)
 
@@ -30,7 +36,7 @@
 
 			<div class="border-b border-gray-50 pt-4 md:pt-6 flex items-center justify-between">
 				<nuxt-link to="/" class="mr-auto ml-4 md:m-0">
-					<img src="/images/icons/plus_logo.svg" alt="plus_logo" class="h-8 md:h-auto object-contain" />
+					<img :src="contactInfo.logo" alt="plus_logo" class="h-8 md:h-auto object-contain" />
 				</nuxt-link>
 				<div class="hidden md:block">
 					<header-menu />

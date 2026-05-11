@@ -1,19 +1,17 @@
 <script setup lang="ts">
-	import { mainCategories, featuredCategories } from '~/utils/data/categories'
-	import type { MainCategory, FeaturedCategory, SubCategory } from '~/utils/types'
+	import { featuredCategories, mainCategories } from '~/utils/data/categories'
+	import type { FeaturedCategory, SubCategory } from '~/utils/types'
 	import Icon from '~/utils/ui/Icon.vue'
 
 	const activeMainId = ref<number | null>(mainCategories[0].id)
 
-	const activeMain = computed(() => 
-		mainCategories.find(c => c.id === activeMainId.value) || mainCategories[0]
-	)
+	const activeMain = computed(() => mainCategories.find((c) => c.id === activeMainId.value) || mainCategories[0])
 
 	const activeFeaturedGroups = computed(() => {
-		const filtered = featuredCategories.filter(f => f.main_category_id === activeMainId.value)
+		const filtered = featuredCategories.filter((f) => f.main_category_id === activeMainId.value)
 		// Group by category_type (FeaturedCategoryType)
 		const groups: Record<string, (FeaturedCategory & { subcategories: SubCategory[] })[]> = {}
-		filtered.forEach(f => {
+		filtered.forEach((f) => {
 			if (!groups[f.category_type]) groups[f.category_type] = []
 			groups[f.category_type].push(f)
 		})
@@ -41,27 +39,26 @@
 						<Icon :name="main.id === 1 ? 'palette' : 'landscape'" class="w-5 h-5 opacity-70" />
 						<span class="font-bold text-sm uppercase tracking-tight">{{ main.name }}</span>
 					</div>
-					<Icon name="arrowRight" class="w-4 h-4 opacity-40 transition-transform duration-300 group-hover:translate-x-1" />
+					<Icon
+						name="arrowRight"
+						class="w-4 h-4 opacity-40 transition-transform duration-300 group-hover:translate-x-1"
+					/>
 				</div>
 			</div>
 
 			<!-- Main Content Area for Featured & Subcategories -->
 			<div class="category-content">
-				<div class="p-8 h-full overflow-y-auto custom-scrollbar">
-					<div v-for="(group, type) in activeFeaturedGroups" :key="type" class="mb-10">
-						<h3 class="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-6 border-b border-gray-100 pb-2">
-							{{ type }}
-						</h3>
-						
+				<div class="p-8 h-full flex flex-col overflow-y-auto custom-scrollbar">
+					<div v-for="(group, type) in activeFeaturedGroups" :key="type" class="mb-10 flex-1">
 						<div class="grid grid-cols-2 gap-x-12 gap-y-10">
 							<div v-for="featured in group" :key="featured.id!" class="featured-block">
-								<nuxt-link 
-									:to="`/catalog/${featured.slug}`" 
+								<nuxt-link
+									:to="`/catalog/${featured.slug}`"
 									class="text-lg font-bold text-[#101828] mb-4 block hover:text-[#215EA5] transition-colors"
 								>
 									{{ featured.name }}
 								</nuxt-link>
-								
+
 								<div class="flex flex-col gap-2">
 									<nuxt-link
 										v-for="(sub, idx) in featured.subcategories"
@@ -78,12 +75,23 @@
 					</div>
 
 					<!-- Featured Banner in Menu -->
-					<div v-if="activeMain.images.length" class="mt-8 rounded-3xl overflow-hidden relative group cursor-pointer h-44 shadow-lg">
-						<img :src="activeMain.images[0]" alt="Featured" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-						<div class="absolute inset-0 bg-gradient-to-r from-[#215EA5]/80 to-transparent flex flex-col justify-center px-10 text-white">
+					<div
+						v-if="activeMain.images.length"
+						class="mt-8 rounded-3xl overflow-hidden relative group cursor-pointer h-44 shadow-lg"
+					>
+						<img
+							:src="activeMain.images[0]"
+							alt="Featured"
+							class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+						/>
+						<div
+							class="absolute inset-0 bg-gradient-to-r from-[#215EA5]/80 to-transparent flex flex-col justify-center px-10 text-white"
+						>
 							<span class="text-xs font-bold uppercase tracking-widest mb-2 opacity-90">Öne Çıkan Fırsat</span>
 							<h4 class="text-2xl font-black mb-3 leading-tight">{{ activeMain.name }}</h4>
-							<span class="inline-flex items-center gap-2 bg-white text-[#215EA5] px-5 py-2 rounded-full text-sm font-bold transition-all hover:bg-[#215EA5] hover:text-white">
+							<span
+								class="inline-flex items-center gap-2 bg-white text-[#215EA5] px-5 py-2 rounded-full text-sm font-bold transition-all hover:bg-[#215EA5] hover:text-white"
+							>
 								Hemen İncele
 								<Icon name="arrowRight" class="w-4 h-4" />
 							</span>

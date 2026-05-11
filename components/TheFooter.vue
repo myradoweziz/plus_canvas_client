@@ -1,6 +1,12 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import type { ContactInfo } from '~/utils/types'
+
+	defineProps<{
+		contactInfo: ContactInfo
+	}>()
+
 	const footerLinks = {
 		gallery: [
 			{ name: 'Çok Satan Tablolar', href: '#' },
@@ -33,8 +39,7 @@
 
 	const topLinks = [
 		{ name: 'Hesabım', href: '#' },
-		{ name: 'Sipariş Takibi', href: '#' },
-		{ name: 'İade ve Değişim', href: '#' }
+		{ name: 'Sipariş Takibi', href: '#' }
 	]
 
 	const bottomLinks = [
@@ -90,12 +95,10 @@
 				<!-- Logo and Info -->
 				<div class="lg:col-span-1">
 					<nuxt-link to="/" class="block mb-6">
-						<img src="/images/icons/plus_logo.svg" alt="PlusCanvas" class="h-8 md:h-10 object-contain" />
+						<img :src="contactInfo.logo" alt="PlusCanvas" class="h-8 md:h-10 object-contain" />
 					</nuxt-link>
 					<p class="text-gray-500 text-sm md:text-[15px] leading-relaxed pr-4">
-						PlusCanvas, özenle seçilmiş sanatsal eserleri veya size özel fotoğrafları en kolay şekilde kanvas tablo
-						üzerine bastırmanıza imkan sunar. Aynı zamanda tablolarınızı dilediğiniz gibi kişiselleştirmenize olanak
-						sağlar.
+						{{ contactInfo.slogan }}
 					</p>
 				</div>
 
@@ -147,7 +150,7 @@
 									href="mailto:info@pluscanvas.com"
 									class="text-[#101828] font-medium text-sm md:text-[15px] hover:text-[#215EA5]"
 								>
-									info@pluscanvas.com
+									{{ contactInfo.email }}
 								</a>
 							</div>
 						</div>
@@ -159,7 +162,7 @@
 									href="tel:+905001234567"
 									class="text-[#101828] font-medium text-sm md:text-[15px] hover:text-[#215EA5]"
 								>
-									+90 (500) 123 45 67
+									{{ contactInfo.phone_number }}
 								</a>
 							</div>
 						</div>
@@ -167,7 +170,7 @@
 							<Icon name="footerMapPin" class="w-5 h-5 text-gray-400 mt-0.5" />
 							<div>
 								<span class="block text-gray-400 text-xs uppercase tracking-wider mb-1">Adres</span>
-								<p class="text-[#101828] font-medium text-sm md:text-[15px]">İstanbul, Türkiye</p>
+								<p class="text-[#101828] font-medium text-sm md:text-[15px]">{{ contactInfo.address }}</p>
 							</div>
 						</div>
 

@@ -8,6 +8,8 @@
 	const router = useRouter()
 	const catalogId = route.params.catalogId
 
+	const { faqs } = useHomeStore()
+
 	const breadcrumbs = [
 		{ label: 'Anasayfa', link: '/' },
 		{ label: 'Katalog', link: '/catalog' },
@@ -309,13 +311,6 @@
 		})
 	}
 
-	const categories = [
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' }
-	]
 	const selectedSubId = ref<number | null>(null)
 	const selectedColor = ref<string | null>(null)
 	const isUploaderOpen = ref(false)
@@ -343,7 +338,7 @@
 
 <template>
 	<main class="min-h-screen overflow-hidden">
-		<home-banner :breadcrumbs="breadcrumbs" />
+		<home-banner :banners="[]" :breadcrumbs="breadcrumbs" />
 
 		<catalog-filter
 			:active-filters="activeFilters"
@@ -538,7 +533,7 @@
 					}"
 					class="!overflow-x-visible"
 				>
-					<SwiperSlide v-for="(category, index) in categories" :key="index" class="h-auto">
+					<SwiperSlide v-for="(category, index) in []" :key="index" class="h-auto">
 						<cards-featured-category-card :category="category" />
 					</SwiperSlide>
 				</Swiper>
@@ -557,7 +552,7 @@
 		</section>
 
 		<home-custom-text />
-		<home-frequently-asked-questions />
+		<home-frequently-asked-questions :faqs="faqs" />
 	</main>
 </template>
 

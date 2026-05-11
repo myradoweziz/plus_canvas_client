@@ -7,6 +7,21 @@
 		{ icon: 'basket', title: 'Siparişi Ver', desc: 'Siparişini tamamla ve tablonun üretime başlasın' },
 		{ icon: 'truck', title: 'Kapına Teslim', desc: 'Özenle hazırlanan kanvas tablon kısa sürede adresine gelsin' }
 	]
+
+	const isUploaderOpen = ref(false)
+
+	const openUploader = () => {
+		isUploaderOpen.value = true
+	}
+
+	const closeUploader = () => {
+		isUploaderOpen.value = false
+	}
+
+	const router = useRouter()
+	const goNext = () => {
+		router.push('/products/1')
+	}
 </script>
 
 <template>
@@ -46,12 +61,15 @@
 
 		<div class="mt-12 md:mt-16">
 			<button
+				@click="openUploader"
 				class="bg-[#1853a0] hover:bg-[#124080] text-white px-10 py-3.5 rounded-full font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
 			>
 				Hemen Başla
 			</button>
 		</div>
 	</section>
+
+	<catalog-uploader-modal :is-open="isUploaderOpen" @close="closeUploader" @go-next="goNext" />
 </template>
 
 <style scoped></style>

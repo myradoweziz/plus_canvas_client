@@ -1,20 +1,11 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	const categories = [
-		'Doğa Tabloları',
-		'Rengarenk Tablolar',
-		'Soyut Tablolar',
-		'Manzara Tabloları',
-		'Minimal Tablolar',
-		'Tipografi Tabloları',
-		'Şehir Manzaraları',
-		'Hayvan Tabloları',
-		'Botanik Tablolar',
-		'Geometrik Desenler',
-		'Siyah Beyaz Tablolar',
-		'Modern Sanat'
-	]
+	import type { FeaturedCategory } from '~/utils/types'
+
+	defineProps<{
+		categories: FeaturedCategory[]
+	}>()
 </script>
 
 <template>
@@ -44,12 +35,12 @@
 
 			<div class="flex flex-wrap gap-3 md:gap-4 max-w-full md:max-w-2xl lg:max-w-4xl relative z-10 w-full">
 				<nuxt-link
-					to="/"
-					v-for="(cat, index) in categories"
+					v-for="(category, index) in categories"
 					:key="index"
+					:to="`/catalog/${category.slug}`"
 					class="bg-white hover:text-[#1853a0] hover:shadow-md px-6 py-2.5 md:px-7 md:py-3 rounded-full text-[13px] md:text-[15px] transition-all text-center"
 				>
-					{{ cat }}
+					{{ category.name }}
 				</nuxt-link>
 			</div>
 		</div>

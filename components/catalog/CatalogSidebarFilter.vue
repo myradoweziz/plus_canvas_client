@@ -163,15 +163,15 @@
 	}
 
 	.btn-clear {
-		@apply flex-1 bg-[#F3F4F6] text-[#4B5563] py-2.5 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors;
+		@apply flex-1 bg-[#F3F4F6] text-[#4B5563] py-2.5 rounded-full text-sm font-semibold hover:bg-gray-200 transition-colors;
 	}
 
 	.btn-apply {
-		@apply flex-1 bg-[#2B7FFF] text-white py-2.5 rounded-full text-xs font-bold hover:bg-blue-600 transition-colors shadow-lg shadow-blue-100;
+		@apply flex-1 bg-[#2B7FFF] text-white py-2.5 rounded-full text-sm font-semibold hover:bg-blue-600 transition-colors shadow-lg shadow-blue-100;
 	}
 
 	.tag-pill {
-		@apply flex items-center gap-1.5 bg-gray-50 text-[#374151] px-4 py-2 rounded-full text-[11px] font-bold border border-gray-100 hover:bg-white hover:border-[#2B7FFF] transition-all;
+		@apply flex items-center gap-1.5 bg-gray-50 text-[#374151] px-4 py-2 rounded-full text-sm font-semibold border border-gray-100 hover:bg-white hover:border-[#2B7FFF] transition-all;
 	}
 
 	.main-cat-header {

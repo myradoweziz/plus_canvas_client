@@ -3,6 +3,12 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import type { FeaturedCategory } from '~/utils/types'
+
+	const props = defineProps<{
+		categories: FeaturedCategory[]
+	}>()
+
 	const modules = [Navigation, Autoplay]
 
 	const isBeginning = ref(true)
@@ -17,20 +23,6 @@
 			isEnd.value = swiper.isEnd
 		})
 	}
-
-	const categories = [
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' },
-		{ title: 'Manzara Tabloları', image: '/images/banner.png' }
-	]
 </script>
 
 <template>
@@ -57,6 +49,7 @@
 
 				<!-- Кнопки слайдера -->
 				<SwiperButtons
+					v-if="categories.length > 4"
 					prev-class="cat-prev"
 					next-class="cat-next"
 					:disabled-prev="isBeginning"

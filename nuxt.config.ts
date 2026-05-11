@@ -28,8 +28,7 @@ export default defineNuxtConfig({
 	},
 	runtimeConfig: {
 		public: {
-			baseUrl: process.env.BASE_URL,
-			sessionIdleTime: process.env.SESSION_IDLE_TIME
+			baseUrl: process.env.BASE_URL
 		}
 	},
 	modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'nuxt-swiper'],

@@ -1,33 +1,11 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	const faqs = [
-		{
-			question: 'Kanvas tablo nedir ve nasıl üretilir?',
-			answer:
-				'PlusCanvas® ile kendi fotoğraflarınızı veya seçtiğiniz sanat eserlerini kanvas tablo olarak bastırabilirsiniz. %100 pamuklu kanvas bezi üzerine yüksek çözünürlüklü baskı yapılır ve fırınlanmış ahşap şaseye gerilerek el işçiliği ile hazırlanır.'
-		},
-		{
-			question: 'Teslimat süresi ne kadar?',
-			answer:
-				'Siparişleriniz genellikle 24-48 saat içinde üretime alınır ve 2-4 iş günü içinde kargo ile adresinize teslim edilir.'
-		},
-		{
-			question: 'Fotoğraf kalitesi nasıl olmalı?',
-			answer:
-				'En iyi sonuçlar için fotoğraflarınızın yüksek çözünürlüklü olması önerilir. Yükleme sırasında otomatik kalite kontrolü sistemimiz sizi bilgilendirecektir.'
-		},
-		{
-			question: 'İade ve değişim politikanız nedir?',
-			answer:
-				'Kişiye özel üretilen ürünlerde üretim hatası dışında iade kabul edilememektedir. Hasarlı teslimat durumunda ücretsiz değişim garantimiz bulunmaktadır.'
-		},
-		{
-			question: 'Hangi ödeme yöntemlerini kabul ediyorsunuz?',
-			answer:
-				'Tüm kredi kartları ile 12 aya varan taksit seçenekleri, banka kartı ve havale/EFT ile ödeme yapabilirsiniz.'
-		}
-	]
+	import type { Faq } from '~/utils/types'
+
+	defineProps<{
+		faqs: Faq[]
+	}>()
 
 	const activeIndex = ref(0)
 
@@ -72,7 +50,5 @@
 				</div>
 			</div>
 		</div>
-
-		<!-- SEO Metni Bölümü -->
 	</section>
 </template>

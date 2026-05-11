@@ -1,6 +1,14 @@
 <script setup lang="ts">
-	import { Navigation, Autoplay } from 'swiper/modules'
+	import { Autoplay, Navigation } from 'swiper/modules'
+
 	import Icon from '~/utils/ui/Icon.vue'
+
+	import type { DisCount } from '~/utils/types'
+
+	defineProps<{
+		discounts: DisCount[]
+		mainCategoryId?: number
+	}>()
 
 	const modules = [Navigation, Autoplay]
 
@@ -16,33 +24,6 @@
 			isEnd.value = swiper.isEnd
 		})
 	}
-
-	const discounts = [
-		{
-			title: 'İlk Siparişinize %25 Индirim',
-			desc: 'Yeni müşterilerimize özel kampanya fırsatı',
-			btnText: 'Hemen Al',
-			bgColor: '#5aa4f0',
-			textColor: '#1853a0',
-			link: '/'
-		},
-		{
-			title: '3 Al 2 Öde',
-			desc: 'Seçili kanvas tablolarda geçerli kampanya',
-			btnText: 'İncele',
-			bgColor: '#f4ae0f',
-			textColor: '#ca8804',
-			link: '/'
-		},
-		{
-			title: '3 Al 2 Öde',
-			desc: 'Seçili kanvas tablolarda geçerli kampanya',
-			btnText: 'İncele',
-			bgColor: '#f4ae0f',
-			textColor: '#ca8804',
-			link: '/'
-		}
-	]
 </script>
 
 <template>
@@ -52,6 +33,7 @@
 			<h2 class="text-2xl md:text-3xl lg:text-[40px] font-bold text-[#1a3355] text-center">İndirimler</h2>
 
 			<SwiperButtons
+				v-if="discounts.length > 2"
 				prev-class="dist-prev"
 				next-class="dist-next"
 				:disabled-prev="isBeginning"
@@ -65,25 +47,21 @@
 			:modules="modules"
 			:autoplay="{ delay: 4500, disableOnInteraction: false }"
 			:speed="2000"
-			:loop="false"
+			:loop="true"
 			@swiper="onSwiper"
 			:navigation="{ prevEl: '.dist-prev', nextEl: '.dist-next' }"
-			:slidesPerView="1.1"
 			:spaceBetween="16"
 			:breakpoints="{
-				768: { slidesPerView: 2, spaceBetween: 24 }
+				768: { slidesPerView: 1.5 },
+				1024: { slidesPerView: 2 }
 			}"
+			class="mySwiper"
 		>
-			<SwiperSlide v-for="(item, index) in discounts" :key="index" class="h-auto">
-				<div
-					class="relative h-[280px] md:h-[320px] rounded-[32px] overflow-hidden p-8 md:p-12 flex flex-col items-center justify-center text-center text-white"
-					:style="{ backgroundColor: item.bgColor }"
+			<SwiperSlide v-for="(item, index) in discounts" :key="index">
+				<nuxt-link
+					:to="`/catalog/${mainCategoryId}?discount=${item.id}`"
+					class="relative rounded-3xl overflow-hidden min-h-[350px] text-white flex items-center justify-center"
 				>
-					<!-- Фоновая иконка плюса -->
-					<div class="absolute right-[-40px] top-[-40px] w-64 h-64 md:w-80 md:h-80 pointer-events-none">
-						<Icon name="discountPlus" class="w-full h-full" />
-					</div>
-
 					<!-- Контент -->
 					<div class="relative z-10 flex flex-col items-center">
 						<div class="bg-[#FFFFFF33] p-2 mb-5 md:mb-6 rounded-xl flex justify-center items-center">
@@ -94,17 +72,18 @@
 							{{ item.title }}
 						</h3>
 						<p class="text-white/90 text-sm md:text-base font-medium mb-8">
-							{{ item.desc }}
+							{{ item.description }}
 						</p>
 						<nuxt-link
-							:to="item.link"
+							:to="`/catalog/${mainCategoryId}?discount=${item.id}`"
 							class="bg-white px-10 py-3 rounded-full font-bold transition-all hover:shadow-xl hover:-translate-y-0.5"
-							:style="{ color: item.textColor }"
+							:style="{ color: '#1853a0' }"
 						>
-							{{ item.btnText }}
+							Hemen Al
 						</nuxt-link>
 					</div>
-				</div>
+				</nuxt-link>
+				<img :src="item.image_url" alt="discount" class="absolute top-0 left-0 w-full h-full object-cover" />
 			</SwiperSlide>
 		</Swiper>
 	</section>

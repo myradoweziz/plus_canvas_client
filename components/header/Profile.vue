@@ -4,7 +4,7 @@
 	const icons = ['profile', 'basket']
 
 	const profileItems = [
-		{ icon: 'logout', title: 'Giriş yap', link: '' },
+		{ icon: 'logout', title: 'Giriş yap', link: '/login' },
 		{ icon: 'favorite', title: 'Favorilerim', link: '' },
 		{ icon: 'user', title: 'Hesabım', link: '' },
 		{ icon: 'car', title: 'Sipariş takibi', link: '' }
