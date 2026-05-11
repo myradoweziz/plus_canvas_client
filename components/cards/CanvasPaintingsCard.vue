@@ -32,7 +32,7 @@
 			<!-- Бейдж скидки -->
 			<div
 				v-if="product.discount || product.oldPrice > product.price"
-				class="absolute top-4 left-4 bg-[#5aa4f0] text-white text-[11px] md:text-[12px] font-bold px-2 py-1 rounded-md z-10"
+				class="absolute top-4 left-4 bg-[#1853a0] text-white text-[11px] md:text-[12px] font-bold px-2 py-1 rounded-md z-10"
 			>
 				-{{ product.discount || Math.round((1 - product.price / product.oldPrice) * 100) }}%
 			</div>
@@ -69,7 +69,7 @@
 			<!-- Кнопка -->
 			<div v-if="showButton" class="mt-auto pt-4">
 				<button
-					class="w-full bg-[#5aa4f0] hover:bg-[#1853a0] text-white py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm md:text-[14px] shadow-sm hover:shadow-md"
+					class="w-full bg-[#1853a0] hover:bg-[#124080] text-white py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm md:text-[14px] shadow-sm hover:shadow-md"
 				>
 					<Icon name="basket" class="w-4 h-4 text-white" />
 					Sepete Ekle
