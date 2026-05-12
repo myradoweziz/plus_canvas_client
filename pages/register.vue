@@ -104,8 +104,8 @@
 
 		if (!isValid.value) return
 
-		const token = useCookie('Authorization')
 		const router = useRouter()
+		const authStore = useAuthStore()
 
 		isSubmitting.value = true
 		const { data, error } = await useCustomFetch<LoginResponse>('/api/auth/register', {
@@ -121,7 +121,7 @@
 		}
 
 		if (data.value) {
-			token.value = data.value.token
+			authStore.setSessionToken(data.value.token)
 			toast.success('Kayıt başarılı')
 			router.push('/')
 			return

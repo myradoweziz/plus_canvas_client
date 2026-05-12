@@ -17,11 +17,25 @@
 	}
 
 	const products = [
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379, discount: 31 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379, discount: 31 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379, discount: 31 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379, discount: 31 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379, discount: 31 }
+		{
+			id: 1,
+			name: 'Düğün Anısı Kanvas Baskı',
+			slug: 'düğün-anısı-kanvas-baskı',
+			description: 'Düğün Anısı Kanvas Baskı',
+			price: 379,
+			discount: 31,
+			images: [],
+			inner_images: [],
+			upload_image_count: 0,
+			main_category_id: 1,
+			category_id: 1,
+			sub_category_id: 1,
+			brand_id: 1,
+			banner_id: 1,
+			flag: 'Soyut',
+			product_qode: 'Soyut',
+			discount_id: 1
+		}
 	]
 </script>
 

@@ -1,120 +1,45 @@
 <script setup lang="ts">
 	import { Autoplay, Navigation } from 'swiper/modules'
 
+	import type { Image } from '~/utils/types/home'
+
 	import Icon from '~/utils/ui/Icon.vue'
 	import Pagination from '~/utils/ui/Pagination.vue'
 
 	const route = useRoute()
 	const router = useRouter()
-	const catalogId = route.params.catalogId
+	const categoryId = route.params.categoryId
 
 	const { faqs } = useHomeStore()
 
 	const breadcrumbs = [
 		{ label: 'Anasayfa', link: '/' },
-		{ label: 'Katalog', link: '/catalog' },
-		{ label: catalogId as string }
+		{ label: 'Kategoriler', link: '/categories' },
+		{ label: categoryId as string }
 	]
 
-	type Product = {
-		id: string
-		title: string
-		image: string
-		oldPrice: number
+	interface Product {
+		id: 0
+		name: string
+		slug: string
+		description: string
 		price: number
-		discount?: number
-		category: string
-		tags: string[]
+		discount: number
+		images: Image[]
+		inner_images?: Image[]
+		upload_image_count: number
+		main_category_id: number
+		category_id: number
+		sub_category_id: number
+		brand_id: number
+		banner_id: number
+		flag: string
+		product_qode: string
+		discount_id: number
 	}
 
-	const products = ref<Product[]>([
-		{
-			id: 'p1',
-			title: 'Renkli Soyut Kanvas Tablo',
-			image: '/images/banner.png',
-			oldPrice: 549,
-			price: 379,
-			discount: 31,
-			category: 'Soyut',
-			tags: ['Hediye', 'Modern']
-		},
-		{
-			id: 'p2',
-			title: 'Doğa Manzara Kanvas Tablo',
-			image: '/images/banner.png',
-			oldPrice: 599,
-			price: 419,
-			discount: 30,
-			category: 'Manzara',
-			tags: ['Doğa', 'Bestseller']
-		},
-		{
-			id: 'p3',
-			title: 'Geometrik Soyut Kanvas',
-			image: '/images/banner.png',
-			oldPrice: 439,
-			price: 339,
-			discount: 22,
-			category: 'Soyut',
-			tags: ['Geometri']
-		},
-		{
-			id: 'p4',
-			title: 'Modern Salon Kanvas Tablo Seti',
-			image: '/images/banner.png',
-			oldPrice: 799,
-			price: 549,
-			discount: 31,
-			category: 'Set',
-			tags: ['Salon', 'Modern']
-		},
-		{
-			id: 'p5',
-			title: 'Minimal Çizgiler Kanvas',
-			image: '/images/banner.png',
-			oldPrice: 499,
-			price: 299,
-			discount: 40,
-			category: 'Minimal',
-			tags: ['Minimal', 'Hediye']
-		},
-		{
-			id: 'p6',
-			title: 'Deniz Manzarası Kanvas',
-			image: '/images/banner.png',
-			oldPrice: 649,
-			price: 459,
-			discount: 29,
-			category: 'Manzara',
-			tags: ['Doğa']
-		},
-		{
-			id: 'p7',
-			title: 'Çiçekli Kanvas Tablo',
-			image: '/images/banner.png',
-			oldPrice: 399,
-			price: 319,
-			discount: 20,
-			category: 'Çiçek',
-			tags: ['Hediye']
-		},
-		{
-			id: 'p8',
-			title: 'Modern Soyut Set',
-			image: '/images/banner.png',
-			oldPrice: 899,
-			price: 629,
-			discount: 30,
-			category: 'Set',
-			tags: ['Modern', 'Bestseller']
-		}
-	])
-
 	type FiltersState = {
-		categories: string[]
-		tags: string[]
-		priceMin: number | null
-		priceMax: number | null
+		categories: number[]
 		discountOnly: boolean
 	}
 
@@ -122,95 +47,62 @@
 
 	const filters = reactive<FiltersState>({
 		categories: [],
-		tags: [],
-		priceMin: null,
-		priceMax: null,
 		discountOnly: false
 	})
 
-	const unique = (arr: string[]) => Array.from(new Set(arr))
+	const { data } = await useCustomFetch<ProductsApiResponse>('/api/canvas-products', {
+		method: 'GET',
+		baseURL: useRuntimeConfig().public.baseUrl
+	})
+
+	const products = computed<Product[]>(() => data.value?.data ?? [])
 
 	const activeFilters = computed(() => {
 		const res: Array<{ id: string; label: string }> = []
-		for (const c of filters.categories) res.push({ id: `cat:${c}`, label: c })
-		for (const t of filters.tags) res.push({ id: `tag:${t}`, label: t })
+		for (const c of filters.categories) res.push({ id: `cat:${c}`, label: c.toString() })
 		if (filters.discountOnly) res.push({ id: 'discountOnly', label: 'İndirimli' })
-		if (filters.priceMin != null) res.push({ id: 'priceMin', label: `Min: ${filters.priceMin}` })
-		if (filters.priceMax != null) res.push({ id: 'priceMax', label: `Max: ${filters.priceMax}` })
 		return res
 	})
 
 	const filteredProducts = computed(() => {
-		let list = products.value.slice()
-
-		if (filters.categories.length) list = list.filter((p) => filters.categories.includes(p.category))
-		if (filters.tags.length) list = list.filter((p) => filters.tags.every((t) => p.tags.includes(t)))
-		if (filters.discountOnly) list = list.filter((p) => (p.discount ?? 0) > 0)
-		if (filters.priceMin != null) list = list.filter((p) => p.price >= filters.priceMin!)
-		if (filters.priceMax != null) list = list.filter((p) => p.price <= filters.priceMax!)
-
-		if (sort.value === 'newest') {
-			// для демо: стабильно по id
-			list.sort((a, b) => (a.id < b.id ? 1 : -1))
-		} else if (sort.value === 'price_asc') {
-			list.sort((a, b) => a.price - b.price)
-		} else if (sort.value === 'price_desc') {
-			list.sort((a, b) => b.price - a.price)
-		}
-
-		return list
+		return products.value
 	})
 
 	const availableCategories = computed(() => {
-		const counts = new Map<string, number>()
-		for (const p of products.value) counts.set(p.category, (counts.get(p.category) ?? 0) + 1)
+		const counts = new Map<number, number>()
+		for (const p of products.value) counts.set(p.category_id, (counts.get(p.category_id) ?? 0) + 1)
 		return Array.from(counts.entries())
 			.map(([value, count]) => ({ value, count }))
-			.sort((a, b) => a.value.localeCompare(b.value))
+			.sort((a, b) => a.value - b.value)
 	})
 
 	const availableTags = computed(() => {
 		const counts = new Map<string, number>()
-		for (const p of products.value) for (const t of p.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
+		for (const p of products.value)
+			counts.set(p.category_id.toString(), (counts.get(p.category_id.toString()) ?? 0) + 1)
 		return Array.from(counts.entries())
 			.map(([value, count]) => ({ value, count }))
-			.sort((a, b) => a.value.localeCompare(b.value))
+			.sort((a, b) => Number(a.value) - Number(b.value))
 	})
 
-	const toggleInArray = (arr: string[], value: string) => {
+	const toggleInArray = (arr: number[], value: number) => {
 		if (arr.includes(value)) return arr.filter((v) => v !== value)
 		return [...arr, value]
 	}
 
 	const clearFilters = () => {
 		filters.categories = []
-		filters.tags = []
-		filters.priceMin = null
-		filters.priceMax = null
 		filters.discountOnly = false
 	}
 
 	const removeFilter = (id: string) => {
 		if (id.startsWith('cat:')) {
 			const v = id.slice('cat:'.length)
-			filters.categories = filters.categories.filter((c) => c !== v)
-			return
-		}
-		if (id.startsWith('tag:')) {
-			const v = id.slice('tag:'.length)
-			filters.tags = filters.tags.filter((t) => t !== v)
+			filters.categories = filters.categories.filter((c) => c !== Number(v))
 			return
 		}
 		if (id === 'discountOnly') {
 			filters.discountOnly = false
-			return
-		}
-		if (id === 'priceMin') {
-			filters.priceMin = null
-			return
-		}
-		if (id === 'priceMax') {
-			filters.priceMax = null
 			return
 		}
 	}
@@ -237,13 +129,6 @@
 			.filter(Boolean)
 	}
 
-	const toNumOrNull = (v: unknown) => {
-		const s = Array.isArray(v) ? v[0] : v
-		if (typeof s !== 'string' || !s.trim()) return null
-		const n = Number(s)
-		return Number.isFinite(n) ? n : null
-	}
-
 	const toBool = (v: unknown) => {
 		const s = Array.isArray(v) ? v[0] : v
 		if (typeof s !== 'string') return false
@@ -257,10 +142,6 @@
 		try {
 			const q = route.query
 			sort.value = typeof q.sort === 'string' ? q.sort : 'default'
-			filters.categories = unique(parseStrList(q.cat))
-			filters.tags = unique(parseStrList(q.tag))
-			filters.priceMin = toNumOrNull(q.min)
-			filters.priceMax = toNumOrNull(q.max)
 			filters.discountOnly = toBool(q.discount)
 		} finally {
 			syncingFromRoute.value = false
@@ -277,9 +158,6 @@
 		const q: Record<string, string> = {}
 		if (sort.value && sort.value !== 'default') q.sort = sort.value
 		if (filters.categories.length) q.cat = filters.categories.join(',')
-		if (filters.tags.length) q.tag = filters.tags.join(',')
-		if (filters.priceMin != null) q.min = String(filters.priceMin)
-		if (filters.priceMax != null) q.max = String(filters.priceMax)
 		if (filters.discountOnly) q.discount = '1'
 		return q
 	}
@@ -332,7 +210,11 @@
 	}
 
 	const goNext = () => {
-		router.push(`/catalog/${catalogId}/products/${filteredProducts.value[0]?.id}`)
+		router.push(`/products/${filteredProducts.value[0]?.id}`)
+	}
+
+	type ProductsApiResponse = {
+		data: Product[]
 	}
 </script>
 
@@ -395,7 +277,7 @@
 												type="checkbox"
 												class="w-4 h-4 accent-[#215EA5]"
 												:checked="filters.categories.includes(c.value)"
-												@change="filters.categories = toggleInArray(filters.categories, c.value)"
+												@change="filters.categories = toggleInArray(filters.categories, Number(c.value))"
 											/>
 											<span class="text-[#4A5565]">{{ c.value }}</span>
 										</span>
@@ -416,8 +298,8 @@
 											<input
 												type="checkbox"
 												class="w-4 h-4 accent-[#215EA5]"
-												:checked="filters.tags.includes(t.value)"
-												@change="filters.tags = toggleInArray(filters.tags, t.value)"
+												:checked="filters.categories.includes(Number(t.value))"
+												@change="filters.categories = toggleInArray(filters.categories, Number(t.value))"
 											/>
 											<span class="text-[#4A5565]">{{ t.value }}</span>
 										</span>
@@ -435,12 +317,6 @@
 											type="number"
 											inputmode="numeric"
 											class="mt-1 w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
-											:value="filters.priceMin ?? ''"
-											@input="
-												filters.priceMin = ($event.target as HTMLInputElement).value
-													? Number(($event.target as HTMLInputElement).value)
-													: null
-											"
 										/>
 									</label>
 									<label class="block">
@@ -449,12 +325,6 @@
 											type="number"
 											inputmode="numeric"
 											class="mt-1 w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
-											:value="filters.priceMax ?? ''"
-											@input="
-												filters.priceMax = ($event.target as HTMLInputElement).value
-													? Number(($event.target as HTMLInputElement).value)
-													: null
-											"
 										/>
 									</label>
 								</div>

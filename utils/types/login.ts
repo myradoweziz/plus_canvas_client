@@ -5,17 +5,27 @@ export interface Address {
 	is_default: boolean
 }
 
+export interface User {
+	name: string
+	email: string
+	phone_number: string
+	roles: string[]
+	addresses: Address[]
+}
+
+/** PUT /api/auth/profile — şifre boşsa gönderilmez */
+export interface ProfileUpdatePayload {
+	name: string
+	email: string
+	phone_number: string
+	password?: string
+	password_confirmation?: string
+}
+
 export interface LoginResponse {
 	message: string
 	token: string
-	user: {
-		id: number
-		name: string
-		email: string
-		phone_number: string
-		roles: string[]
-		addresses: Address[]
-	}
+	user: User
 }
 
 export interface LoginForm {

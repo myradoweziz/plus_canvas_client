@@ -28,7 +28,7 @@
 			{ name: 'Anılar için Hediye', href: '#' }
 		],
 		about: [
-			{ name: 'Biz Kimiz?', href: '#' },
+			{ name: 'Biz Kimiz?', href: '/about' },
 			{ name: 'Garanti', href: '#' },
 			{ name: 'Teslimat', href: '#' },
 			{ name: 'Üyelik Bilgileri', href: '#' },

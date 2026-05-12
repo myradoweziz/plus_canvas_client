@@ -1,13 +1,7 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	interface Product {
-		title: string
-		image: string
-		oldPrice: number
-		price: number
-		discount?: number
-	}
+	import type { Product } from '~/utils/types'
 
 	defineProps<{
 		product: Product
@@ -24,17 +18,19 @@
 		<!-- Картинка -->
 		<div class="relative w-full rounded-2xl overflow-hidden bg-gray-100 aspect-[4/5]">
 			<img
-				:src="product.image"
-				:alt="product.title"
+				v-for="image in product.images"
+				:key="image.path"
+				:src="image.url"
+				:alt="product.name"
 				class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
 			/>
 
 			<!-- Бейдж скидки -->
 			<div
-				v-if="product.discount || product.oldPrice > product.price"
+				v-if="product.discount > 0"
 				class="absolute top-4 left-4 bg-[#1853a0] text-white text-[11px] md:text-[12px] font-bold px-2 py-1 rounded-md z-10"
 			>
-				-{{ product.discount || Math.round((1 - product.price / product.oldPrice) * 100) }}%
+				-{{ product.discount }}%
 			</div>
 
 			<!-- Кнопки действий -->
@@ -59,10 +55,10 @@
 			<h3
 				class="text-[15px] md:text-[16px] font-semibold text-gray-900 leading-snug hover:text-[#1853a0] transition-colors"
 			>
-				{{ product.title }}
+				{{ product.name }}
 			</h3>
 			<div class="flex items-center gap-2 mt-1.5 md:mt-2">
-				<span class="text-sm md:text-[14px] font-medium text-gray-400 line-through">₺{{ product.oldPrice }}</span>
+				<span class="text-sm md:text-[14px] font-medium text-gray-400 line-through">₺{{ product.price }}</span>
 				<span class="text-lg md:text-[18px] font-bold text-[#1853a0]">₺{{ product.price }}</span>
 			</div>
 

@@ -1,18 +1,47 @@
 <script setup lang="ts">
+	import { storeToRefs } from 'pinia'
+
 	import Icon from '~/utils/ui/Icon.vue'
 
-	const icons = ['profile', 'basket']
+	type ProfileItem = {
+		title: string
+		icon?: string
+		link?: string
+		isLogout?: boolean
+	}
 
-	const profileItems = [
-		{ icon: 'logout', title: 'Giriş yap', link: '/login' },
-		{ icon: 'favorite', title: 'Favorilerim', link: '' },
-		{ icon: 'user', title: 'Hesabım', link: '' },
-		{ icon: 'car', title: 'Sipariş takibi', link: '' }
-	]
+	const authStore = useAuthStore()
+	const { user, authorizationToken } = storeToRefs(authStore)
+
+	const profileItems = computed<ProfileItem[]>(() => {
+		if (authorizationToken.value) {
+			const displayName = user.value?.name?.trim() || ''
+			return [
+				{ title: displayName, link: '/profile' },
+				{ icon: 'favorite', title: 'Favorilerim', link: '/favorites' },
+				{ icon: 'user', title: 'Hesabım', link: '/profile' },
+				{ icon: 'car', title: 'Sipariş takibi', link: '/orders' },
+				{ icon: 'logout', title: 'Çıkış Yap', isLogout: true }
+			]
+		}
+
+		return [
+			{ title: 'Giriş Yap', link: '/login' },
+			{ title: 'Kayıt Ol', link: '/register' },
+			{ icon: 'favorite', title: 'Favorilerim', link: '/favorites' },
+			{ icon: 'user', title: 'Hesabım', link: '/profile' },
+			{ icon: 'car', title: 'Sipariş takibi', link: '/orders' }
+		]
+	})
 
 	const showProfileMenu = ref<boolean>(false)
 	const profileMenu = ref<HTMLDivElement | null>(null)
 	const profileContainer = ref<HTMLDivElement | null>(null)
+
+	const handleLogout = () => {
+		authStore.logout()
+		showProfileMenu.value = false
+	}
 
 	const handleClickOutside = (event: MouseEvent) => {
 		if (profileContainer.value && !profileContainer.value.contains(event.target as Node)) {
@@ -20,8 +49,12 @@
 		}
 	}
 
-	onMounted(() => {
+	onMounted(async () => {
 		document.addEventListener('click', handleClickOutside)
+		authStore.syncTokenFromCookie()
+		if (authorizationToken.value) {
+			await authStore.getMe()
+		}
 	})
 
 	onUnmounted(() => {
@@ -61,11 +94,21 @@
 		>
 			<ul class="flex flex-col gap-6">
 				<li v-for="(profileItem, index) in profileItems" :key="index" class="cursor-pointer">
+					<button
+						v-if="profileItem.isLogout"
+						type="button"
+						class="flex items-center gap-3 w-full text-left hover:underline hover:text-[#215EA5] transition-all duration-300"
+						@click="handleLogout"
+					>
+						<Icon v-if="profileItem.icon" :name="profileItem.icon" />
+						{{ profileItem.title }}
+					</button>
 					<nuxt-link
-						:to="profileItem.link"
+						v-else
+						:to="profileItem.link || '#'"
 						class="flex items-center gap-3 hover:underline hover:text-[#215EA5] transition-all duration-300"
 					>
-						<Icon :name="profileItem.icon" />
+						<Icon v-if="profileItem.icon" :name="profileItem.icon" />
 						{{ profileItem.title }}
 					</nuxt-link>
 				</li>

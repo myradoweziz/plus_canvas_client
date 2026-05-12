@@ -11,14 +11,13 @@
 	import 'swiper/css/thumbs'
 
 	const route = useRoute()
-	const catalogId = route.params.catalogId
 
 	const productId = route.params.productId
 
 	const breadcrumbs = [
-		{ label: 'Kategoriler', link: '/catalog' },
-		{ label: 'Ürünler', link: `/catalog/${catalogId}` },
-		{ label: 'Ürün Detayı', link: `/catalog/${catalogId}/products/${productId}` }
+		{ label: 'Kategoriler', link: '/categories' },
+		{ label: 'Ürünler', link: `/products` },
+		{ label: 'Ürün Detayı', link: `/products/${productId}` }
 	] as BreadcrumbItem[]
 
 	const thumbsSwiper = ref<any>(null)

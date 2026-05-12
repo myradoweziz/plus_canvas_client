@@ -11,15 +11,9 @@ export default defineNuxtPlugin(() => {
 		baseURL: (config.public.baseUrl as string) ?? '',
 		onRequest({ request, options, error }) {
 			nuxtApp.callHook('page:loading:start')
-			if (userAuth.value) {
-				options.headers.set('Authorization', `Bearer ${userAuth.value}`)
-			}
-			if (authStore.authorizationToken) {
-				options.headers.set('Authorization', authStore.authorizationToken)
-			}
-
-			if (authStore.getClientIp) {
-				options.headers.set('X-Forwarded-For', authStore.getClientIp)
+			const rawToken = userAuth.value || authStore.authorizationToken
+			if (rawToken) {
+				options.headers.set('Authorization', `Bearer ${rawToken}`)
 			}
 
 			if (route.path.startsWith('/contact/') && !sessionStorage.getItem('confirm_phone')) {

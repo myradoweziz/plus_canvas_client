@@ -47,8 +47,8 @@
 
 		if (!isValid.value) return
 
-		const token = useCookie('Authorization')
 		const router = useRouter()
+		const authStore = useAuthStore()
 
 		isSubmitting.value = true
 		try {
@@ -63,9 +63,10 @@
 			}
 
 			if (data.value && data.value.message === 'Successfully logged in') {
-				token.value = data.value.token
+				authStore.setSessionToken(data.value.token)
 				toast.success('Giriş başarılı')
 				router.push('/')
+				await authStore.getMe()
 				return
 			}
 

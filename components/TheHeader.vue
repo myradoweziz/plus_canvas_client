@@ -25,7 +25,7 @@
 
 <template>
 	<header
-		class="sticky top-0 z-50 bg-white transition-all duration-300"
+		class="sticky top-0 z-50 bg-[#F6F6F6] transition-all duration-300"
 		:class="{ 'shadow-lg shadow-black/30': isScrolled }"
 		ref="headerRef"
 	>

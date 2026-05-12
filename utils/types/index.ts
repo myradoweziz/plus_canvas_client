@@ -1,6 +1,7 @@
 export * from './category'
 export * from './home'
 export * from './login'
+export * from './product'
 
 export interface BreadcrumbItem {
 	label: string

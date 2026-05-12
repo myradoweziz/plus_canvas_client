@@ -18,8 +18,8 @@
 	}
 
 	const menu = [
-		{ id: 0, title: 'KİŞİYE ÖZEL KANVAS TABLO', link: '/catalog/1' },
-		{ id: 1, title: 'KATEGORİLER', link: '/catalog' },
+		{ id: 0, title: 'KİŞİYE ÖZEL KANVAS TABLO', link: '/categories/1' },
+		{ id: 1, title: 'KATEGORİLER', link: '/categories' },
 		{ id: 2, title: 'GALERI', link: '/gallery' }
 	]
 </script>

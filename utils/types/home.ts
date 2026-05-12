@@ -1,4 +1,4 @@
-interface Image {
+export interface Image {
 	url: string
 	path: string
 }

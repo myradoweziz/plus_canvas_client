@@ -59,7 +59,7 @@
 		>
 			<SwiperSlide v-for="(item, index) in discounts" :key="index">
 				<nuxt-link
-					:to="`/catalog/${mainCategoryId}?discount=${item.id}`"
+					:to="`/categories/${mainCategoryId}?discount=${item.id}`"
 					class="relative rounded-3xl overflow-hidden min-h-[350px] text-white flex items-center justify-center"
 				>
 					<!-- Контент -->
@@ -75,7 +75,7 @@
 							{{ item.description }}
 						</p>
 						<nuxt-link
-							:to="`/catalog/${mainCategoryId}?discount=${item.id}`"
+							:to="`/categories/${mainCategoryId}?discount=${item.id}`"
 							class="bg-white px-10 py-3 rounded-full font-bold transition-all hover:shadow-xl hover:-translate-y-0.5"
 							:style="{ color: '#1853a0' }"
 						>
