@@ -3,27 +3,56 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import type { Banner, BreadcrumbItem } from '~/utils/types'
+	import type { Banner, BreadcrumbItem, MainCategory } from '~/utils/types'
 
 	const props = withDefaults(
 		defineProps<{
 			status?: string
 			banners: Banner[]
 			breadcrumbs?: BreadcrumbItem[]
+			/** Katalog sayfaları: swiper yokken başlık / açıklama / arka plan görseli */
 			category?: {
 				title: string
+				description?: string
 			}
+			mainCategory?: MainCategory
 		}>(),
 		{
 			banners: () => []
 		}
 	)
 
+	const route = useRoute()
+	/** Ortada büyük başlık: yalnızca ürün listesi (`/products`) */
+	const showMainCategoryHeroTitle = computed(() => route.name === 'products' && props.mainCategory != null)
+
 	const modules = [Pagination, Navigation, Autoplay]
 </script>
 
 <template>
 	<skeletons-banner v-if="status === 'pending'" />
+
+	<!-- Ürün listesi vb.: swiper yok; yalnızca gradient + başlık / açıklama -->
+	<section v-else-if="!banners.length" class="relative w-full sm:h-[350px] md:h-[550px] lg:h-[750px] overflow-hidden">
+		<div class="absolute inset-0 bg-gradient-to-br from-[#215EA5] to-slate-900" />
+
+		<div
+			class="relative z-10 w-full h-full max-w-[1400px] mx-auto px-4 md:px-10 flex flex-col justify-center pointer-events-none"
+		>
+			<div v-if="breadcrumbs?.length" class="absolute top-6 md:top-10 left-4 md:left-10 pointer-events-auto">
+				<Breadcrumbs :items="breadcrumbs" white />
+			</div>
+
+			<div v-if="category" class="max-w-[550px] lg:max-w-[600px] text-white pointer-events-auto">
+				<h1 class="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+					{{ category.title }}
+				</h1>
+				<p v-if="category.description" class="mt-4 text-sm md:text-base text-gray-200 leading-relaxed">
+					{{ category.description }}
+				</p>
+			</div>
+		</div>
+	</section>
 
 	<Swiper
 		v-else
@@ -32,7 +61,7 @@
 		:speed="2000"
 		:pagination="{ clickable: true }"
 		:navigation="{ prevEl: '.swiper-btn-prev', nextEl: '.swiper-btn-next' }"
-		:loop="true"
+		:loop="banners.length > 1"
 	>
 		<SwiperSlide v-for="banner in banners" :key="banner.id">
 			<div class="relative w-full sm:h-[350px] md:h-[550px] lg:h-[750px]">
@@ -56,24 +85,23 @@
 					</div>
 
 					<!-- Главный заголовок и кнопка слева -->
-					<div class="max-w-[450px] lg:max-w-[500px] text-white pointer-events-auto">
+					<div v-if="!showMainCategoryHeroTitle" class="max-w-[450px] lg:max-w-[500px] text-white pointer-events-auto">
 						<h1 class="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
 							{{ banner.title }}
 						</h1>
-						<p class="mt-4 text-sm md:text-base text-gray-200">{{ banner.description }}</p>
-						<button
-							v-if="false"
-							class="mt-6 lg:mt-8 bg-blue-600 hover:bg-blue-700 text-white px-6 md:px-8 py-2.5 md:py-3 rounded-full font-semibold transition-colors shadow-lg"
-						>
-							Fotoğrafını yükle
-						</button>
+						<p v-if="banner.description" class="mt-4 text-sm md:text-base text-gray-200">
+							{{ banner.description }}
+						</p>
 					</div>
 
 					<div
-						v-if="false"
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold"
+						v-if="showMainCategoryHeroTitle"
+						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold text-center"
 					>
-						Çok Satılan Tablolar
+						{{ mainCategory?.name }}
+						<p v-if="mainCategory?.description" class="mt-4 text-sm md:text-base">
+							{{ mainCategory?.description }}
+						</p>
 					</div>
 
 					<!-- Маленький элемент снизу справа -->

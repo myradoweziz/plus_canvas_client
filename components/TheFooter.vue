@@ -9,8 +9,6 @@
 
 	const homeStore = useHomeStore()
 
-	console.log(homeStore.personalizedCanvasPaintingsCategories)
-
 	const footerLinks = reactive({
 		gallery: [
 			{ name: 'Çok Satan Tablolar', href: '#' },
@@ -110,7 +108,7 @@
 				<!-- Logo and Info -->
 				<div class="lg:col-span-1">
 					<nuxt-link to="/" class="block mb-6">
-						<img :src="contactInfo.logo" alt="PlusCanvas" class="h-8 md:h-10 object-contain" />
+						<img :src="contactInfo.logo_path" alt="PlusCanvas" class="h-8 md:h-10 object-contain" />
 					</nuxt-link>
 					<p class="text-gray-500 text-sm md:text-[15px] leading-relaxed pr-4">
 						{{ contactInfo.slogan }}

@@ -3,18 +3,44 @@
 
 	import type { Product } from '~/utils/types'
 
-	defineProps<{
-		product: Product
-		showButton?: boolean
-	}>()
+	const props = withDefaults(
+		defineProps<{
+			product: Product
+			showButton?: boolean
+			/** true: только emit `openUploader`, без встроенного модала (страница сама показывает uploader) */
+			delegateUploader?: boolean
+		}>(),
+		{ delegateUploader: false }
+	)
 
 	const emit = defineEmits<{
-		(e: 'open-uploader'): void
+		(e: 'openUploader'): void
 	}>()
+
+	const router = useRouter()
+
+	const isUploaderOpen = ref(false)
+
+	const openUploader = () => {
+		if (props.delegateUploader) {
+			emit('openUploader')
+			return
+		}
+		isUploaderOpen.value = true
+	}
+
+	const closeUploader = () => {
+		isUploaderOpen.value = false
+	}
+
+	const goNext = () => {
+		router.push(`/products/${props.product.id}`)
+	}
 </script>
 
 <template>
-	<div class="group flex flex-col h-full rounded-2xl cursor-pointer" @click.stop="emit('open-uploader')">
+	<div class="flex flex-col h-full min-h-0">
+	<div class="group flex flex-col h-full rounded-2xl cursor-pointer" @click="openUploader">
 		<!-- Картинка -->
 		<div class="relative w-full rounded-2xl overflow-hidden bg-gray-100 aspect-[4/5]">
 			<img
@@ -72,6 +98,15 @@
 				</button>
 			</div>
 		</div>
+	</div>
+
+	<!-- Uploader Modal -->
+	<catalog-uploader-modal
+		v-if="!delegateUploader"
+		:is-open="isUploaderOpen"
+		@close="closeUploader"
+		@go-next="goNext"
+	/>
 	</div>
 </template>
 

@@ -1,6 +1,12 @@
 <script setup lang="ts">
 	import { Autoplay, Navigation } from 'swiper/modules'
 
+	import type { Product } from '~/utils/types'
+
+	defineProps<{
+		products: Product[]
+	}>()
+
 	const modules = [Navigation, Autoplay]
 
 	const isBeginning = ref(true)
@@ -15,14 +21,6 @@
 			isEnd.value = swiper.isEnd
 		})
 	}
-
-	const products = [
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379 },
-		{ title: 'Düğün Anısı Kanvas Baskı', image: '/images/banner.png', oldPrice: 400, price: 379 }
-	]
 </script>
 
 <template>

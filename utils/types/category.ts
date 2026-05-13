@@ -1,7 +1,11 @@
+import type { Image } from './home'
+
 export const FEATURED_CATEGORY = 'Öne Çıkan Kategoriler'
 export const MOST_SEARCHED_CATEGORY = 'En Çok Aranan Kategoriler'
 export const CANVAS_PAINTING_CATEGORY = 'Kanvas Tablo Galerisi'
+export const CANVAS_PAINTING_CATEGORY_SLUG = 'kanvas-tablo-galerisi'
 export const PERSONALIZED_CANVAS_PAINTINGS_CATEGORY = 'Kişiye Özel Kanvas Tablo'
+export const PERSONALIZED_CANVAS_SLUG = 'kisiye-ozel-kanvas-tablo'
 
 export type CategoryType = typeof CANVAS_PAINTING_CATEGORY | typeof PERSONALIZED_CANVAS_PAINTINGS_CATEGORY
 export type FeaturedCategoryType = typeof FEATURED_CATEGORY | typeof MOST_SEARCHED_CATEGORY
@@ -11,7 +15,7 @@ export type MainCategory = {
 	name: string
 	slug: string
 	description: string
-	images: string[]
+	images: Image[]
 	is_active: boolean
 	featured_order: number
 	category_type: CategoryType
@@ -31,6 +35,8 @@ export type FeaturedCategory = {
 	is_active: boolean
 	featured_order: number
 	category_type: FeaturedCategoryType
+	/** Ürün sayısı (API) */
+	products_count?: number | null
 	subcategories?: SubCategory[]
 }
 
@@ -44,6 +50,8 @@ export type SubCategory = {
 	slug: string
 	is_active: boolean
 	featured_order: number
+	/** Ürün sayısı (API) */
+	products_count?: number | null
 }
 
 export type SubCategoryPayload = Omit<SubCategory, 'id'>

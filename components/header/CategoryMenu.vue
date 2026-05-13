@@ -1,27 +1,112 @@
 <script setup lang="ts">
+	import { storeToRefs } from 'pinia'
+
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { featuredCategories, mainCategories } from '~/utils/data/categories'
-	import type { FeaturedCategory, SubCategory } from '~/utils/types'
+	import {
+		CANVAS_PAINTING_CATEGORY_SLUG,
+		PERSONALIZED_CANVAS_PAINTINGS_CATEGORY,
+		PERSONALIZED_CANVAS_SLUG,
+		type FeaturedCategory,
+		type MainCategory,
+		type SubCategory
+	} from '~/utils/types'
 
-	const activeMainId = ref<number | null>(mainCategories[0].id)
+	/** Только эти два пункта в сайдбаре меню (порядок: сначала kişiye özel, потом galeri). */
+	const MAIN_MENU_ORDER: Record<string, number> = {
+		[PERSONALIZED_CANVAS_SLUG]: 0,
+		[CANVAS_PAINTING_CATEGORY_SLUG]: 1
+	}
 
-	const activeMain = computed(() => mainCategories.find((c) => c.id === activeMainId.value) || mainCategories[0])
+	const homeStore = useHomeStore()
+	const { mainCategories, featuredCategoriesAll, subCategories } = storeToRefs(homeStore)
+
+	const visibleMainCategories = computed(() =>
+		mainCategories.value
+			.filter((m) => m.slug in MAIN_MENU_ORDER)
+			.sort((a, b) => (MAIN_MENU_ORDER[a.slug] ?? 99) - (MAIN_MENU_ORDER[b.slug] ?? 99))
+	)
+
+	const activeMainId = ref<number | null>(null)
+
+	watch(
+		visibleMainCategories,
+		(mains) => {
+			if (!mains.length) {
+				activeMainId.value = null
+				return
+			}
+			const stillValid = mains.some((c) => c.id === activeMainId.value)
+			if (activeMainId.value == null || !stillValid) {
+				activeMainId.value = mains[0]?.id ?? null
+			}
+		},
+		{ immediate: true, deep: true }
+	)
+
+	const activeMain = computed<MainCategory | null>(() => {
+		const mains = visibleMainCategories.value
+		if (!mains.length) return null
+		return mains.find((c) => c.id === activeMainId.value) ?? mains[0] ?? null
+	})
+
+	const featuredForActiveMain = computed(() => {
+		const mainId = activeMainId.value
+		if (mainId == null) return [] as FeaturedCategory[]
+		const n = Number(mainId)
+		return featuredCategoriesAll.value.filter((f) => {
+			const fm = f.main_category_id ?? f.main_category?.id
+			return fm != null && Number(fm) === n
+		})
+	})
 
 	const activeFeaturedGroups = computed(() => {
-		const filtered = featuredCategories.filter((f) => f.main_category_id === activeMainId.value)
-		// Group by category_type (FeaturedCategoryType)
-		const groups: Record<string, (FeaturedCategory & { subcategories: SubCategory[] })[]> = {}
-		filtered.forEach((f) => {
+		const groups: Record<string, FeaturedCategory[]> = {}
+		for (const f of featuredForActiveMain.value) {
 			if (!groups[f.category_type]) groups[f.category_type] = []
 			groups[f.category_type].push(f)
-		})
+		}
 		return groups
 	})
+
+	const mainCategoryIcon = (main: MainCategory) =>
+		main.category_type === PERSONALIZED_CANVAS_PAINTINGS_CATEGORY ? 'palette' : 'landscape'
 
 	const setActiveMain = (id: number | null) => {
 		activeMainId.value = id
 	}
+
+	const mainExploreHref = computed(() => {
+		const m = activeMain.value
+		if (!m) return '/products'
+		return productsHrefForMain(m)
+	})
+
+	/** Ссылка на каталог с фильтром по главной категории (без `main_category_id=null` в URL). */
+	const productsHrefForMain = (main: MainCategory) => {
+		if (main.id != null) return `/products?main_category_id=${main.id}`
+		return '/products'
+	}
+
+	/** Сначала вложенные с API; если пусто — плоский список из `homeStore.subCategories`. */
+	const subsForFeatured = (featured: FeaturedCategory): SubCategory[] => {
+		const nested = featured.subcategories
+		if (nested?.length) return nested
+		const fid = featured.id
+		if (fid == null) return []
+		const fn = Number(fid)
+		return subCategories.value.filter((s) => s.category_id != null && Number(s.category_id) === fn)
+	}
+
+	onMounted(async () => {
+		const need = !mainCategories.value.length || !featuredCategoriesAll.value.length || !subCategories.value.length
+		if (!need) return
+		await Promise.all([
+			homeStore.fetchMainCategories(),
+			homeStore.fetchFeaturedCategories(),
+			homeStore.fetchSubCategories()
+		])
+	})
 </script>
 
 <template>
@@ -29,32 +114,37 @@
 		<div class="category-menu-wrapper">
 			<!-- Sidebar for Main Categories -->
 			<div class="category-sidebar">
-				<div
-					v-for="main in mainCategories"
-					:key="main.id!"
+				<nuxt-link
+					v-for="main in visibleMainCategories"
+					:key="main.id ?? main.slug"
+					:to="productsHrefForMain(main)"
 					class="category-item"
 					:class="{ active: activeMainId === main.id }"
 					@mouseenter="setActiveMain(main.id)"
 				>
 					<div class="flex items-center gap-3">
-						<Icon :name="main.id === 1 ? 'palette' : 'landscape'" class="w-5 h-5 opacity-70" />
+						<Icon :name="mainCategoryIcon(main)" class="w-5 h-5 opacity-70" />
 						<span class="font-bold text-sm uppercase tracking-tight">{{ main.name }}</span>
 					</div>
 					<Icon
 						name="arrowRight"
 						class="w-4 h-4 opacity-40 transition-transform duration-300 group-hover:translate-x-1"
 					/>
-				</div>
+				</nuxt-link>
 			</div>
 
 			<!-- Main Content Area for Featured & Subcategories -->
 			<div class="category-content">
 				<div class="p-8 h-full flex flex-col overflow-y-auto custom-scrollbar">
+					<p v-if="!Object.keys(activeFeaturedGroups).length && activeMain" class="text-sm text-gray-500">
+						Bu kategori için alt kategori bulunamadı.
+					</p>
 					<div v-for="(group, type) in activeFeaturedGroups" :key="type" class="mb-10 flex-1">
+						<p class="text-xs font-bold uppercase tracking-wider text-[#215EA5] mb-4">{{ type }}</p>
 						<div class="grid grid-cols-2 gap-x-12 gap-y-10">
-							<div v-for="featured in group" :key="featured.id!" class="featured-block">
+							<div v-for="featured in group" :key="featured.id ?? featured.slug" class="featured-block">
 								<nuxt-link
-									:to="`/products?category_id=${featured.id}`"
+									:to="featured.id != null ? `/products?category_id=${featured.id}` : '#'"
 									class="text-lg font-bold text-[#101828] mb-4 block hover:text-[#215EA5] transition-colors"
 								>
 									{{ featured.name }}
@@ -62,9 +152,13 @@
 
 								<div class="flex flex-col gap-2">
 									<nuxt-link
-										v-for="(sub, idx) in featured.subcategories"
-										:key="sub.id!"
-										:to="`/products?category_id=${featured.id}&sub_category_id=${sub.id}`"
+										v-for="(sub, idx) in subsForFeatured(featured)"
+										:key="sub.id ?? `${featured.id}-${idx}`"
+										:to="
+											featured.id != null && sub.id != null
+												? `/products?category_id=${featured.id}&sub_category_id=${sub.id}`
+												: '#'
+										"
 										class="subcategory-link"
 										:style="{ animationDelay: `${idx * 50}ms` }"
 									>
@@ -76,13 +170,14 @@
 					</div>
 
 					<!-- Featured Banner in Menu -->
-					<div
-						v-if="activeMain.images.length"
-						class="mt-8 rounded-3xl overflow-hidden relative group cursor-pointer h-44 shadow-lg"
+					<nuxt-link
+						v-if="activeMain?.images?.length"
+						:to="mainExploreHref"
+						class="mt-8 rounded-3xl overflow-hidden relative group cursor-pointer h-44 shadow-lg block"
 					>
 						<img
-							:src="activeMain.images[0]"
-							alt="Featured"
+							:src="activeMain.images[0]?.url"
+							:alt="activeMain.name"
 							class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
 						/>
 						<div
@@ -91,13 +186,13 @@
 							<span class="text-xs font-bold uppercase tracking-widest mb-2 opacity-90">Öne Çıkan Fırsat</span>
 							<h4 class="text-2xl font-black mb-3 leading-tight">{{ activeMain.name }}</h4>
 							<span
-								class="inline-flex items-center gap-2 bg-white text-[#215EA5] px-5 py-2 rounded-full text-sm font-bold transition-all hover:bg-[#215EA5] hover:text-white"
+								class="inline-flex items-center gap-2 bg-white text-[#215EA5] px-5 py-2 rounded-full text-sm font-bold transition-all group-hover:bg-[#215EA5] group-hover:text-white"
 							>
 								Hemen İncele
 								<Icon name="arrowRight" class="w-4 h-4" />
 							</span>
 						</div>
-					</div>
+					</nuxt-link>
 				</div>
 			</div>
 		</div>

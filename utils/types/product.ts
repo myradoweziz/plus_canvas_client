@@ -1,3 +1,4 @@
+import type { MainCategory } from './category'
 import type { Image } from './home'
 
 export interface Product {
@@ -11,6 +12,7 @@ export interface Product {
 	inner_images?: Image[]
 	upload_image_count: number
 	main_category_id: number
+	main_category?: MainCategory
 	category_id: number
 	sub_category_id: number
 	brand_id: number
@@ -18,4 +20,7 @@ export interface Product {
 	flag: string
 	product_qode: string
 	discount_id: number
+	/** Filtre (sidebar Renk adı veya API color_id) */
+	color?: string
+	color_id?: number | null
 }

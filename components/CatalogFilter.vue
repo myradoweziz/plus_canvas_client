@@ -35,8 +35,8 @@
 <template>
 	<section class="bg-white shadow-lg p-4 md:p-6 border border-gray-100">
 		<div class="max-w-[1400px] mx-auto">
-			<div class="flex items-center justify-between gap-4">
-				<div class="flex items-center gap-4 md:gap-8">
+			<div v-if="false" class="flex items-center justify-end gap-4">
+				<div v-if="false" class="flex items-center gap-4 md:gap-8">
 					<button
 						class="flex items-center justify-between md:justify-normal gap-2 bg-[#215EA5] text-white px-5 py-2.5 rounded-full text-sm md:text-base hover:bg-[#124080] transition-all"
 						@click="emit('open')"
@@ -61,6 +61,7 @@
 						>
 							<option value="default">Varsayılan</option>
 							<option value="newest">En Yeniler</option>
+							<option value="oldest">En Eskiler</option>
 							<option value="price_asc">Düşük Fiyat</option>
 							<option value="price_desc">Yüksek Fiyat</option>
 						</select>
@@ -73,27 +74,47 @@
 			</div>
 
 			<!-- Активные теги -->
-			<div
-				v-if="normalizedActiveFilters.length"
-				class="hidden md:flex flex-wrap items-center mt-6 pt-4 border-t border-t-gray-200"
-			>
-				<span class="text-xs md:text-sm font-semibold text-[#4A5565] uppercase tracking-wider mr-2"
-					>Aktif Filtreler:</span
-				>
-				<div class="flex items-center gap-3">
-					<div
-						v-for="filter in normalizedActiveFilters"
-						:key="filter.id"
-						class="bg-[#215EA5B2] text-white px-4 py-2 rounded-full text-xs md:text-sm flex items-center gap-2 border border-[#1853a0]/20 hover:bg-[#124080] cursor-pointer transition-all"
-						@click="emit('remove', filter.id)"
+			<div class="hidden md:flex items-center justify-between">
+				<div v-if="normalizedActiveFilters.length" class="md:flex flex-wrap items-center">
+					<span class="text-xs md:text-sm font-semibold text-[#4A5565] uppercase tracking-wider mr-2"
+						>Aktif Filtreler:</span
 					>
-						{{ filter.label }}
-						<Icon name="close" class="w-3 h-3 md:w-4 md:h-4" />
+					<div class="flex items-center gap-3">
+						<div
+							v-for="filter in normalizedActiveFilters"
+							:key="filter.id"
+							class="bg-[#215EA5B2] text-white px-4 py-2 rounded-full text-xs md:text-sm flex items-center gap-2 border border-[#1853a0]/20 hover:bg-[#124080] cursor-pointer transition-all"
+							@click="emit('remove', filter.id)"
+						>
+							{{ filter.label }}
+							<Icon name="close" class="w-3 h-3 md:w-4 md:h-4" />
+						</div>
+					</div>
+					<button class="text-[#4A5565] text-xs md:text-sm hover:underline ml-2" @click="emit('clear')">
+						Tümünü Temizle
+					</button>
+				</div>
+				<div v-else></div>
+
+				<div class="hidden md:flex items-center gap-2">
+					<span class="text-[#4A5565] text-sm hidden md:inline">Sırala:</span>
+					<div class="relative min-w-[140px] md:min-w-[180px]">
+						<select
+							class="w-full bg-gray-50 border border-gray-200 rounded-full px-5 py-2.5 text-sm md:text-base font-semibold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
+							v-model="sortLocal"
+						>
+							<option value="default">Varsayılan</option>
+							<option value="newest">En Yeniler</option>
+							<option value="oldest">En Eskiler</option>
+							<option value="price_asc">Düşük Fiyat</option>
+							<option value="price_desc">Yüksek Fiyat</option>
+						</select>
+						<Icon
+							name="arrowBottom"
+							class="absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 pointer-events-none"
+						/>
 					</div>
 				</div>
-				<button class="text-[#4A5565] text-xs md:text-sm hover:underline ml-2" @click="emit('clear')">
-					Tümünü Temizle
-				</button>
 			</div>
 		</div>
 	</section>

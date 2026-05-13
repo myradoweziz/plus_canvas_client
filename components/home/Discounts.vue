@@ -7,8 +7,10 @@
 
 	defineProps<{
 		discounts: DisCount[]
-		mainCategoryId?: number
 	}>()
+
+	const homeStore = useHomeStore()
+	const mainCategoryId = homeStore.mainCategoryId
 
 	const modules = [Navigation, Autoplay]
 
