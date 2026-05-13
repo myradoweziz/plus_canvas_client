@@ -26,6 +26,14 @@
 			discount_id: 1
 		}
 	]
+
+	onMounted(async () => {
+		const token = useCookie('Authorization')
+		const router = useRouter()
+		if (!token.value) {
+			router.push('/login')
+		}
+	})
 </script>
 
 <template>

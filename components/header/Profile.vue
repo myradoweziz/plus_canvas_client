@@ -28,7 +28,6 @@
 
 		return [
 			{ title: 'Giriş Yap', link: '/login' },
-			{ title: 'Kayıt Ol', link: '/register' },
 			{ icon: 'favorite', title: 'Favorilerim', link: '/favorites' },
 			{ icon: 'user', title: 'Hesabım', link: '/profile' },
 			{ icon: 'car', title: 'Sipariş takibi', link: '/orders' }

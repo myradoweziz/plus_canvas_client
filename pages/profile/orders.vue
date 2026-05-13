@@ -26,6 +26,14 @@
 					: 'bg-[#155DFC1A] text-[#1447E6]'
 		]
 	}
+
+	onMounted(async () => {
+		const token = useCookie('Authorization')
+		const router = useRouter()
+		if (!token.value) {
+			router.push('/login')
+		}
+	})
 </script>
 
 <template>
