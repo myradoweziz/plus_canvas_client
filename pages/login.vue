@@ -62,15 +62,18 @@
 				return
 			}
 
-			if (data.value && data.value.message === 'Successfully logged in') {
-				authStore.setSessionToken(data.value.token)
-				toast.success('Giriş başarılı')
-				router.push('/')
-				await authStore.getMe()
-				return
-			}
+			if (data.value) {
+				const anyData = data.value as any
+				const token: string | undefined = anyData?.token ?? anyData?.data?.token ?? anyData?.data?.data?.token
+				if (!token) {
+					submitError.value = 'Giriş yapılamadı. Sunucudan token alınamadı.'
+					return
+				}
 
-			submitError.value = 'Giriş yapılamadı. Lütfen tekrar deneyin.'
+				authStore.setSessionToken(token)
+				toast.success('Giriş başarılı')
+				router.push('/profile')
+			}
 		} finally {
 			isSubmitting.value = false
 		}

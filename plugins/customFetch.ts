@@ -1,5 +1,11 @@
 export default defineNuxtPlugin(() => {
-	const userAuth = useCookie('Authorization')
+	// Единственный источник токена — cookie Authorization
+	const userAuth = useCookie<string | null>('Authorization', {
+		path: '/',
+		sameSite: 'lax',
+		maxAge: 60 * 60 * 24 * 30,
+		secure: !import.meta.dev
+	})
 	const config = useRuntimeConfig()
 	const authStore = useAuthStore()
 	const nuxtApp = useNuxtApp()
@@ -7,13 +13,26 @@ export default defineNuxtPlugin(() => {
 	const route = useRoute()
 	const router = useRouter()
 
+	const getPathFromResponseUrl = (url: string): string => {
+		try {
+			// может быть абсолютный URL с baseURL
+			return new URL(url).pathname
+		} catch {
+			// может быть относительный путь
+			return url
+		}
+	}
+
 	const $customFetch = $fetch.create({
 		baseURL: (config.public.baseUrl as string) ?? '',
 		onRequest({ request, options, error }) {
 			nuxtApp.callHook('page:loading:start')
-			const rawToken = userAuth.value || authStore.authorizationToken
+			const rawToken = typeof userAuth.value === 'string' ? userAuth.value.trim() : ''
 			if (rawToken) {
-				options.headers.set('Authorization', `Bearer ${rawToken}`)
+				// ofetch допускает headers как объект; нормализуем в Headers, чтобы .set всегда работал
+				const h = options.headers instanceof Headers ? options.headers : new Headers(options.headers as any)
+				h.set('Authorization', `Bearer ${rawToken}`)
+				options.headers = h
 			}
 
 			if (route.path.startsWith('/contact/') && !sessionStorage.getItem('confirm_phone')) {
@@ -33,11 +52,17 @@ export default defineNuxtPlugin(() => {
 		},
 		onResponseError({ response, options, error }) {
 			if (response.status === 401) {
-				if (response.url === '/api/login') {
+				const path = getPathFromResponseUrl(response.url)
+				const isAuthEndpoint =
+					path.includes('/api/auth/login') ||
+					path.includes('/api/auth/register') ||
+					path.includes('/api/auth/me') ||
+					path.includes('/api/login')
+
+				if (isAuthEndpoint) {
 					toast.error(response._data.message || response._data || 'Siziň rugsadyňyz ýok!')
 				} else {
-					toast.info('Sessiýaňyz gutardy. Ulgama täzeden girmegiňizi haýyş edýäris!')
-					authStore.logout()
+					void authStore.logout('expired')
 				}
 			} else if (response.status === 422) {
 				const errors = response._data.data
@@ -53,7 +78,7 @@ export default defineNuxtPlugin(() => {
 					})
 				}
 			} else if (response.status === 403) {
-				authStore.logout()
+				void authStore.logout('forbidden')
 			} else if (response.status === 500 && response._data?.message === 'Token has expired') {
 				toast.info('Sessiýaňyz gutardy. Ulgama täzeden girmegiňizi haýyş edýäris!')
 			} else if (response._data.message) {

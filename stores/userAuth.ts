@@ -8,13 +8,24 @@ export const useAuthStore = defineStore('auth', () => {
 
 	const user = ref<User | null>(null)
 
+	function authCookie() {
+		return useCookie<string | null>('Authorization', {
+			path: '/',
+			sameSite: 'lax',
+			// Сессионная cookie легко воспринимается как "не сохранилось" после перезапуска браузера.
+			// Дадим разумный срок жизни.
+			maxAge: 60 * 60 * 24 * 30,
+			secure: !import.meta.dev
+		})
+	}
+
 	function syncTokenFromCookie() {
-		const tokenCookie = useCookie('Authorization')
+		const tokenCookie = authCookie()
 		authorizationToken.value = tokenCookie.value ?? null
 	}
 
 	function setSessionToken(token: string) {
-		const tokenCookie = useCookie('Authorization')
+		const tokenCookie = authCookie()
 		tokenCookie.value = token
 		authorizationToken.value = token
 	}
@@ -65,12 +76,26 @@ export const useAuthStore = defineStore('auth', () => {
 		localStorage.setItem('auth.person_last_activity', milliseconds)
 	}
 
-	function logout() {
-		const tokenCookie = useCookie('Authorization')
+	async function logout(reason: 'manual' | 'expired' | 'forbidden' = 'manual', redirectTo: string | false = '/') {
+		const toast = useNuxtApp().$toast
+		const tokenCookie = authCookie()
 		tokenCookie.value = null
 		syncTokenFromCookie()
 		user.value = null
-		void navigateTo('/')
+
+		if (reason === 'expired') {
+			toast.info('Sessiýaňyz gutardy. Ulgama täzeden girmegiňizi haýyş edýäris!')
+		} else if (reason === 'forbidden') {
+			toast.error('Giriş izni ýok. Täzeden giriň.')
+		} else {
+			toast.success('Çykış edildi')
+		}
+
+		// Даём UI шанс обновиться до навигации (важно для меню профиля)
+		await nextTick()
+		if (redirectTo !== false) {
+			await navigateTo(redirectTo)
+		}
 	}
 
 	return {

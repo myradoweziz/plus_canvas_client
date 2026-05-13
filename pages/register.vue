@@ -121,7 +121,14 @@
 		}
 
 		if (data.value) {
-			authStore.setSessionToken(data.value.token)
+			const anyData = data.value as any
+			const token: string | undefined = anyData?.token ?? anyData?.data?.token ?? anyData?.data?.data?.token
+			if (!token) {
+				submitError.value = 'Kayıt başarısız. Sunucudan token alınamadı.'
+				return
+			}
+
+			authStore.setSessionToken(token)
 			toast.success('Kayıt başarılı')
 			router.push('/')
 			return

@@ -12,6 +12,7 @@
 
 	const authStore = useAuthStore()
 	const { user, authorizationToken } = storeToRefs(authStore)
+	const route = useRoute()
 
 	const profileItems = computed<ProfileItem[]>(() => {
 		if (authorizationToken.value) {
@@ -38,9 +39,17 @@
 	const profileMenu = ref<HTMLDivElement | null>(null)
 	const profileContainer = ref<HTMLDivElement | null>(null)
 
-	const handleLogout = () => {
-		authStore.logout()
+	watch(
+		() => route.fullPath,
+		() => {
+			showProfileMenu.value = false
+		}
+	)
+
+	const handleLogout = async () => {
+		// Сначала закрываем меню, затем логаут без редиректа — чтобы пункты обновились мгновенно
 		showProfileMenu.value = false
+		await authStore.logout('manual', false)
 	}
 
 	const handleClickOutside = (event: MouseEvent) => {
