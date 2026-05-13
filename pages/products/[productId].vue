@@ -15,7 +15,7 @@
 	const productId = route.params.productId
 
 	const breadcrumbs = [
-		{ label: 'Kategoriler', link: '/categories' },
+		{ label: 'Kategoriler', link: '/products' },
 		{ label: 'Ürünler', link: `/products` },
 		{ label: 'Ürün Detayı', link: `/products/${productId}` }
 	] as BreadcrumbItem[]

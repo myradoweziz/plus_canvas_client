@@ -5,8 +5,8 @@ import { CANVAS_PAINTING_CATEGORY, PERSONALIZED_CANVAS_PAINTINGS_CATEGORY } from
 export const mainCategories: MainCategory[] = [
 	{
 		id: 1,
-		name: 'Kişiye Özel Kanvas ',
-		slug: 'kisiye-ozel-kanvas',
+		name: 'Kişiye Özel Kanvas Tablo',
+		slug: 'kisiye-ozel-kanvas-tablo',
 		description: 'Kendi fotoğraflarınızdan özel tablolar',
 		images: ['/images/banner.png'],
 		is_active: true,

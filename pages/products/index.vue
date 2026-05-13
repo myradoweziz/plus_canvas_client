@@ -8,14 +8,14 @@
 
 	const route = useRoute()
 	const router = useRouter()
-	const categoryId = route.params.categoryId
+	const productId = route.params.productId
 
 	const { faqs } = useHomeStore()
 
 	const breadcrumbs = [
 		{ label: 'Anasayfa', link: '/' },
-		{ label: 'Kategoriler', link: '/categories' },
-		{ label: categoryId as string }
+		{ label: 'Kategoriler', link: '/products' },
+		{ label: productId as string }
 	]
 
 	interface Product {
@@ -219,7 +219,7 @@
 </script>
 
 <template>
-	<main class="min-h-screen overflow-hidden">
+	<main class="min-h-screen">
 		<home-banner :banners="[]" :breadcrumbs="breadcrumbs" />
 
 		<catalog-filter
@@ -354,7 +354,7 @@
 		<div class="max-w-[1400px] mx-auto px-4 md:px-0 py-10 md:py-9">
 			<div class="flex flex-col md:flex-row gap-10">
 				<!-- Desktop sidebar filters -->
-				<div class="hidden md:block w-[390px] shrink-0 sticky top-28 h-fit">
+				<div class="hidden md:block w-[390px]">
 					<catalog-sidebar-filter
 						:selected-sub-id="selectedSubId"
 						:selected-color="selectedColor"

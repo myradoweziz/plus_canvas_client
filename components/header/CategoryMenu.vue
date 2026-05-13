@@ -54,7 +54,7 @@
 						<div class="grid grid-cols-2 gap-x-12 gap-y-10">
 							<div v-for="featured in group" :key="featured.id!" class="featured-block">
 								<nuxt-link
-									:to="`/categories/${featured.id}`"
+									:to="`/products?category_id=${featured.id}`"
 									class="text-lg font-bold text-[#101828] mb-4 block hover:text-[#215EA5] transition-colors"
 								>
 									{{ featured.name }}
@@ -64,7 +64,7 @@
 									<nuxt-link
 										v-for="(sub, idx) in featured.subcategories"
 										:key="sub.id!"
-										:to="`/categories/${featured.id}/${sub.slug}`"
+										:to="`/products?category_id=${featured.id}&sub_category_id=${sub.id}`"
 										class="subcategory-link"
 										:style="{ animationDelay: `${idx * 50}ms` }"
 									>

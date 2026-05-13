@@ -19,18 +19,18 @@
 			const displayName = user.value?.name?.trim() || ''
 			return [
 				{ title: displayName, link: '/profile' },
-				{ icon: 'favorite', title: 'Favorilerim', link: '/favorites' },
+				{ icon: 'favorite', title: 'Favorilerim', link: '/profile/favorites' },
 				{ icon: 'user', title: 'Hesabım', link: '/profile' },
-				{ icon: 'car', title: 'Sipariş takibi', link: '/orders' },
+				{ icon: 'car', title: 'Sipariş takibi', link: '/profile/orders' },
 				{ icon: 'logout', title: 'Çıkış Yap', isLogout: true }
 			]
 		}
 
 		return [
-			{ title: 'Giriş Yap', link: '/login' },
-			{ icon: 'favorite', title: 'Favorilerim', link: '/favorites' },
+			{ title: 'Giriş Yap', link: '/login', icon: 'logout' },
+			{ icon: 'favorite', title: 'Favorilerim', link: '/profile/favorites' },
 			{ icon: 'user', title: 'Hesabım', link: '/profile' },
-			{ icon: 'car', title: 'Sipariş takibi', link: '/orders' }
+			{ icon: 'car', title: 'Sipariş takibi', link: '/profile/orders' }
 		]
 	})
 

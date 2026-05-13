@@ -7,7 +7,11 @@
 		contactInfo: ContactInfo
 	}>()
 
-	const footerLinks = {
+	const homeStore = useHomeStore()
+
+	console.log(homeStore.personalizedCanvasPaintingsCategories)
+
+	const footerLinks = reactive({
 		gallery: [
 			{ name: 'Çok Satan Tablolar', href: '#' },
 			{ name: 'Yeni Tablolar', href: '#' },
@@ -35,7 +39,18 @@
 			{ name: 'Bize Ulaşın', href: '#' },
 			{ name: 'BLOG', href: '#' }
 		]
-	}
+	})
+
+	watchEffect(() => {
+		footerLinks.gallery = homeStore.canvasPaintingCategories.map((category) => ({
+			name: category.name,
+			href: `/products?category_id=${category.id}`
+		}))
+		footerLinks.personalized = homeStore.personalizedCanvasPaintingsCategories.map((category) => ({
+			name: category.name,
+			href: `/products?category_id=${category.id}`
+		}))
+	})
 
 	const topLinks = [
 		{ name: 'Hesabım', href: '#' },
