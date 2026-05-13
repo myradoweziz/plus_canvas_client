@@ -180,6 +180,21 @@
 		return Number(n)
 	}
 
+	/** Alt liste: ok işaretli veya bu featured seçiliyse veya altından bir sub seçiliyse. */
+	const isFeaturedSubsVisible = (featured: FeaturedCategory) => {
+		const fid = featured.id
+		if (fid == null) return false
+		const fn = Number(fid)
+		if (activeFeaturedId.value != null && Number(activeFeaturedId.value) === fn) return true
+		if (props.selectedCategoryId != null && Number(props.selectedCategoryId) === fn) return true
+		const sid = props.selectedSubId
+		if (sid == null) return false
+		for (const s of subsForFeatured(featured)) {
+			if (s.id != null && Number(s.id) === Number(sid)) return true
+		}
+		return false
+	}
+
 	onMounted(async () => {
 		const need = !mainCategories.value.length || !featuredCategoriesAll.value.length || !subCategories.value.length
 		if (!need) return
@@ -261,7 +276,7 @@
 								<Icon
 									name="arrowRight"
 									class="w-3 h-3 transition-transform duration-300"
-									:class="{ 'rotate-90': activeFeaturedId === featured.id }"
+									:class="{ 'rotate-90': isFeaturedSubsVisible(featured) }"
 								/>
 							</button>
 							<button
@@ -278,7 +293,7 @@
 							>
 						</div>
 
-						<ul v-if="activeFeaturedId === featured.id" class="sub-list">
+						<ul v-if="isFeaturedSubsVisible(featured)" class="sub-list">
 							<li
 								v-for="sub in subsForFeatured(featured)"
 								:key="sub.id ?? sub.slug"

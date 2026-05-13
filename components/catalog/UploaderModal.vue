@@ -1,4 +1,6 @@
 <script setup lang="ts">
+	import axios, { isAxiosError } from 'axios'
+
 	import Icon from '~/utils/ui/Icon.vue'
 
 	defineProps<{
@@ -12,10 +14,57 @@
 
 	const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
+	type TempUploadApiResponse = {
+		message: string
+		data: {
+			session_id: string
+			user_id: number | null
+			file_path: string
+			original_name: string
+			mime_type: string
+			size: number
+			updated_at: string
+			created_at: string
+			id: number
+			url: string
+		}
+	}
+
+	type UploadedItem = {
+		id: number
+		url: string
+		progress: number
+		isUploading: boolean
+		sessionId?: string
+		serverId?: number
+	}
+
+	const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/pjpeg', 'image/x-png'])
+
 	const fileInput = ref<HTMLInputElement | null>(null)
 	const isDragging = ref(false)
-	const uploadedImages = ref<{ id: number; url: string; progress: number; isUploading: boolean }[]>([])
+	const uploadedImages = ref<UploadedItem[]>([])
 	const errorMessage = ref<string | null>(null)
+
+	/** Tam API URL — boş baseUrl ile istek Nuxt origin’e gider ve API’ye ulaşmaz. */
+	const getUploadTempUrl = (): string | null => {
+		const base = String(useRuntimeConfig().public.baseUrl ?? '')
+			.trim()
+			.replace(/\/+$/, '')
+		if (!base) return null
+		return `${base}/api/media/upload-temp`
+	}
+
+	const uploadAuthHeaders = (): Record<string, string> => {
+		const authCookie = useCookie<string | null>('Authorization', {
+			path: '/',
+			sameSite: 'lax',
+			maxAge: 60 * 60 * 24 * 30,
+			secure: !import.meta.dev
+		})
+		const t = typeof authCookie.value === 'string' ? authCookie.value.trim() : ''
+		return t ? { Authorization: `Bearer ${t}` } : {}
+	}
 
 	const showError = (message: string) => {
 		errorMessage.value = message
@@ -28,52 +77,77 @@
 		fileInput.value?.click()
 	}
 
-	const simulateUpload = (file: File) => {
-		const id = Date.now() + Math.random()
-		const newImage = {
-			id,
+	const uploadTempImage = async (file: File) => {
+		const localId = Date.now() + Math.random()
+		uploadedImages.value.push({
+			id: localId,
 			url: '',
 			progress: 0,
 			isUploading: true
-		}
-		uploadedImages.value.push(newImage)
+		})
 
-		// Create preview
-		const reader = new FileReader()
-		reader.onload = (e) => {
-			const targetImage = uploadedImages.value.find((img) => img.id === id)
-			if (targetImage) {
-				targetImage.url = e.target?.result as string
-			}
-		}
-		reader.readAsDataURL(file)
+		const formData = new FormData()
+		formData.append('file', file)
 
-		// Simulate progress
-		const interval = setInterval(() => {
-			const targetImage = uploadedImages.value.find((img) => img.id === id)
-			if (!targetImage) {
-				clearInterval(interval)
+		const uploadUrl = getUploadTempUrl()
+
+		if (!uploadUrl) {
+			showError('API adresi eksik: .env içinde BASE_URL tanımlayın (ör. http://sunucu:8000).')
+			uploadedImages.value = uploadedImages.value.filter((i) => i.id !== localId)
+			return
+		}
+
+		try {
+			const { data: res } = await axios.post<TempUploadApiResponse>(uploadUrl, formData, {
+				headers: uploadAuthHeaders(),
+				onUploadProgress: (ev) => {
+					const item = uploadedImages.value.find((i) => i.id === localId)
+					if (!item) return
+					const total = ev.total
+					if (total && total > 0) {
+						item.progress = Math.min(99, Math.round((ev.loaded * 100) / total))
+					}
+				}
+			})
+			const item = uploadedImages.value.find((i) => i.id === localId)
+			if (!item) return
+			const url = typeof res?.data?.url === 'string' ? res.data.url.trim() : ''
+			if (!url) {
+				showError('Sunucudan görüntü adresi alınamadı.')
+				uploadedImages.value = uploadedImages.value.filter((i) => i.id !== localId)
 				return
 			}
-
-			targetImage.progress += Math.floor(Math.random() * 20) + 10
-			if (targetImage.progress >= 100) {
-				targetImage.progress = 100
-				clearInterval(interval)
-				setTimeout(() => {
-					targetImage.isUploading = false
-				}, 500)
+			item.url = url
+			item.serverId = res.data.id
+			item.sessionId = res.data.session_id
+			item.progress = 100
+			item.isUploading = false
+		} catch (e) {
+			uploadedImages.value = uploadedImages.value.filter((i) => i.id !== localId)
+			if (isAxiosError(e)) {
+				const data = e.response?.data as { message?: string } | undefined
+				const msg = data?.message ?? e.message
+				if (msg) showError(msg)
+			} else if (e instanceof Error) {
+				showError(e.message)
+			} else {
+				showError('Yükleme başarısız.')
 			}
-		}, 300)
+		}
 	}
 
 	const validateAndUpload = (file: File) => {
+		const mime = (file.type || '').toLowerCase()
+		if (mime && !ALLOWED_MIME.has(mime)) {
+			showError(`“${file.name}”: yalnızca PNG, JPG, JPEG veya GIF.`)
+			return
+		}
 		if (file.size > MAX_FILE_SIZE_BYTES) {
 			const sizeMb = (file.size / 1024 / 1024).toFixed(1)
 			showError(`Файл “${file.name}” слишком большой (${sizeMb} MB). Максимум 10 MB.`)
 			return
 		}
-		simulateUpload(file)
+		uploadTempImage(file)
 	}
 
 	const handleDrop = (e: DragEvent) => {
@@ -145,29 +219,31 @@
 								<div
 									v-for="img in uploadedImages"
 									:key="img.id"
-									class="relative group aspect-square bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+									class="relative group aspect-square rounded-2xl shadow-sm border border-gray-100 overflow-hidden bg-gray-50"
+									:class="img.url ? 'bg-white' : ''"
 								>
-									<img v-if="img.url" :src="img.url" class="w-full h-full object-cover" />
+									<img v-if="img.url" :src="img.url" :alt="img.url" class="w-full h-full object-cover" />
 
-									<!-- Progress Overlay -->
 									<div
 										v-if="img.isUploading"
 										class="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-4"
 									>
 										<div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-2">
 											<div
-												class="h-full bg-white transition-all duration-300"
-												:style="{ width: img.progress + '%' }"
-											></div>
+												class="h-full bg-white transition-all duration-150"
+												:style="{ width: Math.min(100, Math.max(0, img.progress)) + '%' }"
+											/>
 										</div>
-										<span class="text-[10px] font-bold text-white uppercase tracking-wider">{{ img.progress }}%</span>
+										<span class="text-[10px] font-bold text-white uppercase tracking-wider"
+											>{{ Math.min(100, Math.max(0, Math.round(img.progress))) }}%</span
+										>
 									</div>
 
-									<!-- Remove Button -->
 									<button
 										v-if="!img.isUploading"
+										type="button"
 										@click="removeImage(img.id)"
-										class="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur shadow-md rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all text-gray-500"
+										class="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur shadow-md rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all text-gray-500 z-[1]"
 									>
 										<Icon name="close" class="w-4 h-4" />
 									</button>
@@ -191,7 +267,7 @@
 							<div class="mt-auto pt-10 flex gap-4 w-full justify-center">
 								<button
 									@click="goNext"
-									:disabled="uploadedImages.length === 0"
+									:disabled="uploadedImages.length === 0 || uploadedImages.some((i) => i.isUploading || !i.url.trim())"
 									class="bg-[#2B7FFF] hover:bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-100 transition-all min-w-[200px] disabled:opacity-50 disabled:cursor-not-allowed"
 								>
 									Devam Et
