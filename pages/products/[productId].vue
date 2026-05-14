@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { FreeMode, Navigation, Thumbs } from 'swiper/modules'
 
-	import type { BreadcrumbItem } from '~/utils/types'
+	import type { BreadcrumbItem, ProductDesignPayload } from '~/utils/types'
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import 'swiper/css'
@@ -31,6 +31,16 @@
 	const nextEl = ref<HTMLElement | null>(null)
 	const prevEl3 = ref<HTMLElement | null>(null)
 	const nextEl3 = ref<HTMLElement | null>(null)
+
+	const lastDesign = ref<ProductDesignPayload | null>(null)
+	const onDesignUpdate = (payload: ProductDesignPayload) => {
+		lastDesign.value = payload
+	}
+
+	const designObjectCount = (d: ProductDesignPayload) => {
+		const o = d.fabric.objects
+		return Array.isArray(o) ? o.length : 0
+	}
 </script>
 
 <template>
@@ -209,6 +219,14 @@
 					</div>
 				</div>
 			</div>
+
+			<section class="mt-16 max-w-4xl">
+				<product-design-editor @update:design="onDesignUpdate" />
+				<p v-if="lastDesign" class="mt-3 text-xs text-gray-400">
+					Tasarım verisi güncellendi ({{ lastDesign.tempImage ? 'yüklenen görsel' : 'görsel yok' }}, fabric
+					nesneleri: {{ designObjectCount(lastDesign) }}).
+				</p>
+			</section>
 		</section>
 	</div>
 </template>
