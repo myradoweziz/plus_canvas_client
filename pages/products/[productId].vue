@@ -219,14 +219,6 @@
 					</div>
 				</div>
 			</div>
-
-			<section class="mt-16 max-w-4xl">
-				<product-design-editor @update:design="onDesignUpdate" />
-				<p v-if="lastDesign" class="mt-3 text-xs text-gray-400">
-					Tasarım verisi güncellendi ({{ lastDesign.tempImage ? 'yüklenen görsel' : 'görsel yok' }}, fabric
-					nesneleri: {{ designObjectCount(lastDesign) }}).
-				</p>
-			</section>
 		</section>
 	</div>
 </template>
