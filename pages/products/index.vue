@@ -29,6 +29,8 @@
 		{ label: productId as string }
 	]
 
+	const PAGE_SIZE = 50
+
 	const filters = reactive<FilterProduct>({
 		main_category_id: null,
 		category_id: null,
@@ -36,7 +38,9 @@
 		brand_id: null,
 		color_id: null,
 		sort_by: null,
-		categories: []
+		categories: [],
+		limit: PAGE_SIZE,
+		offset: 0
 	})
 
 	const syncingFromRoute = ref(false)
@@ -70,9 +74,7 @@
 		try {
 			const q = route.query
 			const sortRaw =
-				(typeof q.sort_by === 'string' && q.sort_by.trim()) ||
-				(typeof q.sort === 'string' && q.sort.trim()) ||
-				''
+				(typeof q.sort_by === 'string' && q.sort_by.trim()) || (typeof q.sort === 'string' && q.sort.trim()) || ''
 			filters.sort_by = sortRaw && SORT_BY_VALUES.has(sortRaw) ? sortRaw : null
 			filters.main_category_id = toNum(q.main_category_id)
 			filters.category_id = toNum(q.category_id)
@@ -90,6 +92,13 @@
 					.map((s) => Number(s))
 					.filter((n) => Number.isFinite(n) && n > 0)
 			}
+			const pageNum = toNum(q.page)
+			if (pageNum != null && pageNum > 1) {
+				filters.offset = (pageNum - 1) * PAGE_SIZE
+			} else {
+				filters.offset = 0
+			}
+			filters.limit = PAGE_SIZE
 		} finally {
 			syncingFromRoute.value = false
 		}
@@ -115,13 +124,19 @@
 		brand_id: filters.brand_id,
 		color_id: filters.color_id,
 		sort_by: filters.sort_by || undefined,
-		categories: filters.categories?.length ? filters.categories : undefined
+		categories: filters.categories?.length ? filters.categories : undefined,
+		limit: filters.limit ?? PAGE_SIZE,
+		offset: filters.offset ?? 0
 	}))
 
 	const rc = useRuntimeConfig()
 
 	type BrandsApiResponse = { data: FilterBrand[] }
 	type ColorsApiResponse = { data: FilterColor[] }
+	type ProductsApiResponse = {
+		data: Product[]
+		total?: number
+	}
 
 	const { data: brandsLabelData } = await useCustomFetch<BrandsApiResponse>('/api/brands', {
 		method: 'GET',
@@ -156,6 +171,72 @@
 	})
 
 	const products = computed<Product[]>(() => data.value?.data ?? [])
+
+	const catalogCurrentPage = computed(() => Math.floor((filters.offset ?? 0) / PAGE_SIZE) + 1)
+
+	const catalogTotalPages = computed(() => {
+		const total = data.value?.total
+		if (total != null && Number.isFinite(Number(total)) && Number(total) >= 0) {
+			return Math.max(1, Math.ceil(Number(total) / PAGE_SIZE))
+		}
+		const len = products.value.length
+		const p = catalogCurrentPage.value
+		if (len === 0) return Math.max(1, p)
+		if (len < PAGE_SIZE) return p
+		return p + 1
+	})
+
+	const setCatalogPage = (page: number) => {
+		const tp = catalogTotalPages.value
+		const next = Math.max(1, Math.min(page, tp))
+		filters.offset = (next - 1) * PAGE_SIZE
+	}
+
+	const filterSnapshotKey = computed(() =>
+		[
+			filters.main_category_id,
+			filters.category_id,
+			filters.sub_category_id,
+			filters.brand_id,
+			filters.color_id,
+			filters.sort_by,
+			(filters.categories ?? [])
+				.slice()
+				.sort((a, b) => a - b)
+				.join(',')
+		].join('|')
+	)
+
+	let lastFilterSnapshotKey = ''
+
+	watch(
+		filterSnapshotKey,
+		(key) => {
+			if (syncingFromRoute.value) return
+			if (lastFilterSnapshotKey === '') {
+				lastFilterSnapshotKey = key
+				return
+			}
+			if (lastFilterSnapshotKey !== key) {
+				lastFilterSnapshotKey = key
+				filters.offset = 0
+			}
+		},
+		{ flush: 'post' }
+	)
+
+	let offsetScrollPrimed = false
+	watch(
+		() => filters.offset,
+		() => {
+			if (!import.meta.client) return
+			if (!offsetScrollPrimed) {
+				offsetScrollPrimed = true
+				return
+			}
+			window.scrollTo({ top: 0, behavior: 'smooth' })
+		}
+	)
 
 	/** Ana kategorinin tüm görselleri → swiper slaytları (Banner[]). */
 	const mainCategoryHeroBanners = computed((): Banner[] => {
@@ -309,28 +390,6 @@
 		return res
 	})
 
-	const availableCategories = computed(() => {
-		const counts = new Map<number, number>()
-		for (const p of products.value) counts.set(p.category_id, (counts.get(p.category_id) ?? 0) + 1)
-		return Array.from(counts.entries())
-			.map(([value, count]) => ({ value, count }))
-			.sort((a, b) => a.value - b.value)
-	})
-
-	const availableTags = computed(() => {
-		const counts = new Map<string, number>()
-		for (const p of products.value)
-			counts.set(p.category_id.toString(), (counts.get(p.category_id.toString()) ?? 0) + 1)
-		return Array.from(counts.entries())
-			.map(([value, count]) => ({ value, count }))
-			.sort((a, b) => Number(a.value) - Number(b.value))
-	})
-
-	const toggleInArray = (arr: number[], value: number) => {
-		if (arr.includes(value)) return arr.filter((v) => v !== value)
-		return [...arr, value]
-	}
-
 	const clearFilters = () => {
 		filters.main_category_id = null
 		filters.category_id = null
@@ -339,6 +398,7 @@
 		filters.color_id = null
 		filters.sort_by = null
 		filters.categories = []
+		filters.offset = 0
 	}
 
 	const removeFilter = (id: string) => {
@@ -402,6 +462,8 @@
 		if (filters.sort_by) q.sort_by = filters.sort_by
 		const validCats = (filters.categories ?? []).filter((c) => Number.isFinite(c) && c > 0)
 		if (validCats.length) q.cat = validCats.join(',')
+		const page = Math.floor((filters.offset ?? 0) / PAGE_SIZE) + 1
+		if (page > 1) q.page = String(page)
 		return q
 	}
 
@@ -473,7 +535,15 @@
 	const toggleMainCategoryId = (id: number) => {
 		const n = Number(id)
 		if (!Number.isFinite(n)) return
-		if (filters.main_category_id != null && Number(filters.main_category_id) === n) {
+		const mainMatches = filters.main_category_id != null && Number(filters.main_category_id) === n
+		if (mainMatches) {
+			/** İlk tık: alt filtreleri kaldır; yalnızca ana kategori seçili kalsın. */
+			const hasNested = filters.category_id != null || filters.sub_category_id != null
+			if (hasNested) {
+				filters.category_id = null
+				filters.sub_category_id = null
+				return
+			}
 			filters.main_category_id = null
 			return
 		}
@@ -511,6 +581,39 @@
 		filters.color_id = cur != null && Number(cur) === n ? null : n
 	}
 
+	/** Mobil çekmece: seçim sonrası paneli kapat */
+	const mobileDrawerAfterFilter = () => {
+		closeFilters()
+	}
+	const mobileToggleMain = (id: number) => {
+		toggleMainCategoryId(id)
+		mobileDrawerAfterFilter()
+	}
+	const mobileToggleCategory = (categoryId: number, mainCategoryId: number | null) => {
+		toggleCategoryId(categoryId, mainCategoryId)
+		mobileDrawerAfterFilter()
+	}
+	const mobileToggleSub = (id: number) => {
+		toggleSubId(id)
+		mobileDrawerAfterFilter()
+	}
+	const mobileToggleColor = (id: number) => {
+		toggleColorId(id)
+		mobileDrawerAfterFilter()
+	}
+	const mobileToggleBrand = (id: number) => {
+		toggleBrandId(id)
+		mobileDrawerAfterFilter()
+	}
+	const mobileRemoveFilter = (id: string) => {
+		removeFilter(id)
+		mobileDrawerAfterFilter()
+	}
+	const mobileClearFilters = () => {
+		clearFilters()
+		mobileDrawerAfterFilter()
+	}
+
 	const isUploaderOpen = ref(false)
 
 	const openUploader = () => {
@@ -523,10 +626,6 @@
 
 	const goNext = () => {
 		router.push(`/products/${filteredProducts.value[0]?.id}`)
-	}
-
-	type ProductsApiResponse = {
-		data: Product[]
 	}
 </script>
 
@@ -565,138 +664,66 @@
 
 		<!-- Mobile drawer filters -->
 		<Teleport to="body">
-			<div v-if="isFilterDrawerOpen" class="fixed inset-0 z-[70] md:hidden" @keydown.esc="closeFilters">
-				<button class="absolute inset-0 bg-black/50" aria-label="Close filters" @click="closeFilters" />
-
+			<Transition name="catalog-filter-drawer">
 				<div
-					class="absolute inset-y-0 left-0 w-[86%] max-w-[360px] bg-white shadow-2xl flex flex-col"
-					role="dialog"
-					aria-modal="true"
+					v-if="isFilterDrawerOpen"
+					class="catalog-filter-drawer-root fixed inset-0 z-[70] md:hidden"
+					@keydown.esc="closeFilters"
 				>
-					<div class="flex items-center justify-between px-4 py-4 border-b border-gray-200">
-						<div class="flex items-center gap-2">
-							<Icon name="filter" class="w-5 h-5 text-[#1853a0]" />
-							<span class="font-bold text-[#215EA5]">Filtreler</span>
+					<button
+						type="button"
+						class="catalog-filter-drawer-backdrop absolute inset-0 bg-black/50"
+						aria-label="Close filters"
+						@click="closeFilters"
+					/>
+
+					<div
+						class="catalog-filter-drawer-panel absolute inset-y-0 left-0 w-[90%] max-w-[400px] bg-white shadow-2xl flex flex-col"
+						role="dialog"
+						aria-modal="true"
+					>
+						<div class="flex-1 min-h-0 overflow-y-auto px-2 py-3">
+							<catalog-sidebar-filter
+								:filters="filters"
+								:active-summary="activeFilters"
+								@toggle-main-category="mobileToggleMain"
+								@toggle-category="mobileToggleCategory"
+								@toggle-sub="mobileToggleSub"
+								@toggle-color="mobileToggleColor"
+								@toggle-brand="mobileToggleBrand"
+								@remove-filter="mobileRemoveFilter"
+								@close="closeFilters"
+								@clear="mobileClearFilters"
+								@apply="applyAndCloseFilters"
+							/>
 						</div>
-						<button class="p-2 -mr-2" aria-label="Close" @click="closeFilters">
-							<Icon name="close" class="w-5 h-5 text-gray-600" />
-						</button>
-					</div>
-
-					<div class="px-4 py-4 overflow-auto">
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-[#4A5565]">{{ filteredProducts.length }} ürün bulundu</span>
-							<button class="text-sm font-semibold text-[#215EA5] hover:underline" @click="clearFilters">
-								Temizle
-							</button>
-						</div>
-
-						<div class="mt-5 space-y-6">
-							<div>
-								<div class="text-sm font-bold text-[#215EA5]">Kategoriler</div>
-								<div class="mt-3 space-y-2">
-									<label
-										v-for="c in availableCategories"
-										:key="c.value"
-										class="flex items-center justify-between gap-3 text-sm cursor-pointer select-none"
-									>
-										<span class="flex items-center gap-2">
-											<input
-												type="checkbox"
-												class="w-4 h-4 accent-[#215EA5]"
-												:checked="(filters.categories ?? []).includes(c.value)"
-												@change="filters.categories = toggleInArray(filters.categories ?? [], Number(c.value))"
-											/>
-											<span class="text-[#4A5565]">{{ c.value }}</span>
-										</span>
-										<span class="text-xs text-gray-400">{{ c.count }}</span>
-									</label>
-								</div>
-							</div>
-
-							<div>
-								<div class="text-sm font-bold text-[#215EA5]">Etiketler</div>
-								<div class="mt-3 grid grid-cols-2 gap-2">
-									<label
-										v-for="t in availableTags"
-										:key="t.value"
-										class="flex items-center justify-between gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm cursor-pointer select-none hover:bg-gray-100"
-									>
-										<span class="flex items-center gap-2">
-											<input
-												type="checkbox"
-												class="w-4 h-4 accent-[#215EA5]"
-												:checked="(filters.categories ?? []).includes(Number(t.value))"
-												@change="filters.categories = toggleInArray(filters.categories ?? [], Number(t.value))"
-											/>
-											<span class="text-[#4A5565]">{{ t.value }}</span>
-										</span>
-										<span class="text-xs text-gray-400">{{ t.count }}</span>
-									</label>
-								</div>
-							</div>
-
-							<div>
-								<div class="text-sm font-bold text-[#215EA5]">Fiyat Aralığı</div>
-								<div class="mt-3 grid grid-cols-2 gap-3">
-									<label class="block">
-										<span class="text-xs text-gray-500">Min</span>
-										<input
-											type="number"
-											inputmode="numeric"
-											class="mt-1 w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
-										/>
-									</label>
-									<label class="block">
-										<span class="text-xs text-gray-500">Max</span>
-										<input
-											type="number"
-											inputmode="numeric"
-											class="mt-1 w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1853a0]/20"
-										/>
-									</label>
-								</div>
-							</div>
-
-							<label
-								class="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 cursor-pointer select-none"
-							>
-								<span class="text-sm font-semibold text-[#4A5565]">Sadece indirimli</span>
-							</label>
-						</div>
-					</div>
-
-					<div class="mt-auto p-4 border-t border-gray-200">
-						<button
-							class="w-full bg-[#215EA5] text-white py-3 rounded-xl font-bold hover:bg-[#124080] transition-all"
-							@click="applyAndCloseFilters"
-						>
-							Ürünleri Göster ({{ filteredProducts.length }})
-						</button>
 					</div>
 				</div>
-			</div>
+			</Transition>
 		</Teleport>
 
 		<div class="max-w-[1400px] mx-auto px-4 md:px-0 py-10 md:py-9">
 			<div class="flex flex-col md:flex-row gap-10">
 				<!-- Desktop sidebar filters -->
-				<div class="hidden md:block w-[390px]">
-					<catalog-sidebar-filter
-						:selected-main-category-id="filters.main_category_id"
-						:selected-category-id="filters.category_id"
-						:selected-sub-id="filters.sub_category_id"
-						:selected-color-id="filters.color_id"
-						:selected-brand-id="filters.brand_id"
-						@toggle-main-category="toggleMainCategoryId"
-						@toggle-category="toggleCategoryId"
-						@toggle-sub="toggleSubId"
-						@toggle-color="toggleColorId"
-						@toggle-brand="toggleBrandId"
-						@clear="clearFilters"
-						@apply="applyAndCloseFilters"
-					/>
-				</div>
+				<Transition
+					appear
+					enter-active-class="transition-all duration-500 ease-out"
+					enter-from-class="opacity-0 -translate-x-4"
+					enter-to-class="opacity-100 translate-x-0"
+				>
+					<div class="hidden md:block w-[390px] shrink-0">
+						<catalog-sidebar-filter
+							:filters="filters"
+							@toggle-main-category="toggleMainCategoryId"
+							@toggle-category="toggleCategoryId"
+							@toggle-sub="toggleSubId"
+							@toggle-color="toggleColorId"
+							@toggle-brand="toggleBrandId"
+							@clear="clearFilters"
+							@apply="applyAndCloseFilters"
+						/>
+					</div>
+				</Transition>
 
 				<div class="flex-1 min-w-0">
 					<div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-x-6 md:gap-y-10">
@@ -711,8 +738,8 @@
 					</div>
 				</div>
 			</div>
-			<div class="flex items-center justify-center mt-10">
-				<Pagination />
+			<div v-if="catalogTotalPages > 1" class="flex items-center justify-center mt-10">
+				<Pagination :page="catalogCurrentPage" :total-pages="catalogTotalPages" @update:page="setCatalogPage" />
 			</div>
 		</div>
 
@@ -765,5 +792,26 @@
 		-webkit-appearance: none;
 		-moz-appearance: none;
 		appearance: none;
+	}
+
+	/* Mobil filtre çekmecesi: arka plan soluklaşır, panel soldan kayar */
+	:global(.catalog-filter-drawer-enter-active),
+	:global(.catalog-filter-drawer-leave-active) {
+		transition: opacity 280ms ease;
+	}
+
+	:global(.catalog-filter-drawer-enter-active .catalog-filter-drawer-panel),
+	:global(.catalog-filter-drawer-leave-active .catalog-filter-drawer-panel) {
+		transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+	}
+
+	:global(.catalog-filter-drawer-enter-from),
+	:global(.catalog-filter-drawer-leave-to) {
+		opacity: 0;
+	}
+
+	:global(.catalog-filter-drawer-enter-from .catalog-filter-drawer-panel),
+	:global(.catalog-filter-drawer-leave-to .catalog-filter-drawer-panel) {
+		transform: translateX(-100%);
 	}
 </style>

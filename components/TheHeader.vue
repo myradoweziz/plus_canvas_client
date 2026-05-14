@@ -9,6 +9,7 @@
 
 	const headerRef = ref<HTMLElement | null>(null)
 	const isScrolled = ref(false)
+	const isMobileMenuOpen = ref(false)
 
 	const handleScroll = () => {
 		isScrolled.value = window.scrollY > 0
@@ -43,11 +44,19 @@
 				</div>
 
 				<header-profile />
-				<button class="md:hidden text-gray-800 p-1 pl-4">
+				<button
+					type="button"
+					class="md:hidden text-gray-800 p-1 pl-4 rounded-lg hover:bg-gray-200/60"
+					aria-label="Menüyü aç"
+					:aria-expanded="isMobileMenuOpen"
+					@click="isMobileMenuOpen = true"
+				>
 					<Icon name="hamburger" class="w-6 h-6" />
 				</button>
 			</div>
 		</div>
+
+		<header-mobile-menu :is-open="isMobileMenuOpen" :contact-info="contactInfo" @close="isMobileMenuOpen = false" />
 	</header>
 </template>
 

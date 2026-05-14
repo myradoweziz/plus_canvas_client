@@ -37,7 +37,7 @@
 				<nuxt-link
 					v-for="(category, index) in categories"
 					:key="index"
-					:to="`/categories/${category.id}`"
+					:to="`/products?category_id=${category.id}`"
 					class="bg-white hover:text-[#1853a0] hover:shadow-md px-6 py-2.5 md:px-7 md:py-3 rounded-full text-[13px] md:text-[15px] transition-all text-center"
 				>
 					{{ category.name }}

@@ -8,7 +8,7 @@
 
 <template>
 	<nuxt-link
-		:to="`/categories/${category.id}`"
+		:to="`/products?category_id=${category.id}`"
 		class="group relative block h-[280px] md:h-[340px] lg:h-[400px] rounded-[24px] overflow-hidden shadow-lg hover:shadow-2xl transition-all"
 	>
 		<img

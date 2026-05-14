@@ -35,18 +35,20 @@
 <template>
 	<section class="bg-white shadow-lg p-4 md:p-6 border border-gray-100">
 		<div class="max-w-[1400px] mx-auto">
-			<div v-if="false" class="flex items-center justify-end gap-4">
-				<div v-if="false" class="flex items-center gap-4 md:gap-8">
+			<div class="flex items-center justify-between gap-4">
+				<div class="flex items-center gap-4 md:gap-8">
 					<button
-						class="flex items-center justify-between md:justify-normal gap-2 bg-[#215EA5] text-white px-5 py-2.5 rounded-full text-sm md:text-base hover:bg-[#124080] transition-all"
+						type="button"
+						class="flex md:hidden items-center justify-between md:justify-normal gap-2 bg-[#215EA5] text-white px-5 py-2.5 rounded-full text-sm md:text-base hover:bg-[#124080] transition-all"
 						@click="emit('open')"
 					>
 						<Icon name="filter" class="w-4 h-4 md:w-5 md:h-5 text-white" />
 						Filtrele
 						<span
 							class="bg-white text-[#1853a0] w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-							>{{ normalizedActiveFilters.length }}</span
 						>
+							{{ normalizedActiveFilters.length }}
+						</span>
 					</button>
 
 					<span class="text-[#4A5565] text-sm hidden sm:inline">{{ productCount }} ürün bulundu</span>
@@ -74,7 +76,7 @@
 			</div>
 
 			<!-- Активные теги -->
-			<div class="hidden md:flex items-center justify-between">
+			<div class="hidden md:flex items-center justify-between mt-4 border-t border-gray-200 pt-4">
 				<div v-if="normalizedActiveFilters.length" class="md:flex flex-wrap items-center">
 					<span class="text-xs md:text-sm font-semibold text-[#4A5565] uppercase tracking-wider mr-2"
 						>Aktif Filtreler:</span
@@ -96,7 +98,7 @@
 				</div>
 				<div v-else></div>
 
-				<div class="hidden md:flex items-center gap-2">
+				<div v-if="false" class="hidden md:flex items-center gap-2">
 					<span class="text-[#4A5565] text-sm hidden md:inline">Sırala:</span>
 					<div class="relative min-w-[140px] md:min-w-[180px]">
 						<select

@@ -96,10 +96,10 @@
 
 					<div
 						v-if="showMainCategoryHeroTitle"
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold text-center"
+						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-4xl md:text-6xl font-bold text-center"
 					>
 						{{ mainCategory?.name }}
-						<p v-if="mainCategory?.description" class="mt-4 text-sm md:text-base">
+						<p v-if="mainCategory?.description" class="mt-4 text-sm md:text-2xl text-gray-200">
 							{{ mainCategory?.description }}
 						</p>
 					</div>

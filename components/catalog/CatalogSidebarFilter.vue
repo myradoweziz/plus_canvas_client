@@ -4,32 +4,27 @@
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import {
-		CANVAS_PAINTING_CATEGORY_SLUG,
-		PERSONALIZED_CANVAS_SLUG,
-		type FeaturedCategory,
-		type FilterBrand,
-		type FilterColor,
-		type MainCategory,
-		type SubCategory
-	} from '~/utils/types'
+	CANVAS_PAINTING_CATEGORY_SLUG,
+	PERSONALIZED_CANVAS_SLUG,
+	type FeaturedCategory,
+	type FilterBrand,
+	type FilterColor,
+	type FilterProduct,
+	type MainCategory,
+	type SubCategory
+} from '~/utils/types'
 
 	type ColorsApiResponse = { data: FilterColor[] }
 	type BrandsApiResponse = { data: FilterBrand[] }
-	const props = withDefaults(
-		defineProps<{
-			selectedMainCategoryId?: number | null
-			selectedCategoryId?: number | null
-			selectedSubId: number | null
-			selectedColorId?: number | null
-			selectedBrandId?: number | null
-		}>(),
-		{
-			selectedMainCategoryId: null,
-			selectedCategoryId: null,
-			selectedBrandId: null,
-			selectedColorId: null
-		}
-	)
+	type ActiveSummaryItem = { id: string; label: string }
+
+	const props = defineProps<{
+		filters: FilterProduct
+		/** Mobil çekmece: seçili filtre etiketleri (masaüstünde iletilmez) */
+		activeSummary?: ActiveSummaryItem[]
+	}>()
+
+	const activeSummary = computed(() => props.activeSummary ?? [])
 
 	const emit = defineEmits<{
 		(e: 'toggleMainCategory', id: number): void
@@ -37,6 +32,8 @@
 		(e: 'toggleSub', id: number): void
 		(e: 'toggleColor', id: number): void
 		(e: 'toggleBrand', id: number): void
+		(e: 'removeFilter', id: string): void
+		(e: 'close'): void
 		(e: 'clear'): void
 		(e: 'apply'): void
 	}>()
@@ -54,24 +51,20 @@
 	}
 
 	const isColorActive = (color: FilterColor) =>
-		color.id != null &&
-		props.selectedColorId != null &&
-		Number(props.selectedColorId) === Number(color.id)
+		color.id != null && props.filters.color_id != null && Number(props.filters.color_id) === Number(color.id)
 
 	const isBrandActive = (brand: FilterBrand) =>
-		brand.id != null &&
-		props.selectedBrandId != null &&
-		Number(props.selectedBrandId) === Number(brand.id)
+		brand.id != null && props.filters.brand_id != null && Number(props.filters.brand_id) === Number(brand.id)
 
 	const isMainCategoryFilterActive = (main: MainCategory) =>
 		main.id != null &&
-		props.selectedMainCategoryId != null &&
-		Number(props.selectedMainCategoryId) === Number(main.id)
+		props.filters.main_category_id != null &&
+		Number(props.filters.main_category_id) === Number(main.id)
 
 	const isFeaturedCategoryFilterActive = (featured: FeaturedCategory) =>
 		featured.id != null &&
-		props.selectedCategoryId != null &&
-		Number(props.selectedCategoryId) === Number(featured.id)
+		props.filters.category_id != null &&
+		Number(props.filters.category_id) === Number(featured.id)
 
 	const onToggleMainCategoryFilter = (main: MainCategory) => {
 		const id = main.id
@@ -180,16 +173,20 @@
 		return Number(n)
 	}
 
+	const featuredHasSubs = (featured: FeaturedCategory) => subsForFeatured(featured).length > 0
+
 	/** Alt liste: ok işaretli veya bu featured seçiliyse veya altından bir sub seçiliyse. */
 	const isFeaturedSubsVisible = (featured: FeaturedCategory) => {
+		const subs = subsForFeatured(featured)
+		if (!subs.length) return false
 		const fid = featured.id
 		if (fid == null) return false
 		const fn = Number(fid)
 		if (activeFeaturedId.value != null && Number(activeFeaturedId.value) === fn) return true
-		if (props.selectedCategoryId != null && Number(props.selectedCategoryId) === fn) return true
-		const sid = props.selectedSubId
+		if (props.filters.category_id != null && Number(props.filters.category_id) === fn) return true
+		const sid = props.filters.sub_category_id
 		if (sid == null) return false
-		for (const s of subsForFeatured(featured)) {
+		for (const s of subs) {
 			if (s.id != null && Number(s.id) === Number(sid)) return true
 		}
 		return false
@@ -209,15 +206,36 @@
 <template>
 	<aside class="catalog-sidebar">
 		<div class="sidebar-header">
-			<span class="font-bold text-lg text-[#101828]">Filtreler</span>
+			<div class="flex items-center justify-between">
+				<span class="font-bold text-lg text-[#101828]">Filtreler</span>
+				<button type="button" class="p-2 -mr-2 block md:hidden" aria-label="Kapat" @click="emit('close')">
+					<Icon name="close" class="w-5 h-5 text-gray-600" />
+				</button>
+			</div>
 			<div class="flex gap-3 mt-4">
 				<button class="btn-clear" @click="emit('clear')">Temizle</button>
 				<button class="btn-apply" @click="emit('apply')">Filtreleri Uygula</button>
 			</div>
 		</div>
 
+		<div v-if="activeSummary.length" class="sidebar-section border-t border-gray-100 mt-6 pt-6 px-5 md:hidden">
+			<h3 class="text-sm font-semibold text-[#4A5565] mb-3">Aktif filtreler</h3>
+			<div class="flex flex-wrap gap-2">
+				<button
+					v-for="item in activeSummary"
+					:key="item.id"
+					type="button"
+					class="active-filter-chip"
+					@click="emit('removeFilter', item.id)"
+				>
+					<span class="min-w-0 truncate">{{ item.label }}</span>
+					<Icon name="close" class="w-3.5 h-3.5 shrink-0 opacity-90" />
+				</button>
+			</div>
+		</div>
+
 		<div class="sidebar-section border-t border-gray-100 mt-6 pt-6 px-5">
-			<h3 class="text-sm font-bold text-[#4A5565] mb-4">Popüler Etiketler</h3>
+			<h3 class="text-sm font-semibold text-[#4A5565] mb-4">Popüler Etiketler</h3>
 			<div class="flex flex-wrap gap-2">
 				<button
 					v-for="brand in brands"
@@ -268,6 +286,7 @@
 					<div v-for="featured in getFeaturedForMain(main)" :key="featured.id ?? featured.slug" class="featured-item">
 						<div class="featured-header group select-none">
 							<button
+								v-if="featuredHasSubs(featured)"
 								type="button"
 								class="p-1 -ml-1 shrink-0 text-gray-400 hover:text-[#215EA5] transition-all duration-300 cursor-pointer"
 								aria-label="Alt kategorileri göster"
@@ -279,6 +298,7 @@
 									:class="{ 'rotate-90': isFeaturedSubsVisible(featured) }"
 								/>
 							</button>
+							<span v-else class="w-3 h-3"></span>
 							<button
 								type="button"
 								class="font-bold text-sm text-[#364153] group-hover:text-[#215EA5] transition-colors text-left flex-1 min-w-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed py-1"
@@ -298,7 +318,7 @@
 								v-for="sub in subsForFeatured(featured)"
 								:key="sub.id ?? sub.slug"
 								class="sub-item flex items-center justify-between gap-2 gap-x-3"
-								:class="{ active: selectedSubId === sub.id }"
+								:class="{ active: filters.sub_category_id === sub.id }"
 								@click="sub.id != null && emit('toggleSub', sub.id)"
 							>
 								<span class="min-w-0 truncate">{{ sub.name }}</span>
@@ -377,6 +397,10 @@
 		&.active {
 			@apply bg-white border-[#2B7FFF] text-[#215EA5] ring-1 ring-[#2B7FFF]/30;
 		}
+	}
+
+	.active-filter-chip {
+		@apply flex items-center gap-1.5 max-w-full bg-[#155DFC1A] text-[#2B7FFF] pl-3 pr-2 py-1.5 rounded-full text-xs font-semibold hover:bg-[#124080] cursor-pointer transition-all;
 	}
 
 	.main-cat-header {

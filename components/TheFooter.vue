@@ -152,7 +152,7 @@
 				</div>
 
 				<!-- Contact Info -->
-				<div>
+				<div id="iletisim">
 					<h4 class="font-bold text-[#101828] text-base mb-6">İletişim & Destek</h4>
 					<div class="space-y-5">
 						<div class="flex items-start gap-3">
