@@ -1,5 +1,6 @@
 import type { MainCategory } from './category'
 import type { Image } from './home'
+import type { CanvasFormat } from '~/utils/productDesignConfig'
 
 export interface Product {
 	id: number
@@ -23,4 +24,5 @@ export interface Product {
 	/** Filtre (sidebar Renk adı veya API color_id) */
 	color?: string
 	color_id?: number | null
+	canvas_formats?: CanvasFormat[]
 }

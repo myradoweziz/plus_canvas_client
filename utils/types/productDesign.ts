@@ -12,7 +12,9 @@ export type ProductDesignPayload = {
 	canvasHeight: number
 	/** Seçilen baskı boyutu (40×30 cm vb.) */
 	printSizeLabel?: string
-	formatId?: string
+	formatId?: number
 	formatLabel?: string
+	printSizeId?: number
+	printPrice?: number
 	frameId?: string
 }

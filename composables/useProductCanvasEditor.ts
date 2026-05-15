@@ -3,8 +3,9 @@ import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import { createPlusCanvasWatermarkTile } from '~/utils/plusCanvasWatermarkPattern'
 import {
 	FRAME_OPTIONS,
-	MAIN_CANVAS_FORMATS,
-	PRINT_SIZES,
+	formatOrientationAspect,
+	getDefaultSize,
+	sizeAspect,
 	printBoxInViewport,
 	type CanvasFormat,
 	type FrameOption,
@@ -18,21 +19,45 @@ const DEFAULT_VIEWPORT_H = 520
 export function useProductCanvasEditor(options: {
 	productId: Ref<string>
 	wrapRef: Ref<HTMLElement | null>
+	canvasFormats: Ref<CanvasFormat[]>
 	onDesignUpdate?: (payload: ProductDesignPayload) => void
 }) {
 	const designStore = useProductDesignStore()
 	const { loadHtmlImage } = useFabricImageLoader()
 
-	const selectedFormat = ref<CanvasFormat>(MAIN_CANVAS_FORMATS[0])
-	const selectedSize = ref<PrintSizeOption>(PRINT_SIZES[0])
+	const formatPresets = computed(() => options.canvasFormats.value)
+	const selectedFormat = ref<CanvasFormat | null>(null)
+	const selectedSize = ref<PrintSizeOption | null>(null)
 	const selectedFrame = ref<FrameOption>(FRAME_OPTIONS[0])
+
+	const syncSelectionFromFormats = () => {
+		const formats = formatPresets.value
+		if (!formats.length) {
+			selectedFormat.value = null
+			selectedSize.value = null
+			return
+		}
+		const current = selectedFormat.value
+		const format = current && formats.some((f) => f.id === current.id) ? current : formats[0]
+		selectedFormat.value = format
+		const sizeList = format.sizes
+		const sizeCurrent = selectedSize.value
+		selectedSize.value =
+			sizeCurrent && sizeList.some((s) => s.id === sizeCurrent.id)
+				? sizeCurrent
+				: getDefaultSize(format)
+	}
 	const isLoadingImage = ref(false)
 	const viewportW = ref(DEFAULT_VIEWPORT_W)
 	const viewportH = ref(DEFAULT_VIEWPORT_H)
 
 	let fabricLib: typeof import('fabric').fabric | null = null
+	let canvasInitId = 0
 	let resizeObserver: ResizeObserver | null = null
+
+	const isActiveCanvasInit = (initId: number) => initId === canvasInitId
 	let fabricCanvas: import('fabric').fabric.Canvas | null = null
+	let canvasReady = false
 	let photoObject: import('fabric').fabric.Image | null = null
 	let printAreaRect: import('fabric').fabric.Rect | null = null
 	let frameObject: import('fabric').fabric.Object | null = null
@@ -64,6 +89,13 @@ export function useProductCanvasEditor(options: {
 		if (!wrap) return
 		wrap.style.position = 'relative'
 		wrap.style.overflow = 'hidden'
+		wrap.style.borderRadius = '20px'
+
+		const container = wrap.querySelector('.canvas-container') as HTMLElement | null
+		if (container) {
+			container.style.borderRadius = '20px'
+			container.style.overflow = 'hidden'
+		}
 	}
 
 	const cx = () => viewportW.value / 2
@@ -76,9 +108,11 @@ export function useProductCanvasEditor(options: {
 			tempImage: activeImage.value,
 			canvasWidth: viewportW.value,
 			canvasHeight: viewportH.value,
-			printSizeLabel: selectedSize.value.label,
-			formatId: selectedFormat.value.id,
-			formatLabel: selectedFormat.value.label,
+			printSizeLabel: selectedSize.value?.display_name,
+			printSizeId: selectedSize.value?.id,
+			printPrice: selectedSize.value?.price,
+			formatId: selectedFormat.value?.id,
+			formatLabel: selectedFormat.value?.name,
 			frameId: selectedFrame.value.id
 		}
 		options.onDesignUpdate(payload)
@@ -100,7 +134,9 @@ export function useProductCanvasEditor(options: {
 	const getPrintDimensions = () => {
 		const maxW = viewportW.value * 0.9
 		const maxH = viewportH.value * 0.9
-		return printBoxInViewport(selectedFormat.value.aspect, maxW, maxH)
+		const format = selectedFormat.value
+		if (!format) return printBoxInViewport(1, maxW, maxH)
+		return printBoxInViewport(formatOrientationAspect(format), maxW, maxH)
 	}
 
 	/** Фото заполняет область печати на 100% (object-fit: cover), фиксированный масштаб. */
@@ -179,9 +215,12 @@ export function useProductCanvasEditor(options: {
 		if (photoObject) fabricCanvas.moveTo(photoObject, z)
 	}
 
-	const applyWatermarkBackground = async () => {
+	const applyWatermarkBackground = async (initId?: number) => {
+		if (initId !== undefined && !isActiveCanvasInit(initId)) return
 		if (!fabricCanvas || !fabricLib) return
 		const tile = await createPlusCanvasWatermarkTile()
+		if (initId !== undefined && !isActiveCanvasInit(initId)) return
+		if (!fabricCanvas || !fabricLib) return
 		const pattern = new fabricLib.Pattern({
 			source: tile as unknown as HTMLImageElement,
 			repeat: 'repeat'
@@ -259,7 +298,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const syncPrintArea = async () => {
-		if (!fabricCanvas || !fabricLib) return
+		if (!fabricCanvas || !fabricLib || !selectedFormat.value) return
 
 		const { width, height } = getPrintDimensions()
 
@@ -279,12 +318,21 @@ export function useProductCanvasEditor(options: {
 			})
 			fabricCanvas.add(printAreaRect)
 		} else {
-			printAreaRect.set({ width, height, left: cx(), top: cy() })
+			printAreaRect.set({
+				width,
+				height,
+				scaleX: 1,
+				scaleY: 1,
+				left: cx(),
+				top: cy()
+			})
 			printAreaRect.setCoords()
 		}
 
 		if (photoObject) {
-			photoObject.clipPath = makeClipRect(width, height)
+			const clip = makeClipRect(width, height)
+			photoObject.set({ clipPath: clip })
+			photoObject.dirty = true
 			fitPhotoCover()
 			lockPhotoInteractions(photoObject)
 			fabricCanvas.bringToFront(photoObject)
@@ -337,18 +385,28 @@ export function useProductCanvasEditor(options: {
 
 	const applyFormat = async (format: CanvasFormat) => {
 		selectedFormat.value = format
+		selectedSize.value = getDefaultSize(format)
+		if (!fabricCanvas) {
+			await tryInitOrSyncFormats()
+			return
+		}
 		await syncPrintArea()
 	}
 
-	const applyFormatById = async (formatId: string) => {
-		const f = MAIN_CANVAS_FORMATS.find((x) => x.id === formatId)
-		if (f) await applyFormat(f)
+	const applyFormatById = async (formatId: number) => {
+		const id = Number(formatId)
+		const f = formatPresets.value.find((x) => Number(x.id) === id)
+		if (!f) return
+		await applyFormat(f)
 	}
 
-	const applySizeById = async (sizeId: string) => {
-		const s = PRINT_SIZES.find((x) => x.id === sizeId)
+	const applySizeById = async (sizeId: number) => {
+		const format = selectedFormat.value
+		if (!format) return
+		const s = format.sizes.find((x) => x.id === sizeId)
 		if (s) {
 			selectedSize.value = s
+			await syncPrintArea()
 			emitDesign()
 		}
 	}
@@ -376,11 +434,14 @@ export function useProductCanvasEditor(options: {
 			watermarkBg.set({ left: 0, top: 0, width, height })
 			watermarkBg.setCoords()
 		}
+		applyWrapLayoutStyles()
 		await syncPrintArea()
 		fabricCanvas.requestRenderAll()
 	}
 
 	const disposeCanvas = () => {
+		canvasInitId++
+		canvasReady = false
 		resizeObserver?.disconnect()
 		resizeObserver = null
 		if (fabricCanvas) {
@@ -401,11 +462,21 @@ export function useProductCanvasEditor(options: {
 	const initCanvas = async () => {
 		if (!import.meta.client || !options.wrapRef.value) return
 		disposeCanvas()
+		const initId = canvasInitId
+
 		const mod = await import('fabric')
-		fabricLib = mod.fabric
+		if (!isActiveCanvasInit(initId)) return
+
+		const lib = mod.fabric
+		if (!lib?.Canvas || !lib.Pattern) return
+		fabricLib = lib
+
+		if (!options.wrapRef.value) return
 
 		applyWrapLayoutStyles()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+		if (!isActiveCanvasInit(initId) || !options.wrapRef.value) return
+
 		let { width, height } = getViewportSize()
 		if (width < 2 || height < 2) {
 			width = DEFAULT_VIEWPORT_W
@@ -428,21 +499,58 @@ export function useProductCanvasEditor(options: {
 			hoverCursor: 'default'
 		})
 		fabricCanvas.calcOffset()
+		applyWrapLayoutStyles()
 
 		resizeObserver = new ResizeObserver(() => {
 			void resizeCanvasToContainer()
 		})
 		resizeObserver.observe(options.wrapRef.value)
 
-		await applyWatermarkBackground()
+		await applyWatermarkBackground(initId)
+		if (!isActiveCanvasInit(initId)) return
 
 		await resizeCanvasToContainer()
+		if (!isActiveCanvasInit(initId)) return
+
+		syncSelectionFromFormats()
 		await syncPrintArea()
+		if (!isActiveCanvasInit(initId)) return
+
 		const list = uploadImages.value
 		if (list.length > 0) {
 			await selectUploadImage(designStore.activeImageIndex)
 		}
+
+		canvasReady = true
 	}
+
+	const tryInitOrSyncFormats = async () => {
+		if (!import.meta.client || !formatPresets.value.length) return
+		if (!options.wrapRef.value) return
+		if (!designStore.hasSessionFor(options.productId.value)) return
+
+		syncSelectionFromFormats()
+
+		if (!fabricCanvas || !canvasReady) {
+			try {
+				await initCanvas()
+			} catch {
+				/* aborted */
+			}
+			return
+		}
+
+		await syncPrintArea()
+	}
+
+	watch(formatPresets, () => void tryInitOrSyncFormats())
+
+	watch(
+		() => options.wrapRef.value,
+		(wrap) => {
+			if (wrap) void tryInitOrSyncFormats()
+		}
+	)
 
 	watch(
 		() => options.productId.value,
@@ -455,7 +563,6 @@ export function useProductCanvasEditor(options: {
 
 	onUnmounted(() => {
 		disposeCanvas()
-		fabricLib = null
 	})
 
 	return {
@@ -470,9 +577,9 @@ export function useProductCanvasEditor(options: {
 		selectedFormat,
 		selectedSize,
 		selectedFrame,
-		formatPresets: MAIN_CANVAS_FORMATS,
+		formatPresets,
+		sizeOptions: computed(() => selectedFormat.value?.sizes ?? []),
 		frameOptions: FRAME_OPTIONS,
-		printSizes: PRINT_SIZES,
 		initCanvas,
 		selectUploadImage,
 		applyFormat,
@@ -480,7 +587,8 @@ export function useProductCanvasEditor(options: {
 		applySizeById,
 		applyFrame,
 		applyFrameByIndex,
-		isFormatActive: (id: string) => selectedFormat.value.id === id,
+		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
+		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
 		isFrameActive: (id: string) => selectedFrame.value.id === id
 	}
 }

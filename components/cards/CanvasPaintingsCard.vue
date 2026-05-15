@@ -45,6 +45,12 @@
 	const discountedPrice = computed(() => {
 		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
 	})
+
+	/** Лимит загрузки из API; 0 или меньше — без ограничения в модалке */
+	const uploadMaxImages = computed(() => {
+		const n = props.product.upload_image_count
+		return typeof n === 'number' && n > 0 ? n : undefined
+	})
 </script>
 
 <template>
@@ -115,6 +121,7 @@
 		<catalog-uploader-modal
 			v-if="!delegateUploader"
 			:is-open="isUploaderOpen"
+			:max-images="uploadMaxImages"
 			@close="closeUploader"
 			@go-next="goNext"
 		/>

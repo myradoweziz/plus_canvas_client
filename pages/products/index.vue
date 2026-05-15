@@ -631,6 +631,17 @@
 
 	const designStore = useProductDesignStore()
 
+	const uploaderProduct = computed(() => {
+		const id = uploaderProductId.value
+		if (id == null) return null
+		return filteredProducts.value.find((p) => p.id === id) ?? null
+	})
+
+	const uploaderMaxImages = computed(() => {
+		const n = uploaderProduct.value?.upload_image_count
+		return typeof n === 'number' && n > 0 ? n : undefined
+	})
+
 	const goNext = async (payload: { images: TempDesignImage[] }) => {
 		const id = uploaderProductId.value ?? filteredProducts.value[0]?.id
 		if (id == null || !payload.images.length) return
@@ -671,7 +682,12 @@
 		/>
 
 		<!-- Uploader Modal -->
-		<catalog-uploader-modal :is-open="isUploaderOpen" @close="closeUploader" @go-next="goNext" />
+		<catalog-uploader-modal
+			:is-open="isUploaderOpen"
+			:max-images="uploaderMaxImages"
+			@close="closeUploader"
+			@go-next="goNext"
+		/>
 
 		<!-- Mobile drawer filters -->
 		<Teleport to="body">

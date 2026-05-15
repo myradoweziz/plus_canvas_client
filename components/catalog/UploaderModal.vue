@@ -68,10 +68,18 @@
 		uploadSessionId.value = null
 	}
 
+	const clearUploaderState = () => {
+		uploadedImages.value = []
+		resetUploadSessionId()
+		errorMessage.value = null
+		isDragging.value = false
+		if (fileInput.value) fileInput.value.value = ''
+	}
+
 	watch(
 		() => props.isOpen,
 		(open) => {
-			if (!open) resetUploadSessionId()
+			if (!open) clearUploaderState()
 		}
 	)
 
@@ -84,8 +92,39 @@
 
 	const canUploadMore = computed(() => remainingUploadSlots.value > 0)
 
+	const allowMultipleFilePick = computed(() => !hasUploadLimit.value || props.maxImages! > 1)
+
+	const readyImages = computed(() => uploadedImages.value.filter((i) => !i.isUploading && i.url.trim()))
+
+	const hasUploadInProgress = computed(() =>
+		uploadedImages.value.some((i) => i.isUploading || !i.url.trim())
+	)
+
+	const requiredImageCount = computed(() => (hasUploadLimit.value ? props.maxImages! : 1))
+
+	const canProceed = computed(() => {
+		if (hasUploadInProgress.value) return false
+		if (hasUploadLimit.value) return readyImages.value.length === requiredImageCount.value
+		return readyImages.value.length > 0
+	})
+
 	const showMaxImagesError = () => {
 		showError(`En fazla ${props.maxImages} görsel yükleyebilirsiniz.`)
+	}
+
+	const warnIfTooManyFilesSelected = (selectedCount: number, willUploadCount: number) => {
+		if (!hasUploadLimit.value || selectedCount <= willUploadCount) return
+		const max = props.maxImages!
+		const already = uploadedImages.value.length
+		if (already === 0) {
+			showError(
+				`${selectedCount} dosya seçtiniz. Bu ürün için en fazla ${max} görsel yüklenebilir; yalnızca ${willUploadCount} dosya yüklenecek.`
+			)
+			return
+		}
+		showError(
+			`${selectedCount} dosya seçtiniz. Toplam en fazla ${max} görsel (${already} yüklü); yalnızca ${willUploadCount} dosya daha eklenecek.`
+		)
 	}
 
 	/** Tam API URL — boş baseUrl ile istek Nuxt origin’e gider ve API’ye ulaşmaz. */
@@ -130,13 +169,16 @@
 			return
 		}
 		const allowed = hasUploadLimit.value ? files.slice(0, remainingUploadSlots.value) : files
-		if (allowed.length < files.length) {
-			showError(`Yalnızca ${allowed.length} görsel daha eklenebilir (maks. ${props.maxImages}).`)
-		}
+		warnIfTooManyFilesSelected(files.length, allowed.length)
+		if (!allowed.length) return
 		allowed.forEach((file) => validateAndUpload(file))
 	}
 
 	const uploadTempImage = async (file: File) => {
+		if (!canUploadMore.value) {
+			showMaxImagesError()
+			return
+		}
 		const localId = Date.now() + Math.random()
 		uploadedImages.value.push({
 			id: localId,
@@ -209,7 +251,7 @@
 		}
 		if (file.size > MAX_FILE_SIZE_BYTES) {
 			const sizeMb = (file.size / 1024 / 1024).toFixed(1)
-			showError(`Файл “${file.name}” слишком большой (${sizeMb} MB). Максимум 10 MB.`)
+			showError(`“${file.name}” çok büyük (${sizeMb} MB). Maksimum 10 MB.`)
 			return
 		}
 		uploadTempImage(file)
@@ -234,22 +276,33 @@
 	}
 
 	const resetUpload = () => {
-		uploadedImages.value = []
-		resetUploadSessionId()
+		clearUploaderState()
 	}
 
 	const goNext = () => {
-		const ready: TempDesignImage[] = uploadedImages.value
-			.filter((i) => !i.isUploading && i.url.trim())
-			.map((i) => ({
-				url: i.url.trim(),
-				id: i.serverId ?? 0,
-				session_id: i.sessionId ?? ''
-			}))
+		const ready: TempDesignImage[] = readyImages.value.map((i) => ({
+			url: i.url.trim(),
+			id: i.serverId ?? 0,
+			session_id: i.sessionId ?? ''
+		}))
+
+		if (hasUploadInProgress.value) {
+			showError('Lütfen tüm yüklemelerin tamamlanmasını bekleyin.')
+			return
+		}
+
+		if (hasUploadLimit.value && ready.length < requiredImageCount.value) {
+			showError(
+				`Devam etmek için ${requiredImageCount.value} görsel yüklemeniz gerekir (${ready.length}/${requiredImageCount.value} yüklü).`
+			)
+			return
+		}
+
 		if (!ready.length) {
 			showError('Önce bir görsel yükleyin ve yüklemenin bitmesini bekleyin.')
 			return
 		}
+
 		emit('go-next', { images: ready })
 	}
 </script>
@@ -277,7 +330,7 @@
 						class="hidden"
 						@change="handleFileSelect"
 						accept="image/png, image/jpeg, image/jpg, image/gif"
-						multiple
+						:multiple="allowMultipleFilePick"
 					/>
 
 					<!-- Dynamic Content Area -->
@@ -338,12 +391,19 @@
 								</button>
 							</div>
 
+							<p v-if="hasUploadLimit" class="mt-6 text-sm font-medium text-[#364153]">
+								{{ readyImages.length }} / {{ maxImages }} görsel yüklendi
+								<span v-if="!canProceed && !hasUploadInProgress" class="text-[#2B7FFF]">
+									— devam etmek için {{ maxImages }} görsel gerekli
+								</span>
+							</p>
+
 							<!-- Action Footer -->
 							<div class="mt-auto pt-10 flex gap-4 w-full justify-center">
 								<button
 									type="button"
 									@click="goNext"
-									:disabled="uploadedImages.length === 0 || uploadedImages.some((i) => i.isUploading || !i.url.trim())"
+									:disabled="!canProceed"
 									class="bg-[#2B7FFF] hover:bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-100 transition-all min-w-[200px] disabled:opacity-50 disabled:cursor-not-allowed"
 								>
 									Devam Et
@@ -387,7 +447,7 @@
 
 							<div class="mt-10 flex flex-wrap justify-center gap-4 opacity-40">
 								<span class="text-xs font-bold uppercase tracking-widest text-gray-600">
-									PNG, JPG, JPEG veya GIF (Maks. 10MB<span v-if="hasUploadLimit">, en fazla {{ maxImages }} görsel</span>)
+									PNG, JPG, JPEG veya GIF (Maks. 10MB<span v-if="hasUploadLimit">, tam {{ maxImages }} görsel yükleyin</span>)
 								</span>
 							</div>
 						</div>

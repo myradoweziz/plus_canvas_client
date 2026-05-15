@@ -1,16 +1,10 @@
 <script setup lang="ts">
-	import { FreeMode, Navigation, Thumbs } from 'swiper/modules'
-
-	import type { BreadcrumbItem, ProductDesignPayload } from '~/utils/types'
-	import Icon from '~/utils/ui/Icon.vue'
-
-	import 'swiper/css'
-
-	import 'swiper/css/free-mode'
-	import 'swiper/css/navigation'
-	import 'swiper/css/thumbs'
+	import { extractCanvasFormatsFromProduct } from '~/utils/productDesignConfig'
+	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 
 	const route = useRoute()
+	const router = useRouter()
+	const designStore = useProductDesignStore()
 
 	const productId = computed(() => {
 		const id = route.params.productId
@@ -24,18 +18,6 @@
 		{ label: 'Ürün Detayı', link: `/products/${productId.value}` }
 	] as BreadcrumbItem[]
 
-	const thumbsSwiper = ref<any>(null)
-	const modules = [FreeMode, Navigation, Thumbs]
-
-	const setThumbsSwiper = (swiper: any) => {
-		thumbsSwiper.value = swiper
-	}
-
-	const prevEl = ref<HTMLElement | null>(null)
-	const nextEl = ref<HTMLElement | null>(null)
-	const prevEl3 = ref<HTMLElement | null>(null)
-	const nextEl3 = ref<HTMLElement | null>(null)
-
 	const lastDesign = ref<ProductDesignPayload | null>(null)
 	const onDesignUpdate = (payload: ProductDesignPayload) => {
 		lastDesign.value = payload
@@ -43,33 +25,42 @@
 
 	const canvasWrapRef = ref<HTMLElement | null>(null)
 
+	const { data: productData, status: productStatus } = await useFetch<{ data: Product }>(
+		() => `/api/canvas-products/${productId.value}`,
+		{
+			method: 'GET',
+			baseURL: useRuntimeConfig().public.baseUrl
+		}
+	)
+
+	const product = computed(() => productData.value?.data)
+	const canvasFormats = computed(() => extractCanvasFormatsFromProduct(product.value))
+
 	const {
 		uploadImages,
 		activeImage,
 		isThumbActive,
 		previewUrl,
-		initCanvas,
 		selectUploadImage,
 		formatPresets,
+		sizeOptions,
 		frameOptions,
 		applyFormatById,
+		applySizeById,
 		applyFrameByIndex,
-		isFormatActive,
+		activeFormatId,
 		isFrameActive,
-		selectedFormat
+		selectedFormat,
+		selectedSize
 	} = useProductCanvasEditor({
 		productId,
 		wrapRef: canvasWrapRef,
+		canvasFormats,
 		onDesignUpdate
 	})
 
-	const onThumbClick = async (index: number) => {
-		await selectUploadImage(index)
-		thumbsSwiper.value?.slideTo?.(index)
-	}
-
-	const onFormatSelectChange = (e: Event) => {
-		applyFormatById((e.target as HTMLSelectElement).value)
+	const onThumbSelect = (index: number) => {
+		void selectUploadImage(index)
 	}
 
 	const currentPreviewSrc = computed(() => {
@@ -78,8 +69,24 @@
 	})
 
 	onMounted(async () => {
-		await nextTick()
-		await initCanvas()
+		if (!designStore.hasSessionFor(productId.value)) {
+			await router.replace('/products')
+		}
+	})
+
+	onBeforeRouteLeave((to) => {
+		const nextId = to.params.productId
+		const nextProductId = Array.isArray(nextId) ? nextId[0] : nextId
+		const stayingOnSameProduct = to.path.startsWith('/products/') && String(nextProductId ?? '') === productId.value
+		if (!stayingOnSameProduct) {
+			designStore.clearSession()
+		}
+	})
+
+	watch(productId, async (newId, oldId) => {
+		if (!oldId || newId === oldId) return
+		designStore.clearSession()
+		await router.replace('/products')
 	})
 </script>
 
@@ -88,185 +95,46 @@
 		<section class="max-w-[1400px] mx-auto px-4 md:px-0 py-10 md:py-9">
 			<Breadcrumbs :items="breadcrumbs" />
 
-			<div class="mt-20 flex gap-10">
-				<div>
-					<div class="flex gap-5">
-						<section class="relative h-[510px] w-[100px]">
-							<swiper
-								@swiper="setThumbsSwiper"
-								:slidesPerView="4"
-								:spaceBetween="20"
-								:freeMode="true"
-								:watchSlidesProgress="true"
-								:modules="modules"
-								class="mySwiper w-full h-full"
-								:style="{
-									'--swiper-navigation-color': '#fff',
-									'--swiper-pagination-color': '#fff'
-								}"
-								direction="vertical"
-								:navigation="{ prevEl, nextEl }"
-							>
-								<swiper-slide
-									v-for="(img, index) in uploadImages"
-									:key="img.id"
-									class="cursor-pointer"
-									:class="{ 'is-thumb-active': isThumbActive(index) }"
-									@click="onThumbClick(index)"
-								>
-									<img :src="previewUrl(img.url)" :alt="`upload-${img.id}`" />
-								</swiper-slide>
-								<swiper-slide v-if="!uploadImages.length">
-									<img src="/images/banner.png" alt="placeholder" />
-								</swiper-slide>
-							</swiper>
+			<div v-if="productStatus === 'pending'" class="mt-20 text-center text-[#364153]">Yükleniyor…</div>
 
-							<!-- Custom navigation buttons: one top, one bottom -->
-							<div v-if="uploadImages.length > 4">
-								<button ref="prevEl" type="button" class="navBtn absolute left-1/4 top-0 z-10">
-									<Icon name="arrowRight" class="w-12 h-12 -rotate-90" />
-								</button>
-								<button ref="nextEl" type="button" class="navBtn absolute left-1/4 -bottom-15 z-10">
-									<Icon name="arrowRight" class="w-12 h-12 rotate-90" />
-								</button>
-							</div>
-						</section>
+			<div v-else-if="product" class="product-detail-layout mt-20 flex gap-10 items-start">
+				<div class="product-detail-editor min-w-0">
+					<ProductDesignEditorPanel
+						:product="product"
+						:images="uploadImages"
+						:is-thumb-active="isThumbActive"
+						:preview-url="previewUrl"
+						:format-presets="formatPresets"
+						:format-preview-src="currentPreviewSrc"
+						:active-format-id="activeFormatId"
+						@thumb-select="onThumbSelect"
+						@select-format="(id) => void applyFormatById(id)"
+					>
+						<template #canvas>
+							<div ref="canvasWrapRef" class="mySwiper2 relative w-full h-[620px] overflow-hidden" />
+						</template>
+					</ProductDesignEditorPanel>
 
-						<section class="w-full max-w-3xl">
-							<div ref="canvasWrapRef" class="mySwiper2 relative w-full h-[520px] overflow-hidden" />
+					<p v-if="!formatPresets.length" class="mt-4 text-sm text-amber-700">
+						Bu ürün için format bulunamadı (API: canvas_formats).
+					</p>
 
-							<div class="relative">
-								<swiper
-									:slidesPerView="6"
-									:spaceBetween="20"
-									:modules="modules"
-									class="mySwiper3 w-[680px]"
-									:navigation="{ prevEl: prevEl3, nextEl: nextEl3 }"
-								>
-									<swiper-slide
-										v-for="format in formatPresets"
-										:key="format.id"
-										class="flex flex-col items-center justify-center pb-4 cursor-pointer"
-										@click="applyFormatById(format.id)"
-									>
-										<div
-											class="relative pt-[100%] w-full border border-transparent hover:border-blue-600 transition-all rounded-md overflow-hidden"
-											:class="{ 'border-blue-600': isFormatActive(format.id) }"
-										>
-											<img
-												v-if="currentPreviewSrc"
-												:src="currentPreviewSrc"
-												:alt="format.label"
-												class="w-full h-full absolute top-0 left-0 object-cover"
-											/>
-
-											<img
-												v-else
-												src="/images/banner.png"
-												:alt="format.label"
-												class="w-full h-full absolute top-0 left-0 object-cover"
-											/>
-										</div>
-
-										<p class="text-sm text-[#364153] px-4 pt-4">{{ format.label }}</p>
-									</swiper-slide>
-								</swiper>
-
-								<div v-if="formatPresets.length > 6">
-									<button ref="prevEl3" type="button" class="navBtn absolute -left-12 bottom-10 z-10">
-										<Icon name="arrowRight" class="w-12 h-12 -rotate-180" />
-									</button>
-									<button ref="nextEl3" type="button" class="navBtn absolute right-0 bottom-10 z-10">
-										<Icon name="arrowRight" class="w-12 h-12 -rotate-360" />
-									</button>
-								</div>
-							</div>
-							<div class="bg-[#155DFC1A] mt-6 flex items-center justify-center gap-2 p-8 rounded-md text-[#155DFC]">
-								<Icon name="car" />
-								<span class="font-bold">Tahmini Teslimat:</span> Şimdi sipariş verin — 21 Mayısa kapınızda!
-							</div>
-						</section>
-					</div>
-
-					<section class="flex items-center justify-between mt-6">
-						<button
-							v-for="(value, index) in ['Açıklama', 'Sıkça Sorulan Sorular', 'Ürün Özellikleri']"
-							:key="index"
-							:class="[
-								'font-medium border-b-2 transition-all w-full hover:border-[#2B7FFF] hover:text-[#2B7FFF]',
-								`${index === 0 ? 'border-[#2B7FFF] text-[#2B7FFF]' : 'border-[#B3B3B3] text-[#B3B3B3]'}`
-							]"
-						>
-							{{ value }}
-						</button>
-					</section>
-					<div class="mt-6 text-[#313131] text-left">
-						Starry Night, Vincent van Gogh tarafından 1889 yılında yapılmış ve sanat tarihinin en ikonik tablolarından
-						biri olarak kabul edilmiştir. Dalgamsı fırça darbeleri, dramatik gökyüzü ve yoğun renk kontrastlarıyla Van
-						Gogh’un duygusal dünyasını yansıtır. Bu eşsiz eser, PlusCanvas kalitesiyle kanvas tablo olarak yeniden hayat
-						bulur
-					</div>
+					<ProductDetailTabs />
 				</div>
 
-				<div class="w-full">
-					<h1 class="font-semibold text-4xl">Çiçek Açan Badem Ağacı - Almond Blossom</h1>
-					<div class="flex items-center gap-2 mt-3">
-						<Icon name="star" class="w-6 h-6 text-yellow-300" />
-						<span class="text-[#B3B3B3]"
-							>4.8 •
-							<span class="underline"> 22 Değerlendirme </span>
-						</span>
-					</div>
-					<div class="mt-4 text-sm text-[#B3B3B3] flex items-center gap-2">
-						Ürün Kodu: <span class="font-bold"> KT-2024-001 </span>
-						<Icon name="copyIcon" />
-					</div>
-					<div class="mt-8">Boyut Seçin</div>
-
-					<div class="mt-2 relative w-full max-w-[180px]">
-						<select
-							name="size"
-							id="size"
-							:value="selectedFormat.id"
-							class="pcSelect w-full appearance-none bg-[#B3B3B333] hover:bg-[#B3B3B340] rounded-full py-3 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all"
-							@change="onFormatSelectChange"
-						>
-							<option v-for="format in formatPresets" :key="format.id" :value="format.id">
-								{{ format.label }}
-							</option>
-						</select>
-						<div class="pointer-events-none absolute inset-y-0 right-4 flex items-center">
-							<Icon name="arrowRight" class="w-4 h-4 rotate-90" />
-						</div>
-					</div>
-					<div class="mt-8">Çerçeve Seçin</div>
-					<div class="grid grid-cols-7 gap-3 mt-3">
-						<img
-							v-for="(frame, index) in frameOptions.slice(0, 9)"
-							:key="frame.id"
-							:src="frame.src ?? '/images/cerceve.png'"
-							:alt="frame.label"
-							class="border border-transparent hover:border-blue-600 transition-all cursor-pointer rounded-md"
-							:class="{ 'border-blue-600': isFrameActive(frame.id) }"
-							@click="applyFrameByIndex(index)"
-						/>
-					</div>
-					<div class="mt-8 flex items-center gap-5">
-						<span class="text-4xl font-bold text-[#313131]">399₺</span>
-						<span class="text-2xl line-through text-[#B3B3B3]">599₺</span>
-					</div>
-
-					<div class="mt-5 flex items-center gap-2">
-						<button
-							class="bg-[#2B7FFF] rounded-3xl p-4 py-3 hover:bg-[#2B7FFF]/80 transition-all text-white font-semibold text-lg w-full max-w-[300px]"
-						>
-							Sepete Ekle
-						</button>
-						<Icon
-							name="heart"
-							class="text-white bg-[#2B7FFF] rounded-3xl w-[50px] h-[50px] hover:bg-[#2B7FFF]/80 transition-all"
-						/>
-					</div>
+				<div class="product-detail-sidebar w-full shrink-0">
+					<ProductDetailSidebar
+						:product="product"
+						:format-presets="formatPresets"
+						:size-options="sizeOptions"
+						:frame-options="frameOptions"
+						:selected-format-id="selectedFormat?.id ?? null"
+						:selected-size-id="selectedSize?.id ?? null"
+						:is-frame-active="isFrameActive"
+						@format-change="applyFormatById"
+						@size-change="applySizeById"
+						@frame-select="applyFrameByIndex"
+					/>
 				</div>
 			</div>
 		</section>
@@ -274,92 +142,39 @@
 </template>
 
 <style lang="scss" scoped>
-	.mySwiper {
-		margin: 0;
-		margin-top: 40px;
-		.swiper-slide {
-			width: 100px;
-			border-radius: 12px;
-			overflow: hidden;
-			opacity: 0.5;
-			transition: all 0.3s ease;
-			&:hover {
-				opacity: 1;
-			}
+	.product-detail-layout {
+		align-items: flex-start;
+	}
 
-			img {
-				width: 100%;
-				height: 100%;
-			}
+	.product-detail-editor {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.product-detail-sidebar {
+		flex: 0 0 380px;
+		max-width: 420px;
+	}
+
+	@media (max-width: 1024px) {
+		.product-detail-layout {
+			flex-direction: column;
 		}
-		.swiper-slide.is-thumb-active {
-			opacity: 1;
+
+		.product-detail-sidebar {
+			flex: 1 1 auto;
+			max-width: none;
+			width: 100%;
 		}
 	}
 
-	.mySwiper2 {
+	:deep(.mySwiper2) {
 		margin: auto 0;
 
-		:deep(.canvas-container) {
+		.canvas-container {
 			margin: 0 auto;
-		}
-
-		.swiper-slide {
 			border-radius: 20px;
 			overflow: hidden;
-			img {
-				width: 100%;
-				height: 100%;
-			}
-		}
-	}
-
-	.navBtn {
-		width: 48px;
-		height: 48px;
-		border-radius: 9999px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s ease;
-		background-color: transparent;
-		user-select: none;
-		cursor: pointer;
-
-		&.disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-			pointer-events: none;
-		}
-		&:hover {
-			transform: translateY(-1px);
-			color: #1853a0;
-		}
-		:deep(svg) {
-			filter: drop-shadow(0 10px 20px rgba(16, 24, 40, 0.15));
-		}
-	}
-
-	.pcSelect {
-		box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.06);
-	}
-
-	.mySwiper3 {
-		margin-top: 20px;
-		.swiper-slide {
-			border: 1px solid transparent;
-			background-color: white;
-			border-radius: 8px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			cursor: pointer;
-			transition: all 0.3s ease;
-			overflow: hidden;
-
-			&:hover {
-				border-color: #2b7fff;
-			}
 		}
 	}
 </style>
