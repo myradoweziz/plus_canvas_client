@@ -3,13 +3,23 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	defineProps<{
-		isOpen: boolean
-	}>()
+	import type { TempDesignImage } from '~/utils/types'
+	import { createUploadSessionId } from '~/utils/uploadSessionId'
+
+	const props = withDefaults(
+		defineProps<{
+			isOpen: boolean
+			/** Maksimum yüklenebilir görsel sayısı; tanımsız = sınırsız */
+			maxImages?: number
+		}>(),
+		{
+			maxImages: undefined
+		}
+	)
 
 	const emit = defineEmits<{
 		(e: 'close'): void
-		(e: 'go-next'): void
+		(e: 'go-next', payload: { images: TempDesignImage[] }): void
 	}>()
 
 	const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -45,6 +55,38 @@
 	const isDragging = ref(false)
 	const uploadedImages = ref<UploadedItem[]>([])
 	const errorMessage = ref<string | null>(null)
+	const uploadSessionId = ref<string | null>(null)
+
+	const getOrCreateUploadSessionId = () => {
+		if (!uploadSessionId.value) {
+			uploadSessionId.value = createUploadSessionId()
+		}
+		return uploadSessionId.value
+	}
+
+	const resetUploadSessionId = () => {
+		uploadSessionId.value = null
+	}
+
+	watch(
+		() => props.isOpen,
+		(open) => {
+			if (!open) resetUploadSessionId()
+		}
+	)
+
+	const hasUploadLimit = computed(() => typeof props.maxImages === 'number' && props.maxImages > 0)
+
+	const remainingUploadSlots = computed(() => {
+		if (!hasUploadLimit.value) return Infinity
+		return Math.max(0, props.maxImages! - uploadedImages.value.length)
+	})
+
+	const canUploadMore = computed(() => remainingUploadSlots.value > 0)
+
+	const showMaxImagesError = () => {
+		showError(`En fazla ${props.maxImages} görsel yükleyebilirsiniz.`)
+	}
 
 	/** Tam API URL — boş baseUrl ile istek Nuxt origin’e gider ve API’ye ulaşmaz. */
 	const getUploadTempUrl = (): string | null => {
@@ -74,7 +116,24 @@
 	}
 
 	const openFileSelector = () => {
+		if (!canUploadMore.value) {
+			showMaxImagesError()
+			return
+		}
 		fileInput.value?.click()
+	}
+
+	const queueFilesForUpload = (files: File[]) => {
+		if (!files.length) return
+		if (!canUploadMore.value) {
+			showMaxImagesError()
+			return
+		}
+		const allowed = hasUploadLimit.value ? files.slice(0, remainingUploadSlots.value) : files
+		if (allowed.length < files.length) {
+			showError(`Yalnızca ${allowed.length} görsel daha eklenebilir (maks. ${props.maxImages}).`)
+		}
+		allowed.forEach((file) => validateAndUpload(file))
 	}
 
 	const uploadTempImage = async (file: File) => {
@@ -86,8 +145,10 @@
 			isUploading: true
 		})
 
+		const sessionId = getOrCreateUploadSessionId()
 		const formData = new FormData()
 		formData.append('file', file)
+		formData.append('session_id', sessionId)
 
 		const uploadUrl = getUploadTempUrl()
 
@@ -119,7 +180,7 @@
 			}
 			item.url = url
 			item.serverId = res.data.id
-			item.sessionId = res.data.session_id
+			item.sessionId = res.data.session_id?.trim() || sessionId
 			item.progress = 100
 			item.isUploading = false
 		} catch (e) {
@@ -137,6 +198,10 @@
 	}
 
 	const validateAndUpload = (file: File) => {
+		if (!canUploadMore.value) {
+			showMaxImagesError()
+			return
+		}
 		const mime = (file.type || '').toLowerCase()
 		if (mime && !ALLOWED_MIME.has(mime)) {
 			showError(`“${file.name}”: yalnızca PNG, JPG, JPEG veya GIF.`)
@@ -154,17 +219,13 @@
 		e.preventDefault()
 		isDragging.value = false
 		const files = e.dataTransfer?.files
-		if (files) {
-			Array.from(files).forEach((file) => validateAndUpload(file))
-		}
+		if (files?.length) queueFilesForUpload(Array.from(files))
 	}
 
 	const handleFileSelect = (e: Event) => {
 		const target = e.target as HTMLInputElement
 		const files = target.files
-		if (files) {
-			Array.from(files).forEach((file) => validateAndUpload(file))
-		}
+		if (files?.length) queueFilesForUpload(Array.from(files))
 		target.value = ''
 	}
 
@@ -174,10 +235,22 @@
 
 	const resetUpload = () => {
 		uploadedImages.value = []
+		resetUploadSessionId()
 	}
 
 	const goNext = () => {
-		emit('go-next')
+		const ready: TempDesignImage[] = uploadedImages.value
+			.filter((i) => !i.isUploading && i.url.trim())
+			.map((i) => ({
+				url: i.url.trim(),
+				id: i.serverId ?? 0,
+				session_id: i.sessionId ?? ''
+			}))
+		if (!ready.length) {
+			showError('Önce bir görsel yükleyin ve yüklemenin bitmesini bekleyin.')
+			return
+		}
+		emit('go-next', { images: ready })
 	}
 </script>
 
@@ -251,6 +324,8 @@
 
 								<!-- Add More Card -->
 								<button
+									v-if="canUploadMore"
+									type="button"
 									@click="openFileSelector"
 									class="aspect-square border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-[#2B7FFF] hover:bg-blue-50/30 transition-all group"
 								>
@@ -266,6 +341,7 @@
 							<!-- Action Footer -->
 							<div class="mt-auto pt-10 flex gap-4 w-full justify-center">
 								<button
+									type="button"
 									@click="goNext"
 									:disabled="uploadedImages.length === 0 || uploadedImages.some((i) => i.isUploading || !i.url.trim())"
 									class="bg-[#2B7FFF] hover:bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-100 transition-all min-w-[200px] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -311,7 +387,7 @@
 
 							<div class="mt-10 flex flex-wrap justify-center gap-4 opacity-40">
 								<span class="text-xs font-bold uppercase tracking-widest text-gray-600">
-									PNG, JPG, JPEG veya GIF (Maks. 10MB)
+									PNG, JPG, JPEG veya GIF (Maks. 10MB<span v-if="hasUploadLimit">, en fazla {{ maxImages }} görsel</span>)
 								</span>
 							</div>
 						</div>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import type { TempDesignImage } from '~/utils/types'
+
 	const steps = [
 		{ icon: 'upload', title: 'Fotoğrafını Yükle', desc: 'Telefonundan veya bilgisayarından sevdiğin fotoğrafı yükle' },
 		{ icon: 'palette', title: 'Tablonu Tasarla', desc: 'Boyutunu ve çerçeve stilini seçerek tablonu kişiselleştir' },
@@ -19,8 +21,14 @@
 	}
 
 	const router = useRouter()
-	const goNext = () => {
-		router.push('/products/1')
+	const designStore = useProductDesignStore()
+
+	const goNext = async (payload: { images: TempDesignImage[] }) => {
+		if (!payload.images.length) return
+		const productId = 1
+		designStore.setSession(productId, payload.images)
+		closeUploader()
+		await router.push(`/products/${productId}`)
 	}
 </script>
 

@@ -70,6 +70,15 @@ export default defineNuxtConfig({
 		}
 	},
 	vite: {
+		server: {
+			proxy: {
+				'/media-proxy': {
+					target: process.env.BASE_URL || 'http://35.233.125.99:8000',
+					changeOrigin: true,
+					rewrite: (path: string) => path.replace(/^\/media-proxy/, '')
+				}
+			}
+		},
 		optimizeDeps: {
 			include: ['fabric']
 		},

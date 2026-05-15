@@ -12,12 +12,16 @@
 
 	const route = useRoute()
 
-	const productId = route.params.productId
+	const productId = computed(() => {
+		const id = route.params.productId
+		if (Array.isArray(id)) return id[0] ?? ''
+		return String(id ?? '')
+	})
 
 	const breadcrumbs = [
 		{ label: 'Kategoriler', link: '/products' },
 		{ label: 'Ürünler', link: `/products` },
-		{ label: 'Ürün Detayı', link: `/products/${productId}` }
+		{ label: 'Ürün Detayı', link: `/products/${productId.value}` }
 	] as BreadcrumbItem[]
 
 	const thumbsSwiper = ref<any>(null)
@@ -37,10 +41,46 @@
 		lastDesign.value = payload
 	}
 
-	const designObjectCount = (d: ProductDesignPayload) => {
-		const o = d.fabric.objects
-		return Array.isArray(o) ? o.length : 0
+	const canvasWrapRef = ref<HTMLElement | null>(null)
+
+	const {
+		uploadImages,
+		activeImage,
+		isThumbActive,
+		previewUrl,
+		initCanvas,
+		selectUploadImage,
+		formatPresets,
+		frameOptions,
+		applyFormatById,
+		applyFrameByIndex,
+		isFormatActive,
+		isFrameActive,
+		selectedFormat
+	} = useProductCanvasEditor({
+		productId,
+		wrapRef: canvasWrapRef,
+		onDesignUpdate
+	})
+
+	const onThumbClick = async (index: number) => {
+		await selectUploadImage(index)
+		thumbsSwiper.value?.slideTo?.(index)
 	}
+
+	const onFormatSelectChange = (e: Event) => {
+		applyFormatById((e.target as HTMLSelectElement).value)
+	}
+
+	const currentPreviewSrc = computed(() => {
+		const url = activeImage.value?.url ?? uploadImages.value[0]?.url
+		return url ? previewUrl(url) : ''
+	})
+
+	onMounted(async () => {
+		await nextTick()
+		await initCanvas()
+	})
 </script>
 
 <template>
@@ -67,45 +107,33 @@
 								direction="vertical"
 								:navigation="{ prevEl, nextEl }"
 							>
-								<swiper-slide><img src="https://swiperjs.com/demos/images/abstract-1.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-2.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-3.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-4.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-5.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-6.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-7.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-8.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-9.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-10.jpg" /></swiper-slide>
+								<swiper-slide
+									v-for="(img, index) in uploadImages"
+									:key="img.id"
+									class="cursor-pointer"
+									:class="{ 'is-thumb-active': isThumbActive(index) }"
+									@click="onThumbClick(index)"
+								>
+									<img :src="previewUrl(img.url)" :alt="`upload-${img.id}`" />
+								</swiper-slide>
+								<swiper-slide v-if="!uploadImages.length">
+									<img src="/images/banner.png" alt="placeholder" />
+								</swiper-slide>
 							</swiper>
 
 							<!-- Custom navigation buttons: one top, one bottom -->
-							<button ref="prevEl" type="button" class="navBtn absolute left-1/4 top-0 z-10">
-								<Icon name="arrowRight" class="w-12 h-12 -rotate-90" />
-							</button>
-							<button ref="nextEl" type="button" class="navBtn absolute left-1/4 -bottom-15 z-10">
-								<Icon name="arrowRight" class="w-12 h-12 rotate-90" />
-							</button>
+							<div v-if="uploadImages.length > 4">
+								<button ref="prevEl" type="button" class="navBtn absolute left-1/4 top-0 z-10">
+									<Icon name="arrowRight" class="w-12 h-12 -rotate-90" />
+								</button>
+								<button ref="nextEl" type="button" class="navBtn absolute left-1/4 -bottom-15 z-10">
+									<Icon name="arrowRight" class="w-12 h-12 rotate-90" />
+								</button>
+							</div>
 						</section>
 
-						<section>
-							<swiper
-								:spaceBetween="10"
-								:thumbs="{ swiper: thumbsSwiper }"
-								:modules="modules"
-								class="mySwiper2 max-w-3xl h-[600px]"
-							>
-								<swiper-slide><img src="https://swiperjs.com/demos/images/abstract-1.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-2.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-3.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-4.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-5.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-6.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-7.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-8.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-9.jpg" /></swiper-slide
-								><swiper-slide><img src="https://swiperjs.com/demos/images/abstract-10.jpg" /></swiper-slide>
-							</swiper>
+						<section class="w-full max-w-3xl">
+							<div ref="canvasWrapRef" class="mySwiper2 relative w-full h-[520px] overflow-hidden" />
 
 							<div class="relative">
 								<swiper
@@ -115,25 +143,43 @@
 									class="mySwiper3 w-[680px]"
 									:navigation="{ prevEl: prevEl3, nextEl: nextEl3 }"
 								>
-									<swiper-slide v-for="value in 10" :key="value" class="flex flex-col items-center justify-center pb-4">
-										<div class="relative pt-[100%] w-full">
+									<swiper-slide
+										v-for="format in formatPresets"
+										:key="format.id"
+										class="flex flex-col items-center justify-center pb-4 cursor-pointer"
+										@click="applyFormatById(format.id)"
+									>
+										<div
+											class="relative pt-[100%] w-full border border-transparent hover:border-blue-600 transition-all rounded-md overflow-hidden"
+											:class="{ 'border-blue-600': isFormatActive(format.id) }"
+										>
 											<img
+												v-if="currentPreviewSrc"
+												:src="currentPreviewSrc"
+												:alt="format.label"
+												class="w-full h-full absolute top-0 left-0 object-cover"
+											/>
+
+											<img
+												v-else
 												src="/images/banner.png"
-												alt="cerceve"
+												:alt="format.label"
 												class="w-full h-full absolute top-0 left-0 object-cover"
 											/>
 										</div>
 
-										<p class="text-sm text-[#364153] px-4 pt-4">Dikey</p>
+										<p class="text-sm text-[#364153] px-4 pt-4">{{ format.label }}</p>
 									</swiper-slide>
 								</swiper>
 
-								<button ref="prevEl3" type="button" class="navBtn absolute left-0 bottom-10 z-10">
-									<Icon name="arrowRight" class="w-12 h-12 -rotate-180" />
-								</button>
-								<button ref="nextEl3" type="button" class="navBtn absolute right-0 bottom-10 z-10">
-									<Icon name="arrowRight" class="w-12 h-12 -rotate-360" />
-								</button>
+								<div v-if="formatPresets.length > 6">
+									<button ref="prevEl3" type="button" class="navBtn absolute -left-12 bottom-10 z-10">
+										<Icon name="arrowRight" class="w-12 h-12 -rotate-180" />
+									</button>
+									<button ref="nextEl3" type="button" class="navBtn absolute right-0 bottom-10 z-10">
+										<Icon name="arrowRight" class="w-12 h-12 -rotate-360" />
+									</button>
+								</div>
 							</div>
 							<div class="bg-[#155DFC1A] mt-6 flex items-center justify-center gap-2 p-8 rounded-md text-[#155DFC]">
 								<Icon name="car" />
@@ -181,11 +227,13 @@
 						<select
 							name="size"
 							id="size"
+							:value="selectedFormat.id"
 							class="pcSelect w-full appearance-none bg-[#B3B3B333] hover:bg-[#B3B3B340] rounded-full py-3 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all"
+							@change="onFormatSelectChange"
 						>
-							<option selected value="25x25">25x25 cm</option>
-							<option value="25x35">25x35 cm</option>
-							<option value="30x40">30x40 cm</option>
+							<option v-for="format in formatPresets" :key="format.id" :value="format.id">
+								{{ format.label }}
+							</option>
 						</select>
 						<div class="pointer-events-none absolute inset-y-0 right-4 flex items-center">
 							<Icon name="arrowRight" class="w-4 h-4 rotate-90" />
@@ -194,11 +242,13 @@
 					<div class="mt-8">Çerçeve Seçin</div>
 					<div class="grid grid-cols-7 gap-3 mt-3">
 						<img
-							v-for="value in 9"
-							:key="value"
-							src="/images/cerceve.png"
-							alt="cerceve"
+							v-for="(frame, index) in frameOptions.slice(0, 9)"
+							:key="frame.id"
+							:src="frame.src ?? '/images/cerceve.png'"
+							:alt="frame.label"
 							class="border border-transparent hover:border-blue-600 transition-all cursor-pointer rounded-md"
+							:class="{ 'border-blue-600': isFrameActive(frame.id) }"
+							@click="applyFrameByIndex(index)"
 						/>
 					</div>
 					<div class="mt-8 flex items-center gap-5">
@@ -242,13 +292,17 @@
 				height: 100%;
 			}
 		}
-		.swiper-slide-thumb-active {
+		.swiper-slide.is-thumb-active {
 			opacity: 1;
 		}
 	}
 
 	.mySwiper2 {
 		margin: auto 0;
+
+		:deep(.canvas-container) {
+			margin: 0 auto;
+		}
 
 		.swiper-slide {
 			border-radius: 20px;

@@ -1,5 +1,7 @@
 import axios, { isAxiosError } from 'axios'
 
+import { createUploadSessionId } from '~/utils/uploadSessionId'
+
 type TempUploadApiResponse = {
 	message?: string
 	data: {
@@ -17,6 +19,19 @@ type TempUploadApiResponse = {
 }
 
 export function useMediaUploadTemp() {
+	const uploadSessionId = ref<string | null>(null)
+
+	const getOrCreateUploadSessionId = (): string => {
+		if (!uploadSessionId.value) {
+			uploadSessionId.value = createUploadSessionId()
+		}
+		return uploadSessionId.value
+	}
+
+	const resetUploadSessionId = () => {
+		uploadSessionId.value = null
+	}
+
 	const getUploadTempUrl = (): string | null => {
 		const base = String(useRuntimeConfig().public.baseUrl ?? '')
 			.trim()
@@ -41,8 +56,10 @@ export function useMediaUploadTemp() {
 		if (!uploadUrl) {
 			throw new Error('API adresi eksik: .env içinde BASE_URL tanımlayın.')
 		}
+		const sessionId = getOrCreateUploadSessionId()
 		const formData = new FormData()
 		formData.append('file', file)
+		formData.append('session_id', sessionId)
 		const { data: res } = await axios.post<TempUploadApiResponse>(uploadUrl, formData, {
 			headers: uploadAuthHeaders()
 		})
@@ -51,7 +68,7 @@ export function useMediaUploadTemp() {
 		return {
 			url,
 			id: res.data.id,
-			session_id: res.data.session_id
+			session_id: res.data.session_id?.trim() || sessionId
 		}
 	}
 
@@ -68,5 +85,12 @@ export function useMediaUploadTemp() {
 		}
 	}
 
-	return { getUploadTempUrl, uploadAuthHeaders, uploadFile, uploadFileSafe }
+	return {
+		getUploadTempUrl,
+		uploadAuthHeaders,
+		uploadFile,
+		uploadFileSafe,
+		getOrCreateUploadSessionId,
+		resetUploadSessionId
+	}
 }

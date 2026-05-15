@@ -30,6 +30,7 @@
 			<h2 class="text-2xl md:text-3xl lg:text-[40px] font-bold text-[#1853a0] text-center">En Çok Satanlar</h2>
 
 			<SwiperButtons
+				v-if="products.length > 4"
 				prev-class="best-prev"
 				next-class="best-next"
 				:disabled-prev="isBeginning"

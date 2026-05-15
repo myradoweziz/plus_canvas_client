@@ -13,7 +13,8 @@
 		FilterProduct,
 		MainCategory,
 		Product,
-		SubCategory
+		SubCategory,
+		TempDesignImage
 	} from '~/utils/types'
 
 	const route = useRoute()
@@ -615,17 +616,27 @@
 	}
 
 	const isUploaderOpen = ref(false)
+	/** Товар, с карточки которого открыли модал (delegate-uploader). */
+	const uploaderProductId = ref<number | null>(null)
 
-	const openUploader = () => {
+	const openUploader = (productId: number) => {
+		uploaderProductId.value = productId
 		isUploaderOpen.value = true
 	}
 
 	const closeUploader = () => {
 		isUploaderOpen.value = false
+		uploaderProductId.value = null
 	}
 
-	const goNext = () => {
-		router.push(`/products/${filteredProducts.value[0]?.id}`)
+	const designStore = useProductDesignStore()
+
+	const goNext = async (payload: { images: TempDesignImage[] }) => {
+		const id = uploaderProductId.value ?? filteredProducts.value[0]?.id
+		if (id == null || !payload.images.length) return
+		designStore.setSession(id, payload.images)
+		closeUploader()
+		await router.push(`/products/${id}`)
 	}
 </script>
 

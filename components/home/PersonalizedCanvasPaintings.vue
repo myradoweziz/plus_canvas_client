@@ -32,6 +32,7 @@
 			</h2>
 
 			<SwiperButtons
+				v-if="products.length > 4"
 				prev-class="pers-prev"
 				next-class="pers-next"
 				:disabled-prev="isBeginning"
