@@ -5,10 +5,7 @@ import {
 	insetSlotRect,
 	slotRectOnMockup,
 	sortLayoutSlots,
-	type CollageLayoutSlot,
-	detectSlotCoordinateMode,
-	collageLayoutReferenceBounds,
-	slotRectInContainer
+	type CollageLayoutSlot
 } from '~/utils/collageLayout'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
@@ -382,7 +379,7 @@ export function useProductCanvasEditor(options: {
 	const updateFrame = async () => {
 		if (!fabricCanvas || !fabricLib || !printAreaRect) return
 		removeFrame()
-		
+
 		if (hasCollageLayout.value) {
 			fabricCanvas.requestRenderAll()
 			return

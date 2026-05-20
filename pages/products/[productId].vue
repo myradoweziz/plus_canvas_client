@@ -1,4 +1,8 @@
 <script setup lang="ts">
+	import { Autoplay, Navigation } from 'swiper/modules'
+
+	import Icon from '~/utils/ui/Icon.vue'
+
 	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 
@@ -93,6 +97,47 @@
 		designStore.clearSession()
 		await router.replace('/products')
 	})
+
+	const deliveryDirections = [
+		{ icon: 'carTruck', title: 'Ücretsiz Kargo', description: 'Tüm siparişlerde' },
+		{
+			icon: 'money',
+			title: 'Taksitli ödeme',
+			description: 'Banka havalesi veya kredi kartı ile ödeme. 3, 6 veya 9 taksit imkanı.'
+		},
+		{ icon: 'shield', title: 'Memnuniyet Garantisi', description: '30 gün iade' }
+	]
+
+	const deliveryDirectionColors = (index: number) => {
+		return {
+			backgroundColor: index === 0 ? '#00A63E1A' : index === 1 ? '#F4AE0F1A' : '#155DFC1A',
+			iconColor: index === 0 ? '#00A63E' : index === 1 ? '#F4AE0F' : '#155DFC',
+			textColor: index === 0 ? '#0D542B' : index === 1 ? '#F4AE0F' : '#155DFC'
+		}
+	}
+
+	const homeStore = useHomeStore()
+	await homeStore.fetchProducts()
+
+	const relatedProducts = computed(() => {
+		const list = homeStore.canvasPaintingProducts.length ? homeStore.canvasPaintingProducts : homeStore.products
+		return list
+	})
+
+	const swiperModules = [Navigation, Autoplay]
+
+	const relatedSwiperBeginning = ref(true)
+	const relatedSwiperEnd = ref(false)
+
+	const onRelatedSwiper = (swiper: any) => {
+		relatedSwiperBeginning.value = swiper.isBeginning
+		relatedSwiperEnd.value = swiper.isEnd
+
+		swiper.on('slideChange', () => {
+			relatedSwiperBeginning.value = swiper.isBeginning
+			relatedSwiperEnd.value = swiper.isEnd
+		})
+	}
 </script>
 
 <template>
@@ -140,6 +185,64 @@
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"
 					/>
+				</div>
+			</div>
+			<ProductDeliveryDirections
+				:delivery-directions="deliveryDirections"
+				:delivery-direction-colors="deliveryDirectionColors"
+			/>
+
+			<ProductRatingReviews />
+		</section>
+		<section class="mt-20 bg-white">
+			<div class="max-w-[1400px] mx-auto px-4 md:px-10 py-10 md:py-16">
+				<div class="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 md:mb-12">
+					<h2 class="text-[#101828] text-2xl md:text-3xl lg:text-4xl font-bold">Bu tabloyu alanlar bunları da aldı</h2>
+				</div>
+
+				<Swiper
+					v-if="relatedProducts.length"
+					:modules="swiperModules"
+					:autoplay="{ delay: 3500, disableOnInteraction: false }"
+					:speed="2000"
+					:loop="false"
+					@swiper="onRelatedSwiper"
+					:navigation="{ prevEl: '.related-prev', nextEl: '.related-next' }"
+					:slides-per-view="1.2"
+					:space-between="16"
+					:breakpoints="{
+						640: { slidesPerView: 2.2, spaceBetween: 20 },
+						1024: { slidesPerView: 4, spaceBetween: 24 }
+					}"
+				>
+					<SwiperSlide v-for="relatedItem in relatedProducts" :key="relatedItem.id" class="h-auto">
+						<cards-canvas-paintings-card :product="relatedItem" show-button />
+					</SwiperSlide>
+				</Swiper>
+
+				<p v-else class="text-[#364153]">Benzer ürün bulunamadı.</p>
+
+				<div>
+					<button
+						type="button"
+						:class="[
+							'related-prev',
+							{ 'swiper-button-disabled': relatedSwiperBeginning },
+							'w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#101828] hover:bg-[#101828]/80	 text-white flex items-center justify-center transition-all shadow-md pointer-events-auto'
+						]"
+					>
+						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 rotate-90 flex justify-center" />
+					</button>
+					<button
+						type="button"
+						:class="[
+							'related-next',
+							{ 'swiper-button-disabled': relatedSwiperEnd },
+							'w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#101828] hover:bg-[#101828]/80 text-white flex items-center justify-center transition-all shadow-md pointer-events-auto'
+						]"
+					>
+						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 -rotate-90 flex justify-center" />
+					</button>
 				</div>
 			</div>
 		</section>
