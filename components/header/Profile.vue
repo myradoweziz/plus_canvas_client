@@ -11,11 +11,12 @@
 	}
 
 	const authStore = useAuthStore()
-	const { user, authorizationToken } = storeToRefs(authStore)
+	const { user } = storeToRefs(authStore)
+	const tokenCookie = useCookie('Authorization')
 	const route = useRoute()
 
 	const profileItems = computed<ProfileItem[]>(() => {
-		if (authorizationToken.value) {
+		if (tokenCookie.value) {
 			const displayName = user.value?.name?.trim() || ''
 			return [
 				{ title: displayName, link: '/profile' },
@@ -59,8 +60,7 @@
 
 	onMounted(async () => {
 		document.addEventListener('click', handleClickOutside)
-		authStore.syncTokenFromCookie()
-		if (authorizationToken.value) {
+		if (tokenCookie.value) {
 			await authStore.getMe()
 		}
 	})

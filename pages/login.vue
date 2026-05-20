@@ -21,6 +21,7 @@
 	const isSubmitting = ref(false)
 	const submitError = ref<string | null>(null)
 	const toast = useNuxtApp().$toast
+	const tokenCookie = useCookie('Authorization')
 	const emailError = computed(() => {
 		const value = form.value.email.trim()
 		if (!touched.value.email) return null
@@ -62,14 +63,13 @@
 			}
 
 			if (data.value) {
-				const anyData = data.value as any
-				const token: string | undefined = anyData?.token ?? anyData?.data?.token ?? anyData?.data?.data?.token
+				const token = data.value.token
 				if (!token) {
 					submitError.value = 'Giriş yapılamadı. Sunucudan token alınamadı.'
 					return
 				}
 
-				authStore.setSessionToken(token)
+				tokenCookie.value = token
 				toast.success('Giriş başarılı')
 				await nextTick()
 				await navigateTo('/profile', { replace: true })

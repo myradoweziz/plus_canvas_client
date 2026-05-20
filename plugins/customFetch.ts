@@ -1,7 +1,5 @@
-import { useAuthCookie } from '~/utils/authCookie'
-
 export default defineNuxtPlugin(() => {
-	const userAuth = useAuthCookie()
+	const tokenCookie = useCookie('Authorization')
 	const config = useRuntimeConfig()
 	const authStore = useAuthStore()
 	const nuxtApp = useNuxtApp()
@@ -23,7 +21,7 @@ export default defineNuxtPlugin(() => {
 		baseURL: (config.public.baseUrl as string) ?? '',
 		onRequest({ request, options, error }) {
 			nuxtApp.callHook('page:loading:start')
-			const rawToken = typeof userAuth.value === 'string' ? userAuth.value.trim() : ''
+			const rawToken = typeof tokenCookie.value === 'string' ? tokenCookie.value.trim() : ''
 			if (rawToken) {
 				// ofetch допускает headers как объект; нормализуем в Headers, чтобы .set всегда работал
 				const h = options.headers instanceof Headers ? options.headers : new Headers(options.headers as any)

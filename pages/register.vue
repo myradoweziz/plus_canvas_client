@@ -28,6 +28,7 @@
 	const submitError = ref<string | null>(null)
 	const backendErrors = ref<Record<string, string[]>>({})
 	const toast = useNuxtApp().$toast
+	const tokenCookie = useCookie('Authorization')
 
 	const extractBackendErrors = (err: unknown): Record<string, string[]> => {
 		const anyErr = err as any
@@ -104,9 +105,6 @@
 
 		if (!isValid.value) return
 
-		const router = useRouter()
-		const authStore = useAuthStore()
-
 		isSubmitting.value = true
 		const { data, error } = await useCustomFetch<LoginResponse>('/api/auth/register', {
 			method: 'POST',
@@ -128,9 +126,10 @@
 				return
 			}
 
-			authStore.setSessionToken(token)
+			tokenCookie.value = token
 			toast.success('Kayıt başarılı')
-			router.push('/')
+			await nextTick()
+			await navigateTo('/')
 			return
 		}
 

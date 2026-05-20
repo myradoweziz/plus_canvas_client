@@ -1,32 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-import { useAuthCookie } from '~/utils/authCookie'
 import type { ProfileUpdatePayload, User } from '~/utils/types'
 
 export const useAuthStore = defineStore('auth', () => {
 	/** Дублирует значение cookie `Authorization` (без префикса Bearer) — для плагина и UI */
-	const authorizationToken = ref<string | null>(null)
 
 	const user = ref<User | null>(null)
 
-	function authCookie() {
-		return useAuthCookie()
-	}
-
-	function syncTokenFromCookie() {
-		const tokenCookie = authCookie()
-		authorizationToken.value = tokenCookie.value ?? null
-	}
-
-	function setSessionToken(token: string) {
-		const tokenCookie = authCookie()
-		tokenCookie.value = token
-		authorizationToken.value = token
-	}
+	const tokenCookie = useCookie('Authorization')
 
 	async function getMe() {
-		syncTokenFromCookie()
 		const toast = useNuxtApp().$toast
 		const { data, error } = await useCustomFetch<{ data: User }>('/api/auth/me')
 
@@ -39,7 +23,6 @@ export const useAuthStore = defineStore('auth', () => {
 	}
 
 	async function updateProfile(payload: ProfileUpdatePayload): Promise<boolean> {
-		syncTokenFromCookie()
 		const toast = useNuxtApp().$toast
 		const body: Record<string, string> = {
 			name: payload.name.trim(),
@@ -73,9 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
 
 	async function logout(reason: 'manual' | 'expired' | 'forbidden' = 'manual', redirectTo: string | false = '/') {
 		const toast = useNuxtApp().$toast
-		const tokenCookie = authCookie()
 		tokenCookie.value = null
-		syncTokenFromCookie()
 		user.value = null
 
 		if (reason === 'expired') {
@@ -94,10 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
 	}
 
 	return {
-		authorizationToken,
 		user,
-		syncTokenFromCookie,
-		setSessionToken,
 		setUserActivity,
 		logout,
 		getMe,

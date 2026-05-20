@@ -1,11 +1,9 @@
-import { useAuthCookie } from '~/utils/authCookie'
-
 /** Защита /profile/* — проверка cookie на сервере и клиенте до рендера страницы. */
 export default defineNuxtRouteMiddleware((to) => {
-	// if (!to.path.startsWith('/profile')) return
+	if (!to.path.startsWith('/profile')) return
 
-	const token = useAuthCookie()
-	// if (hasAuthToken(token.value)) return
+	const token = useCookie('Authorization')
+	if (token.value) return
 
-	// return navigateTo('/login', { replace: true })
+	return navigateTo('/login', { replace: true })
 })
