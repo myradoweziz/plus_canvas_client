@@ -8,10 +8,44 @@ function canvasMediaUrlAlreadyProxied(raw: string): boolean {
 	}
 }
 
-/** В dev проксируем API/storage через same-origin — Fabric и canvas без CORS. */
+function toMediaProxyPath(pathname: string, search = ''): string {
+	const path = pathname.startsWith('/') ? pathname : `/${pathname}`
+	return `/media-proxy${path}${search}`
+}
+
+function shouldProxyApiMediaUrl(raw: string, apiBase: string): boolean {
+	if (raw.startsWith('/api/')) return true
+	if (!apiBase) return false
+
+	try {
+		const remote = new URL(raw)
+		const api = new URL(apiBase)
+		if (remote.origin === api.origin) return true
+		if (remote.hostname === api.hostname) return true
+	} catch {
+		return false
+	}
+
+	if (import.meta.client) {
+		try {
+			const remote = new URL(raw, window.location.origin)
+			return remote.origin !== window.location.origin
+		} catch {
+			return false
+		}
+	}
+
+	return false
+}
+
+/**
+ * Проксируем медиа API через same-origin `/media-proxy` — иначе CORS при
+ * credentials + Access-Control-Allow-Origin: * (разные порты 80 / 8000).
+ */
 export function mediaUrlForCanvas(rawUrl: string): string {
 	const raw = String(rawUrl ?? '').trim()
-	if (!raw || !import.meta.client || !import.meta.dev) return raw
+	if (!raw || !import.meta.client) return raw
+
 	if (canvasMediaUrlAlreadyProxied(raw)) {
 		if (raw.startsWith('/')) return raw
 		try {
@@ -25,25 +59,20 @@ export function mediaUrlForCanvas(rawUrl: string): string {
 	const base = String(useRuntimeConfig().public.baseUrl ?? '')
 		.trim()
 		.replace(/\/+$/, '')
-	if (!base) return raw
-
-	const toProxy = (pathname: string, search = '') => {
-		const path = pathname.startsWith('/') ? pathname : `/${pathname}`
-		return `/media-proxy${path}${search}`
-	}
 
 	if (raw.startsWith('/')) {
-		return toProxy(raw)
+		if (raw.startsWith('/api/') && base) return toMediaProxyPath(raw)
+		return raw
 	}
 
-	try {
-		const remote = new URL(raw)
-		const apiBase = new URL(base)
-		if (remote.origin === apiBase.origin) {
-			return toProxy(remote.pathname, remote.search)
+	if (base && shouldProxyApiMediaUrl(raw, base)) {
+		try {
+			const remote = new URL(raw)
+			return toMediaProxyPath(remote.pathname, remote.search)
+		} catch {
+			/* noop */
 		}
-	} catch {
-		/* noop */
 	}
+
 	return raw
 }

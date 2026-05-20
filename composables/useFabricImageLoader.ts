@@ -1,6 +1,6 @@
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 
-/** Загрузка картинки для Fabric (прокси + Bearer при необходимости). */
+/** Загрузка картинки для Fabric (same-origin /media-proxy + Bearer при необходимости). */
 export function useFabricImageLoader() {
 	const { uploadAuthHeaders } = useMediaUploadTemp()
 
@@ -19,7 +19,20 @@ export function useFabricImageLoader() {
 
 		const src = mediaUrlForCanvas(raw)
 		const headers = uploadAuthHeaders()
-		const res = await fetch(src, { headers, credentials: 'include' })
+		const hasAuth = Boolean(headers.Authorization)
+		const isSameOrigin =
+			src.startsWith('/') ||
+			(typeof window !== 'undefined' && src.startsWith(window.location.origin))
+
+		const fetchInit: RequestInit = { headers }
+		if (isSameOrigin) {
+			fetchInit.credentials = hasAuth ? 'include' : 'same-origin'
+		} else {
+			// cross-origin: credentials + ACAO:* ломает preflight
+			fetchInit.credentials = hasAuth ? 'include' : 'omit'
+		}
+
+		const res = await fetch(src, fetchInit)
 		if (!res.ok) {
 			throw new Error(`Görsel yüklenemedi (${res.status})`)
 		}
