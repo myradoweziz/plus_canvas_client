@@ -202,6 +202,7 @@
 
 				<div v-if="relatedProducts.length" class="related-swiper-wrap relative">
 					<button
+						v-if="relatedProducts.length > 4"
 						type="button"
 						:class="[
 							'related-prev',
@@ -233,6 +234,7 @@
 					</Swiper>
 
 					<button
+						v-if="relatedProducts.length > 4"
 						type="button"
 						:class="[
 							'related-next',

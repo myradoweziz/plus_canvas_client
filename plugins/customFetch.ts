@@ -1,11 +1,7 @@
+import { useAuthCookie } from '~/utils/authCookie'
+
 export default defineNuxtPlugin(() => {
-	// Единственный источник токена — cookie Authorization
-	const userAuth = useCookie<string | null>('Authorization', {
-		path: '/',
-		sameSite: 'lax',
-		maxAge: 60 * 60 * 24 * 30,
-		secure: !import.meta.dev
-	})
+	const userAuth = useAuthCookie()
 	const config = useRuntimeConfig()
 	const authStore = useAuthStore()
 	const nuxtApp = useNuxtApp()

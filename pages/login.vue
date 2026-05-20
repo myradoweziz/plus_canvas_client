@@ -47,7 +47,6 @@
 
 		if (!isValid.value) return
 
-		const router = useRouter()
 		const authStore = useAuthStore()
 
 		isSubmitting.value = true
@@ -72,7 +71,8 @@
 
 				authStore.setSessionToken(token)
 				toast.success('Giriş başarılı')
-				router.push('/profile')
+				await nextTick()
+				await navigateTo('/profile', { replace: true })
 			}
 		} finally {
 			isSubmitting.value = false

@@ -6,7 +6,6 @@
 	})
 
 	useHead({ title: 'Siparişlerim | PlusCanvas' })
-
 	type OrderStatus = 'pending' | 'shipped' | 'delivered'
 
 	const OrderStatus = {
@@ -27,13 +26,6 @@
 		]
 	}
 
-	onMounted(async () => {
-		// const token = useCookie('Authorization')
-		// const router = useRouter()
-		// if (!token.value) {
-		// 	router.push('/login')
-		// }
-	})
 </script>
 
 <template>

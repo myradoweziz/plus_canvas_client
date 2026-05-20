@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+
+import { useAuthCookie } from '~/utils/authCookie'
 import type { ProfileUpdatePayload, User } from '~/utils/types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -9,14 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
 	const user = ref<User | null>(null)
 
 	function authCookie() {
-		return useCookie<string | null>('Authorization', {
-			path: '/',
-			sameSite: 'lax',
-			// Сессионная cookie легко воспринимается как "не сохранилось" после перезапуска браузера.
-			// Дадим разумный срок жизни.
-			maxAge: 60 * 60 * 24 * 30,
-			secure: !import.meta.dev
-		})
+		return useAuthCookie()
 	}
 
 	function syncTokenFromCookie() {
