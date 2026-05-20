@@ -4,6 +4,7 @@
 
 	import { getFramePrice, isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
 	import type { Product } from '~/utils/types'
+
 	const props = defineProps<{
 		sizeOptions: PrintSizeOption[]
 		frames: FrameOption[]
@@ -47,31 +48,116 @@
 			: Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
 		return Math.round(base + getFramePrice(selectedFrame.value))
 	})
+
+	// New premium interactive features
+	const copied = ref(false)
+	const isFavorited = ref(false)
+	const isAddingToCart = ref(false)
+	const showToast = ref(false)
+	const toastMessage = ref('')
+	const toastSubMessage = ref('')
+
+	const copyProductCode = async () => {
+		if (!props.product.product_qode) return
+		try {
+			await navigator.clipboard.writeText(props.product.product_qode)
+			copied.value = true
+			setTimeout(() => {
+				copied.value = false
+			}, 2000)
+		} catch (err) {
+			console.error('Failed to copy code: ', err)
+		}
+	}
+
+	const triggerToast = (msg: string, subMsg = '') => {
+		toastMessage.value = msg
+		toastSubMessage.value = subMsg
+		showToast.value = true
+		setTimeout(() => {
+			showToast.value = false
+		}, 3500)
+	}
+
+	const toggleFavorite = () => {
+		isFavorited.value = !isFavorited.value
+		triggerToast(
+			isFavorited.value ? 'Favorilere Eklendi!' : 'Favorilerden Çıkarıldı!',
+			`"${props.product.name}" favori listenize ${isFavorited.value ? 'eklendi' : 'çıkarıldı'}.`
+		)
+	}
+
+	const addToCart = () => {
+		if (isAddingToCart.value) return
+		isAddingToCart.value = true
+		setTimeout(() => {
+			isAddingToCart.value = false
+			const size = props.sizeOptions.find((s) => s.id === props.selectedSizeId)
+			const sizeLabel = size?.display_name || 'Standart'
+			const frameLabel = selectedFrame.value?.name || 'Çerçevesiz'
+			
+			triggerToast(
+				'Sepete Eklendi!',
+				`Ürün: ${props.product.name}\nBoyut: ${sizeLabel}\nÇerçeve: ${frameLabel}\nFiyat: ${displayPrice.value}₺`
+			)
+		}, 1000)
+	}
 </script>
 
 <template>
-	<div class="w-full">
-		<h1 class="font-semibold text-4xl">{{ product.name }}</h1>
+	<div class="w-full relative">
+		<!-- Glassmorphic Premium Toast Notification -->
+		<Transition name="toast">
+			<div
+				v-if="showToast"
+				class="fixed top-6 right-6 z-[9999] flex items-start gap-4 max-w-sm w-full bg-white/90 backdrop-blur-xl rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-white/20"
+			>
+				<div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-[#2B7FFF]/10 text-[#2B7FFF]">
+					<Icon name="favorite" class="w-6 h-6 text-red-500 fill-current" v-if="toastMessage.includes('Favorilere')" />
+					<Icon name="basket" class="w-6 h-6 text-[#2B7FFF]" v-else-if="toastMessage.includes('Sepete')" />
+					<Icon name="checkCircle" class="w-6 h-6 text-green-600" v-else />
+				</div>
+				<div class="flex-1 min-w-0">
+					<p class="text-sm font-bold text-gray-900">{{ toastMessage }}</p>
+					<p class="mt-1 text-xs text-gray-500 whitespace-pre-line leading-relaxed">
+						{{ toastSubMessage }}
+					</p>
+				</div>
+				<button @click="showToast = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+					<Icon name="close" class="w-4 h-4" />
+				</button>
+			</div>
+		</Transition>
+
+		<h1 class="font-semibold text-4xl text-gray-950">{{ product.name }}</h1>
 
 		<div class="flex items-center gap-2 mt-3">
-			<Icon name="star" class="w-6 h-6 text-yellow-300" />
-			<span class="text-[#B3B3B3]">
+			<Icon name="star" class="w-6 h-6 text-yellow-400" />
+			<span class="text-[#8e8e8e] font-semibold text-sm">
 				4.8 •
-				<span class="underline">22 Değerlendirme</span>
+				<span class="underline hover:text-[#2B7FFF] cursor-pointer transition-colors">22 Değerlendirme</span>
 			</span>
 		</div>
 
-		<div class="mt-4 text-sm text-[#B3B3B3] flex items-center gap-2">
-			Ürün Kodu: <span class="font-bold">{{ product.product_qode }}</span>
-			<Icon name="copyIcon" />
-		</div>
+		<!-- Interactive Copy Code Button -->
+		<button
+			type="button"
+			class="mt-4 text-sm text-[#B3B3B3] hover:text-[#2B7FFF] transition-colors flex items-center gap-2 cursor-pointer outline-none select-none group"
+			@click="copyProductCode"
+		>
+			<span>Ürün Kodu: <span class="font-bold text-gray-700 group-hover:text-[#2B7FFF] transition-colors">{{ product.product_qode }}</span></span>
+			<Icon name="copyIcon" class="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+			<Transition name="fade">
+				<span v-if="copied" class="text-xs text-green-600 font-bold ml-2 bg-green-50 px-2 py-0.5 rounded-md border border-green-200">Kopyalandı!</span>
+			</Transition>
+		</button>
 
-		<div class="mt-8">Boyut Seçin</div>
+		<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Boyut Seçin</div>
 		<div class="mt-2 relative w-full max-w-[220px]">
 			<select
 				name="size"
 				:value="selectedSizeId ?? ''"
-				class="pcSelect w-full appearance-none bg-[#B3B3B333] hover:bg-[#B3B3B340] rounded-full py-3 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all"
+				class="pcSelect w-full appearance-none bg-[#B3B3B322] hover:bg-[#B3B3B333] rounded-full py-3.5 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all cursor-pointer"
 				:disabled="!sizeOptions.length"
 				@change="onSizeChange"
 			>
@@ -79,20 +165,20 @@
 					{{ size.display_name }}
 				</option>
 			</select>
-			<div class="pointer-events-none absolute inset-y-0 right-4 flex items-center">
+			<div class="pointer-events-none absolute inset-y-0 right-5 flex items-center text-gray-500">
 				<Icon name="arrowRight" class="w-4 h-4 rotate-90" />
 			</div>
 		</div>
 
-		<div class="mt-8">Çerçeve Seçin</div>
+		<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
 		<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
 			<button
 				v-for="(frame, index) in frames"
 				:key="frame.id"
 				type="button"
-				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-md border-2 cursor-pointer transition-all hover:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-all hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF]"
 				:class="
-					isFrameActive(frame.id) ? 'frame-tile--active border-blue-600 ring-2 ring-blue-500/50' : 'border-transparent'
+					isFrameActive(frame.id) ? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10 scale-[1.03]' : 'border-gray-200'
 				"
 				:aria-pressed="isFrameActive(frame.id)"
 				:title="frame.name"
@@ -120,21 +206,41 @@
 		</div>
 
 		<div class="mt-8 flex items-center gap-5">
-			<span class="text-4xl font-bold text-[#313131]">{{ displayPrice }}₺</span>
+			<span class="text-4xl font-extrabold text-[#101828]">{{ displayPrice }}₺</span>
 			<span v-if="product.discount > 0" class="text-2xl line-through text-[#B3B3B3]">{{ product.price }}₺</span>
 		</div>
 
-		<div class="mt-5 flex items-center gap-2">
+		<!-- Interactive Add To Cart and Favorites Controls -->
+		<div class="mt-6 flex items-center gap-3">
 			<button
 				type="button"
-				class="bg-[#2B7FFF] rounded-3xl p-4 py-3 hover:bg-[#2B7FFF]/80 transition-all text-white font-semibold text-lg w-full max-w-[300px]"
+				@click="addToCart"
+				class="bg-[#2B7FFF] hover:bg-[#2B7FFF]/90 active:scale-[0.98] rounded-full p-4 py-3.5 transition-all text-white font-bold text-lg w-full max-w-[300px] shadow-lg shadow-[#2B7FFF]/20 flex items-center justify-center gap-2 cursor-pointer"
+				:disabled="isAddingToCart"
 			>
-				Sepete Ekle
+				<template v-if="isAddingToCart">
+					<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+					Ekleniyor...
+				</template>
+				<template v-else>
+					Sepete Ekle
+				</template>
 			</button>
-			<Icon
-				name="heart"
-				class="text-white bg-[#2B7FFF] rounded-3xl w-[50px] h-[50px] hover:bg-[#2B7FFF]/80 transition-all"
-			/>
+			<button
+				type="button"
+				@click="toggleFavorite"
+				class="flex items-center justify-center rounded-full w-[54px] h-[54px] border-2 transition-all active:scale-[0.9] cursor-pointer shadow-md"
+				:class="isFavorited ? 'bg-red-50 border-red-200 text-red-500 shadow-red-100 scale-105' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'"
+			>
+				<Icon
+					name="favorite"
+					class="w-6 h-6 transition-transform"
+					:class="isFavorited ? 'scale-110 fill-current' : ''"
+				/>
+			</button>
 		</div>
 	</div>
 </template>
@@ -156,6 +262,32 @@
 	}
 
 	.frame-tile--active {
-		border-color: #2563eb !important;
+		border-color: #2B7FFF !important;
+	}
+
+	/* Toast Transition */
+	.toast-enter-active,
+	.toast-leave-active {
+		transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.toast-enter-from {
+		opacity: 0;
+		transform: translateY(-20px) scale(0.95);
+	}
+
+	.toast-leave-to {
+		opacity: 0;
+		transform: translateY(-20px) scale(0.95);
+	}
+
+	/* Fade Transition */
+	.fade-enter-active,
+	.fade-leave-active {
+		transition: opacity 0.25s ease;
+	}
+	.fade-enter-from,
+	.fade-leave-to {
+		opacity: 0;
 	}
 </style>

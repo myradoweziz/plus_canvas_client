@@ -12,7 +12,7 @@
 	const props = defineProps<{
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
-		previewUrl: (url: string) => string
+		getThumbPreviewSrc: (index: number) => string
 	}>()
 
 	const emit = defineEmits<{
@@ -53,14 +53,14 @@
 		>
 			<swiper-slide
 				v-for="(img, index) in images"
-				:key="img.id"
+				:key="`${img.session_id}-${img.id}`"
 				class="thumb-slide cursor-pointer"
 				:class="{ 'is-thumb-active': isThumbActive(index) }"
 				@click="onThumbClick(index)"
 			>
 				<img
-					:src="previewUrl(img.url)"
-					:alt="`upload-${img.id}`"
+					:src="getThumbPreviewSrc(index)"
+					:alt="img.session_id === 'product-image' ? `mockup-${img.id}` : `upload-${img.id}`"
 					class="thumb-slide__img"
 					loading="lazy"
 					@error="($event.target as HTMLImageElement).style.opacity = '0.35'"

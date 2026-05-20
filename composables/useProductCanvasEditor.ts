@@ -1,15 +1,24 @@
 import { useFabricImageLoader } from '~/composables/useFabricImageLoader'
 import {
 	extractCollageLayoutFromProduct,
-	getPrimaryProductBackgroundUrl,
-	insetSlotRect,
+	extractProductImageUrls,
+	getProductImageUrl,
+	COLLAGE_FRAME_CONTENT_MARGIN_PX,
+	centerRectsIntersect,
+	clampCenterRectToFrameInner,
+	collageSlotsBoundsInPrintArea,
+	collageSlotsBoundsOnMockup,
+	collageSlotsToLoad,
+	insetCenterRectByPx,
+	slotRectInPrintArea,
+	resolveLayoutRefBounds,
 	slotRectOnMockup,
 	sortLayoutSlots,
 	type CollageLayoutSlot
 } from '~/utils/collageLayout'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
-	formatOrientationAspect,
+	formatAspect,
 	getDefaultSize,
 	isNoFrame,
 	normalizeFrameColor,
@@ -23,7 +32,7 @@ import type { Product, ProductDesignPayload, TempDesignImage } from '~/utils/typ
 
 const DEFAULT_VIEWPORT_W = 560
 const DEFAULT_VIEWPORT_H = 520
-const FRAME_BORDER_WIDTH = 14
+const FRAME_BORDER_WIDTH = 20
 
 export function useProductCanvasEditor(options: {
 	productId: Ref<string>
@@ -39,7 +48,14 @@ export function useProductCanvasEditor(options: {
 	const formatPresets = computed(() => options.canvasFormats.value)
 	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
 	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
-	const productBackgroundUrl = computed(() => getPrimaryProductBackgroundUrl(options.product?.value))
+	const activeProductImageIndex = ref(0)
+
+	const productBackgroundUrl = computed(() => {
+		const urls = extractProductImageUrls(options.product?.value)
+		if (!urls.length) return null
+		const idx = Math.min(activeProductImageIndex.value, urls.length - 1)
+		return urls[idx] ?? null
+	})
 	const hasCollageLayout = computed(() => (collageLayout.value?.layout_json.length ?? 0) > 0)
 	const selectedFormat = ref<CanvasFormat | null>(null)
 	const selectedSize = ref<PrintSizeOption | null>(null)
@@ -71,6 +87,8 @@ export function useProductCanvasEditor(options: {
 			sizeCurrent && sizeList.some((s) => s.id === sizeCurrent.id) ? sizeCurrent : getDefaultSize(format)
 	}
 	const isLoadingImage = ref(false)
+	const isCanvasInitializing = ref(false)
+	const isCanvasLoading = computed(() => isLoadingImage.value || isCanvasInitializing.value)
 	const viewportW = ref(DEFAULT_VIEWPORT_W)
 	const viewportH = ref(DEFAULT_VIEWPORT_H)
 
@@ -83,14 +101,52 @@ export function useProductCanvasEditor(options: {
 	let canvasReady = false
 	let photoObject: import('fabric').fabric.Image | null = null
 	let collagePhotoObjects: import('fabric').fabric.Object[] = []
+	let canvasInitInFlight = false
+	let canvasInitPending = false
+	let collageSyncInFlight: Promise<void> | null = null
 	let viewportBgImage: import('fabric').fabric.Image | null = null
 	let mockupNaturalW = 0
 	let mockupNaturalH = 0
 	let printAreaRect: import('fabric').fabric.Rect | null = null
 	let frameObject: import('fabric').fabric.Object | null = null
-	let frameBorderRect: import('fabric').fabric.Rect | null = null
 
 	const uploadImages = computed(() => designStore.getSessionImages(options.productId.value))
+
+	const innerThumbImages = computed((): TempDesignImage[] =>
+		uploadImages.value.filter((u) => String(u?.url ?? '').trim().length > 0)
+	)
+
+	/** Слева — product.images (mockup / background). */
+	const productBackgroundThumbs = computed((): TempDesignImage[] => {
+		const p = options.product?.value
+		if (!p) return []
+
+		const fromImages = Array.isArray(p.images)
+			? p.images
+					.map((img, idx) => ({
+						url: getProductImageUrl(img),
+						id: idx + 1,
+						session_id: 'product-image'
+					}))
+					.filter((item) => item.url.length > 0)
+			: []
+
+		if (fromImages.length) return fromImages
+
+		return extractProductImageUrls(p).map((url, idx) => ({
+			url,
+			id: idx + 1,
+			session_id: 'product-image'
+		}))
+	})
+
+	/** Миниатюры слева: images товара; если их нет — inner_images из сессии. */
+	const thumbImages = computed((): TempDesignImage[] => {
+		const bg = productBackgroundThumbs.value
+		return bg.length ? bg : innerThumbImages.value
+	})
+
+	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
 
 	const activeImage = computed(() => designStore.getActiveImage(options.productId.value))
 
@@ -99,7 +155,10 @@ export function useProductCanvasEditor(options: {
 		return designStore.activeImageIndex
 	})
 
-	const isThumbActive = (index: number) => activeImageIndex.value === index
+	const isThumbActive = (index: number) => {
+		if (thumbsAreProductImages.value) return activeProductImageIndex.value === index
+		return activeImageIndex.value === index
+	}
 
 	const previewUrl = (url: string) => {
 		const raw = String(url ?? '').trim()
@@ -108,13 +167,148 @@ export function useProductCanvasEditor(options: {
 		return mediaUrlForCanvas(raw)
 	}
 
+	/** Превью полосы форматов и слева: снимки с Fabric (как на холсте). */
+	const canvasPreviewSrc = ref('')
+	const formatPreviewById = ref<Record<number, string>>({})
+	const thumbPreviewByIndex = ref<Record<number, string>>({})
+
+	const isCanvasAlive = () => Boolean(fabricCanvas && fabricLib && canvasReady)
+
+	const getCanvasExportBounds = () => {
+		if (!fabricCanvas) return null
+		const objects = fabricCanvas.getObjects().filter((o) => o.visible !== false)
+		if (!objects.length) return null
+
+		let minX = Infinity
+		let minY = Infinity
+		let maxX = -Infinity
+		let maxY = -Infinity
+
+		for (const obj of objects) {
+			const br = obj.getBoundingRect(true, true)
+			minX = Math.min(minX, br.left)
+			minY = Math.min(minY, br.top)
+			maxX = Math.max(maxX, br.left + br.width)
+			maxY = Math.max(maxY, br.top + br.height)
+		}
+
+		const pad = 6
+		const left = Math.max(0, Math.floor(minX - pad))
+		const top = Math.max(0, Math.floor(minY - pad))
+		const width = Math.min(viewportW.value, Math.ceil(maxX - minX + pad * 2))
+		const height = Math.min(viewportH.value, Math.ceil(maxY - minY + pad * 2))
+
+		if (width < 2 || height < 2) return null
+		return { left, top, width, height }
+	}
+
+	const captureCanvasPreview = (): string | null => {
+		if (!fabricCanvas) return null
+		try {
+			const bounds = getCanvasExportBounds()
+			const opts: {
+				format: 'png'
+				quality: number
+				multiplier: number
+				left?: number
+				top?: number
+				width?: number
+				height?: number
+			} = {
+				format: 'png',
+				quality: 0.92,
+				multiplier: 0.55
+			}
+			if (bounds) {
+				opts.left = bounds.left
+				opts.top = bounds.top
+				opts.width = bounds.width
+				opts.height = bounds.height
+			}
+			return fabricCanvas.toDataURL(opts)
+		} catch {
+			return null
+		}
+	}
+
+	const captureSlotThumbnails = () => {
+		if (!fabricCanvas) return
+		const next: Record<number, string> = {}
+
+		if (hasCollageLayout.value && collagePhotoObjects.length) {
+			collagePhotoObjects.forEach((obj, i) => {
+				try {
+					const url = obj.toDataURL?.({
+						format: 'png',
+						quality: 0.92,
+						multiplier: 0.35
+					})
+					if (url) next[i] = url
+				} catch {
+					/* слот ещё не отрисован */
+				}
+			})
+		} else if (photoObject) {
+			try {
+				const url = photoObject.toDataURL?.({
+					format: 'png',
+					quality: 0.92,
+					multiplier: 0.35
+				})
+				if (url) next[0] = url
+			} catch {
+				/* noop */
+			}
+		}
+
+		thumbPreviewByIndex.value = next
+	}
+
+	const syncCanvasDerivedPreviews = () => {
+		if (!isCanvasAlive()) return
+		captureSlotThumbnails()
+		const snap = captureCanvasPreview()
+		if (!snap) return
+		canvasPreviewSrc.value = snap
+		const id = selectedFormat.value?.id
+		if (id == null) return
+		const activeKey = Number(id)
+		const next: Record<number, string> = { [activeKey]: snap }
+		for (const format of formatPresets.value) {
+			next[Number(format.id)] = snap
+		}
+		formatPreviewById.value = next
+	}
+
+	const getThumbPreviewSrc = (index: number) => {
+		if (thumbsAreProductImages.value) {
+			const url = productBackgroundThumbs.value[index]?.url
+			return url ? previewUrl(url) : ''
+		}
+		const fromCanvas = thumbPreviewByIndex.value[index]
+		if (fromCanvas) return fromCanvas
+		const url = innerThumbImages.value[index]?.url
+		return url ? previewUrl(url) : ''
+	}
+
+	const scheduleCanvasPreview = () => {
+		if (!import.meta.client || !isCanvasAlive()) return
+		nextTick(() => {
+			requestAnimationFrame(() => syncCanvasDerivedPreviews())
+		})
+	}
+
 	const getViewportSize = () => {
 		const el = options.wrapRef.value
 		if (!el) return { width: DEFAULT_VIEWPORT_W, height: DEFAULT_VIEWPORT_H }
-		const w = Math.max(1, Math.floor(el.clientWidth))
-		const h = Math.max(1, Math.floor(el.clientHeight))
+		const w = Math.max(1, Math.floor(el.offsetWidth || el.clientWidth))
+		const h = Math.max(1, Math.floor(el.offsetHeight || el.clientHeight))
 		return { width: w, height: h }
 	}
+
+	/** Коллаж: mockup заполняет холст (cover), слоты считаются так же. */
+	const mockupViewportFit = (): 'contain' | 'cover' =>
+		hasCollageLayout.value ? 'cover' : 'cover'
 
 	const applyWrapLayoutStyles = () => {
 		const wrap = options.wrapRef.value
@@ -122,11 +316,21 @@ export function useProductCanvasEditor(options: {
 		wrap.style.position = 'relative'
 		wrap.style.overflow = 'hidden'
 		wrap.style.borderRadius = '20px'
+		wrap.style.width = '100%'
+		wrap.style.height = '100%'
+		wrap.style.minHeight = '620px'
+		wrap.style.backgroundColor = '#F5F2ED'
+		wrap.style.display = 'block'
 
 		const container = wrap.querySelector('.canvas-container') as HTMLElement | null
 		if (container) {
+			container.style.position = 'absolute'
+			container.style.inset = '0'
+			container.style.width = '100%'
+			container.style.height = '100%'
 			container.style.borderRadius = '20px'
 			container.style.overflow = 'hidden'
+			container.style.margin = '0'
 		}
 	}
 
@@ -208,7 +412,46 @@ export function useProductCanvasEditor(options: {
 		const maxH = viewportH.value * 0.9
 		const format = selectedFormat.value
 		if (!format) return printBoxInViewport(1, maxW, maxH)
-		return printBoxInViewport(formatOrientationAspect(format), maxW, maxH)
+		return printBoxInViewport(formatAspect(format, selectedSize.value), maxW, maxH)
+	}
+
+	const layoutRefForCollage = (allSlots: CollageLayoutSlot[]) => {
+		const layout = collageLayout.value
+		return resolveLayoutRefBounds(allSlots, {
+			width: layout?.reference_width,
+			height: layout?.reference_height
+		})
+	}
+
+	/** Позиция слота: в области печати (формат), иначе на mockup. */
+	const rawSlotRectForCollage = (
+		slotDef: CollageLayoutSlot,
+		allSlots: CollageLayoutSlot[],
+		layoutRef?: { width?: number; height?: number },
+		mockupW?: number,
+		mockupH?: number
+	) => {
+		if (printAreaRect) {
+			const pw = printAreaRect.width ?? 1
+			const ph = printAreaRect.height ?? 1
+			return slotRectInPrintArea(slotDef, allSlots, pw, ph, cx(), cy(), layoutRef)
+		}
+
+		const layout = collageLayout.value
+		const mW = mockupW ?? (mockupNaturalW > 0 ? mockupNaturalW : layout?.reference_width || viewportW.value)
+		const mH = mockupH ?? (mockupNaturalH > 0 ? mockupNaturalH : layout?.reference_height || viewportH.value)
+		return slotRectOnMockup(
+			slotDef,
+			allSlots,
+			viewportW.value,
+			viewportH.value,
+			cx(),
+			cy(),
+			mW,
+			mH,
+			layoutRef,
+			mockupViewportFit()
+		)
 	}
 
 	/** Фото заполняет область печати на 100% (object-fit: cover), фиксированный масштаб. */
@@ -240,6 +483,7 @@ export function useProductCanvasEditor(options: {
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
 		emitDesign()
+		scheduleCanvasPreview()
 	}
 
 	const lockFabricObject = (obj: import('fabric').fabric.Object) => {
@@ -314,9 +558,12 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas.moveTo(photoObject, z)
 			z += 1
 		}
-		if (frameBorderRect) {
-			fabricCanvas.moveTo(frameBorderRect, z)
-			z += 1
+		for (const obj of fabricCanvas.getObjects()) {
+			const role = (obj as { data?: { role?: string } }).data?.role
+			if (role === 'frame-border') {
+				fabricCanvas.moveTo(obj, z)
+				z += 1
+			}
 		}
 		if (frameObject) {
 			fabricCanvas.moveTo(frameObject, z)
@@ -352,8 +599,7 @@ export function useProductCanvasEditor(options: {
 			lockPhotoInteractions(img)
 			mockupNaturalW = el.naturalWidth || img.width || 1
 			mockupNaturalH = el.naturalHeight || img.height || 1
-			const mockupFit = hasCollageLayout.value ? 'contain' : 'cover'
-			fitImageInViewport(img, mockupFit)
+			fitImageInViewport(img, mockupViewportFit())
 			viewportBgImage = img
 			fabricCanvas.add(viewportBgImage)
 			fabricCanvas.backgroundColor = 'transparent'
@@ -366,24 +612,250 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const removeFrame = () => {
-		if (frameObject && fabricCanvas) {
+		if (!fabricCanvas) return
+
+		if (frameObject) {
 			fabricCanvas.remove(frameObject)
 			frameObject = null
 		}
-		if (frameBorderRect && fabricCanvas) {
-			fabricCanvas.remove(frameBorderRect)
-			frameBorderRect = null
+		for (const obj of [...fabricCanvas.getObjects()]) {
+			const role = (obj as { data?: { role?: string } }).data?.role
+			if (role === 'frame-border' || role === 'frame-image') {
+				fabricCanvas.remove(obj)
+			}
+		}
+
+		fabricCanvas.requestRenderAll()
+	}
+
+	/** Точные границы коллажа на холсте (после layout + refit). */
+	const getCollageBoundsFromObjects = (): {
+		left: number
+		top: number
+		width: number
+		height: number
+	} | null => {
+		if (!collagePhotoObjects.length) return null
+
+		let minL = Infinity
+		let minT = Infinity
+		let maxR = -Infinity
+		let maxB = -Infinity
+
+		for (const obj of collagePhotoObjects) {
+			const br = obj.getBoundingRect(true, true)
+			minL = Math.min(minL, br.left)
+			minT = Math.min(minT, br.top)
+			maxR = Math.max(maxR, br.left + br.width)
+			maxB = Math.max(maxB, br.top + br.height)
+		}
+
+		if (!Number.isFinite(minL) || maxR <= minL || maxB <= minT) return null
+
+		return {
+			left: (minL + maxR) / 2,
+			top: (minT + maxB) / 2,
+			width: maxR - minL,
+			height: maxB - minT
+		}
+	}
+
+	const getCollageBoundsFromLayout = () => {
+		const layout = collageLayout.value
+		if (!layout?.layout_json.length) return null
+
+		const allSlots = layout.layout_json
+		const layoutRef = layoutRefForCollage(allSlots)
+
+		if (printAreaRect) {
+			const pw = printAreaRect.width ?? 1
+			const ph = printAreaRect.height ?? 1
+			return collageSlotsBoundsInPrintArea(allSlots, pw, ph, cx(), cy(), layoutRef)
+		}
+
+		const mockupW =
+			mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
+		const mockupH =
+			mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
+		if (!mockupW || !mockupH) return null
+
+		return collageSlotsBoundsOnMockup(
+			allSlots,
+			viewportW.value,
+			viewportH.value,
+			cx(),
+			cy(),
+			mockupW,
+			mockupH,
+			layoutRef,
+			mockupViewportFit()
+		)
+	}
+
+	/** Коллаж: рамка по области печати (формат) или layout на mockup. */
+	const getFrameOuterBounds = (): {
+		left: number
+		top: number
+		width: number
+		height: number
+	} | null => {
+		if (hasCollageLayout.value) {
+			if (printAreaRect) {
+				return {
+					left: cx(),
+					top: cy(),
+					width: printAreaRect.width ?? 0,
+					height: printAreaRect.height ?? 0
+				}
+			}
+			return getCollageBoundsFromLayout() ?? getCollageBoundsFromObjects()
+		}
+
+		if (!printAreaRect) return null
+		return {
+			left: cx(),
+			top: cy(),
+			width: printAreaRect.width ?? 0,
+			height: printAreaRect.height ?? 0
+		}
+	}
+
+	const drawSelectedFrame = async () => {
+		const canvas = fabricCanvas
+		const lib = fabricLib
+		if (!canvas || !lib) return
+
+		const frame = selectedFrame.value
+		if (!frame || isNoFrame(frame)) return
+
+		const outer = getFrameOuterBounds()
+		if (!outer || outer.width < 1 || outer.height < 1) return
+
+		const pw = outer.width
+		const ph = outer.height
+		const frameCx = outer.left
+		const frameCy = outer.top
+		const bw = FRAME_BORDER_WIDTH
+		const borderColor = normalizeFrameColor(frame.color_hex)
+
+		const addBar = (width: number, height: number, left: number, top: number) => {
+			const rect = new lib.Rect({
+				width,
+				height,
+				left,
+				top,
+				originX: 'center',
+				originY: 'center',
+				fill: borderColor,
+				stroke: borderColor,
+				strokeWidth: 1,
+				objectCaching: false
+			})
+			rect.set({ data: { role: 'frame-border' } })
+			lockFabricObject(rect)
+			canvas.add(rect)
+		}
+
+		const halfW = pw / 2
+		const halfH = ph / 2
+
+		// Полосы по краю коллажа (внутрь), не снаружи — иначе верх/низ обрезаются overflow.
+		addBar(pw, bw, frameCx, frameCy - halfH + bw / 2)
+		addBar(pw, bw, frameCx, frameCy + halfH - bw / 2)
+		addBar(bw, ph, frameCx - halfW + bw / 2, frameCy)
+		addBar(bw, ph, frameCx + halfW - bw / 2, frameCy)
+	}
+
+	/** Отступ контейнера только при выбранной рамке (полоса + 10px). Без рамки — 0. */
+	const getCollageContainerInsetPx = () => {
+		const frame = selectedFrame.value
+		if (!frame || isNoFrame(frame)) return 0
+		return FRAME_BORDER_WIDTH + COLLAGE_FRAME_CONTENT_MARGIN_PX
+	}
+
+	const getCollageContentRect = (): {
+		left: number
+		top: number
+		width: number
+		height: number
+	} | null => {
+		const inset = getCollageContainerInsetPx()
+		if (inset <= 0) return null
+
+		const outer = getFrameOuterBounds()
+		if (!outer) return null
+		return insetCenterRectByPx(outer, inset)
+	}
+
+	const resolveCollageSlotRect = (rawRect: {
+		left: number
+		top: number
+		width: number
+		height: number
+	}) => {
+		const content = getCollageContentRect()
+		if (!content) return rawRect
+
+		const outer = getFrameOuterBounds()
+		if (!outer || !centerRectsIntersect(rawRect, outer)) return rawRect
+
+		return clampCenterRectToFrameInner(rawRect, content)
+	}
+
+	const applyGroupSlotRect = (
+		group: import('fabric').fabric.Group,
+		rect: { left: number; top: number; width: number; height: number }
+	) => {
+		if (!fabricLib) return
+		const inner = group.getObjects()[0] as import('fabric').fabric.Image | undefined
+		if (inner) fitImageInSlot(inner, rect.width, rect.height, 0, 0)
+
+		const clipRect = new fabricLib.Rect({
+			width: rect.width,
+			height: rect.height,
+			originX: 'center',
+			originY: 'center',
+			left: 0,
+			top: 0,
+			absolutePositioned: false
+		})
+
+		group.set({
+			left: rect.left,
+			top: rect.top,
+			width: rect.width,
+			height: rect.height,
+			originX: 'center',
+			originY: 'center'
+		})
+		group.clipPath = clipRect
+		group.setCoords()
+		inner?.setCoords()
+	}
+
+	const refitCollageSlotRects = () => {
+		if (!fabricCanvas || !fabricLib || !collagePhotoObjects.length) return
+
+		const metrics = getCollageMetrics()
+		if (!metrics) return
+
+		const { allSlots, sortedSlots, mockupW, mockupH, layoutRef } = metrics
+		const pairs = collageSlotsToLoad(sortedSlots, allSlots, getCollageUploads().length)
+
+		for (let i = 0; i < collagePhotoObjects.length; i++) {
+			const group = collagePhotoObjects[i] as import('fabric').fabric.Group
+			const slotDef = pairs[i]?.slotDef ?? sortedSlots[i]
+			if (!group || !slotDef) continue
+
+			const rawRect = rawSlotRectForCollage(slotDef, allSlots, layoutRef, mockupW, mockupH)
+			applyGroupSlotRect(group, resolveCollageSlotRect(rawRect))
 		}
 	}
 
 	const updateFrame = async () => {
-		if (!fabricCanvas || !fabricLib || !printAreaRect) return
+		if (!fabricCanvas || !fabricLib) return
+		if (!hasCollageLayout.value && !printAreaRect) return
 		removeFrame()
-
-		if (hasCollageLayout.value) {
-			fabricCanvas.requestRenderAll()
-			return
-		}
 
 		const frame = selectedFrame.value
 		if (!frame || isNoFrame(frame)) {
@@ -391,49 +863,31 @@ export function useProductCanvasEditor(options: {
 			return
 		}
 
-		const pw = printAreaRect.width ?? 0
-		const ph = printAreaRect.height ?? 0
-		const bw = FRAME_BORDER_WIDTH
-		const borderColor = normalizeFrameColor(frame.color_hex)
-
-		frameBorderRect = new fabricLib.Rect({
-			width: pw + bw * 2,
-			height: ph + bw * 2,
-			left: cx(),
-			top: cy(),
-			originX: 'center',
-			originY: 'center',
-			fill: 'transparent',
-			stroke: borderColor,
-			strokeWidth: bw,
-			selectable: false,
-			evented: false
-		})
-		fabricCanvas.add(frameBorderRect)
-
-		const imageUrl = frame.image_url?.trim()
-		if (imageUrl) {
-			try {
-				const el = await loadHtmlImage(mediaUrlForCanvas(imageUrl))
-				const img = new fabricLib.Image(el, {
-					left: cx(),
-					top: cy(),
-					originX: 'center',
-					originY: 'center',
-					selectable: false,
-					evented: false
-				})
-				const scale = Math.max((pw + bw * 2) / (img.width || 1), (ph + bw * 2) / (img.height || 1))
-				img.set({ scaleX: scale, scaleY: scale })
-				frameObject = img
-				fabricCanvas.add(frameObject)
-			} catch {
-				/* только цветная обводка */
-			}
-		}
-
+		await drawSelectedFrame()
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
+	}
+
+	const getCollageMetrics = () => {
+		const layout = collageLayout.value
+		if (!layout) return null
+		const allSlots = layout.layout_json
+		const mockupW =
+			mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
+		const mockupH =
+			mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
+
+		return {
+			layout,
+			allSlots,
+			sortedSlots: sortLayoutSlots(allSlots),
+			mockupW,
+			mockupH,
+			layoutRef: resolveLayoutRefBounds(allSlots, {
+				width: layout.reference_width,
+				height: layout.reference_height
+			})
+		}
 	}
 
 	const addUploadToCollageSlot = async (
@@ -447,18 +901,8 @@ export function useProductCanvasEditor(options: {
 		if (!fabricCanvas || !fabricLib) return
 
 		const el = await loadHtmlImage(upload.url)
-		const rawRect = slotRectOnMockup(
-			slotDef,
-			allSlots,
-			viewportW.value,
-			viewportH.value,
-			cx(),
-			cy(),
-			mockupW,
-			mockupH,
-			layoutRef
-		)
-		const rect = insetSlotRect(rawRect)
+		const rawRect = rawSlotRectForCollage(slotDef, allSlots, layoutRef, mockupW, mockupH)
+		const rect = resolveCollageSlotRect(rawRect)
 
 		const img = new fabricLib.Image(el, {
 			originX: 'center',
@@ -496,46 +940,148 @@ export function useProductCanvasEditor(options: {
 		collagePhotoObjects.push(group)
 	}
 
-	const syncCollageSlots = async () => {
-		if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
+	const isMockupDimensionsReady = () => mockupNaturalW > 0 && mockupNaturalH > 0
 
-		removeSinglePhoto()
-		removeCollagePhotos()
-
-		const uploads = uploadImages.value.filter((u) => u?.url?.trim())
-		if (!uploads.length) return
-
-		const layout = collageLayout.value
-		const allSlots = layout.layout_json
-		const sortedSlots = sortLayoutSlots(allSlots)
-		const mockupW = layout.reference_width || mockupNaturalW || viewportW.value
-		const mockupH = layout.reference_height || mockupNaturalH || viewportH.value
-		const layoutRef = { width: layout.reference_width, height: layout.reference_height }
-
-		const slotCount = sortedSlots.length
-		const imageCount = uploads.length
-		const pairCount = Math.min(slotCount, imageCount)
-
-		for (let i = 0; i < pairCount; i++) {
-			const upload = uploads[i]
-			const slotDef = sortedSlots[i]
-			if (!upload?.url || !slotDef) continue
-
-			try {
-				await addUploadToCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
-			} catch {
-				/* слот без фото */
-			}
+	const waitForMockupDimensions = async (maxWaitMs = 2500) => {
+		if (!productBackgroundUrl.value) return
+		if (isMockupDimensionsReady()) return
+		const deadline = Date.now() + maxWaitMs
+		while (Date.now() < deadline) {
+			if (isMockupDimensionsReady()) return
+			await new Promise<void>((r) => requestAnimationFrame(() => r()))
 		}
-
-		await updateFrame()
-		reorderLayers()
-		fabricCanvas.requestRenderAll()
-		emitDesign()
 	}
 
-	const syncPhotos = async () => {
+	const ensureMockupReady = async () => {
+		if (isMockupDimensionsReady()) return
+		await applyViewportBackground()
+		await waitForMockupDimensions()
+	}
+
+	const expectedCollageUploadCount = () => {
+		const p = options.product?.value
+		const fromProduct = (p?.inner_images ?? [])
+			.map((img) => getProductImageUrl(img))
+			.filter((u) => u.length > 0).length
+		const fromSession = getCollageUploads().length
+		const layoutSlots = collageLayout.value?.layout_json.length ?? 0
+		return Math.max(fromProduct, fromSession, layoutSlots > 0 ? layoutSlots : 0)
+	}
+
+	const getCollageUploads = () => uploadImages.value.filter((u) => u?.url?.trim())
+
+	const waitForCollageUploadsReady = async (minCount: number, maxWaitMs = 3000) => {
+		const deadline = Date.now() + maxWaitMs
+		while (Date.now() < deadline) {
+			const uploads = getCollageUploads()
+			if (minCount <= 0 || uploads.length >= minCount) return uploads
+			await new Promise<void>((r) => setTimeout(r, 40))
+		}
+		return getCollageUploads()
+	}
+
+	const loadOneCollageSlot = async (
+		upload: TempDesignImage,
+		slotDef: CollageLayoutSlot,
+		allSlots: CollageLayoutSlot[],
+		mockupW: number,
+		mockupH: number,
+		layoutRef?: { width?: number; height?: number }
+	) => {
+		const maxAttempts = 3
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			try {
+				await addUploadToCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+				return true
+			} catch {
+				if (attempt < maxAttempts - 1) {
+					await new Promise<void>((r) => setTimeout(r, 150 * (attempt + 1)))
+				}
+			}
+		}
+		return false
+	}
+
+	const loadCollageSlotImages = async (
+		uploads: TempDesignImage[],
+		metrics: NonNullable<ReturnType<typeof getCollageMetrics>>
+	) => {
+		const { allSlots, sortedSlots, mockupW, mockupH, layoutRef } = metrics
+		const pairs = collageSlotsToLoad(sortedSlots, allSlots, uploads.length)
+
+		for (const { slotDef, uploadIndex } of pairs) {
+			if (!fabricCanvas) break
+
+			const upload = uploads[uploadIndex]
+			if (!upload?.url || !slotDef) continue
+
+			await loadOneCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+		}
+
+		return pairs.length
+	}
+
+	const syncCollageSlots = async (): Promise<void> => {
+		if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
+
+		isLoadingImage.value = true
+		try {
+			if (collageSyncInFlight) {
+				await collageSyncInFlight
+				return
+			}
+
+			const run = async () => {
+				if (!isMockupDimensionsReady() && productBackgroundUrl.value) {
+					await applyViewportBackground()
+				}
+				await ensureMockupReady()
+				if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
+
+				const expected = expectedCollageUploadCount()
+				const uploads = await waitForCollageUploadsReady(expected)
+				if (!uploads.length) return
+
+				const metrics = getCollageMetrics()
+				if (!metrics) return
+
+				removeSinglePhoto()
+				removeCollagePhotos()
+
+				const pairs = collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploads.length)
+				const expectedLoaded = pairs.length
+				let pass = 0
+				while (pass < 3 && fabricCanvas) {
+					if (pass > 0) {
+						removeCollagePhotos()
+						await new Promise<void>((r) => setTimeout(r, 200))
+					}
+					await loadCollageSlotImages(uploads, metrics)
+					if (collagePhotoObjects.length >= expectedLoaded) break
+					pass++
+				}
+
+				if (!fabricCanvas) return
+				if (collagePhotoObjects.length > 0) refitCollageSlotRects()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				emitDesign()
+				if (canvasReady) syncCanvasDerivedPreviews()
+			}
+
+			collageSyncInFlight = run()
+			await collageSyncInFlight
+		} finally {
+			collageSyncInFlight = null
+			isLoadingImage.value = false
+		}
+	}
+
+	const syncPhotos = async (opts?: { syncCollage?: boolean }) => {
 		if (!fabricCanvas || !fabricLib || !printAreaRect) return
+
+		const shouldSyncCollage = opts?.syncCollage !== false
 
 		isLoadingImage.value = true
 		try {
@@ -547,7 +1093,7 @@ export function useProductCanvasEditor(options: {
 			}
 
 			if (hasCollageLayout.value) {
-				await syncCollageSlots()
+				if (shouldSyncCollage) await syncCollageSlots()
 				return
 			}
 
@@ -565,12 +1111,14 @@ export function useProductCanvasEditor(options: {
 			} else {
 				removeSinglePhoto()
 				await updateFrame()
+				if (!fabricCanvas) return
 				reorderLayers()
 				fabricCanvas.requestRenderAll()
 				emitDesign()
 			}
 		} finally {
 			isLoadingImage.value = false
+			scheduleCanvasPreview()
 		}
 	}
 
@@ -610,7 +1158,21 @@ export function useProductCanvasEditor(options: {
 			printAreaRect.setCoords()
 		}
 
-		await syncPhotos()
+		await syncPhotos({ syncCollage: !hasCollageLayout.value })
+		if (!fabricCanvas) return
+
+		if (hasCollageLayout.value) {
+			if (collagePhotoObjects.length) {
+				refitCollageSlotRects()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				emitDesign()
+				scheduleCanvasPreview()
+			} else {
+				await syncCollageSlots()
+			}
+		}
 	}
 
 	const setPhotoFromUrl = async (url: string, meta?: TempDesignImage | null, opts?: { skipBackground?: boolean }) => {
@@ -645,9 +1207,29 @@ export function useProductCanvasEditor(options: {
 			reorderLayers()
 			fabricCanvas.requestRenderAll()
 			emitDesign()
+			scheduleCanvasPreview()
 		} finally {
 			if (manageLoading) isLoadingImage.value = false
 		}
+	}
+
+	const selectProductBackground = async (index: number) => {
+		const count = productBackgroundThumbs.value.length
+		if (index < 0 || index >= count) return
+		if (activeProductImageIndex.value === index) return
+		activeProductImageIndex.value = index
+
+		if (!fabricCanvas || !canvasReady) return
+
+		await applyViewportBackground()
+		if (hasCollageLayout.value) {
+			await syncCollageSlots()
+		} else {
+			await syncPhotos()
+		}
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
+		scheduleCanvasPreview()
 	}
 
 	const selectUploadImage = async (index: number) => {
@@ -657,6 +1239,15 @@ export function useProductCanvasEditor(options: {
 		await syncPhotos()
 	}
 
+	/** Клик по миниатюре слева. */
+	const selectThumb = async (index: number) => {
+		if (thumbsAreProductImages.value) {
+			await selectProductBackground(index)
+			return
+		}
+		await selectUploadImage(index)
+	}
+
 	const applyFormat = async (format: CanvasFormat) => {
 		selectedFormat.value = format
 		selectedSize.value = getDefaultSize(format)
@@ -664,7 +1255,6 @@ export function useProductCanvasEditor(options: {
 			await tryInitOrSyncFormats()
 			return
 		}
-		// printAreaRect + photo/collage пересчитываются по formatOrientationAspect(format)
 		await syncPrintArea()
 	}
 
@@ -688,8 +1278,18 @@ export function useProductCanvasEditor(options: {
 
 	const applyFrame = async (frame: FrameOption) => {
 		selectedFrame.value = frame
+
+		if (hasCollageLayout.value && !collagePhotoObjects.length) {
+			await syncCollageSlots()
+		} else if (hasCollageLayout.value && collagePhotoObjects.length) {
+			refitCollageSlotRects()
+		}
 		await updateFrame()
+
+		reorderLayers()
+		fabricCanvas?.requestRenderAll()
 		emitDesign()
+		scheduleCanvasPreview()
 	}
 
 	const applyFrameByIndex = async (index: number) => {
@@ -700,20 +1300,37 @@ export function useProductCanvasEditor(options: {
 	const resizeCanvasToContainer = async () => {
 		if (!fabricCanvas || !options.wrapRef.value) return
 		const { width, height } = getViewportSize()
-		if (width === viewportW.value && height === viewportH.value) return
+		if (width < 2 || height < 2) return
+
+		const sizeChanged = width !== viewportW.value || height !== viewportH.value
+		if (!sizeChanged && canvasReady) return
+
 		viewportW.value = width
 		viewportH.value = height
 		fabricCanvas.setDimensions({ width, height })
 		fabricCanvas.calcOffset()
-		if (viewportBgImage) {
-			fitImageInViewport(viewportBgImage, hasCollageLayout.value ? 'contain' : 'cover')
-		}
 		applyWrapLayoutStyles()
-		await syncPrintArea()
+
+		if (viewportBgImage) {
+			fitImageInViewport(viewportBgImage, mockupViewportFit())
+		}
+
+		if (hasCollageLayout.value && canvasReady) {
+			if (isMockupDimensionsReady() || !productBackgroundUrl.value) {
+				await syncCollageSlots()
+			}
+		} else if (!hasCollageLayout.value) {
+			await syncPrintArea()
+		}
+
 		fabricCanvas.requestRenderAll()
+		if (canvasReady) scheduleCanvasPreview()
 	}
 
 	const disposeCanvas = () => {
+		formatPreviewById.value = {}
+		thumbPreviewByIndex.value = {}
+		canvasPreviewSrc.value = ''
 		canvasInitId++
 		canvasReady = false
 		resizeObserver?.disconnect()
@@ -728,17 +1345,23 @@ export function useProductCanvasEditor(options: {
 		}
 		photoObject = null
 		collagePhotoObjects = []
+		collageSyncInFlight = null
 		viewportBgImage = null
 		mockupNaturalW = 0
 		mockupNaturalH = 0
 		printAreaRect = null
 		frameObject = null
-		frameBorderRect = null
 		if (options.wrapRef.value) options.wrapRef.value.innerHTML = ''
 	}
 
 	const initCanvas = async () => {
 		if (!import.meta.client || !options.wrapRef.value) return
+		const showCollageLoader = hasCollageLayout.value
+		if (showCollageLoader) {
+			isCanvasInitializing.value = true
+			isLoadingImage.value = true
+		}
+		try {
 		disposeCanvas()
 		const initId = canvasInitId
 
@@ -769,7 +1392,7 @@ export function useProductCanvasEditor(options: {
 		fabricCanvas = new fabricLib.Canvas(el, {
 			width,
 			height,
-			backgroundColor: '#b8b8b8',
+			backgroundColor: '#F5F2ED',
 			preserveObjectStacking: true,
 			selection: false,
 			skipTargetFind: true,
@@ -787,6 +1410,10 @@ export function useProductCanvasEditor(options: {
 		await applyViewportBackground(initId)
 		if (!isActiveCanvasInit(initId)) return
 
+		if (productBackgroundUrl.value && !isMockupDimensionsReady()) {
+			await waitForMockupDimensions()
+		}
+
 		await resizeCanvasToContainer()
 		if (!isActiveCanvasInit(initId)) return
 
@@ -795,9 +1422,33 @@ export function useProductCanvasEditor(options: {
 		await syncPrintArea()
 		if (!isActiveCanvasInit(initId)) return
 
-		await syncPhotos()
+		if (hasCollageLayout.value) {
+			const expected = expectedCollageUploadCount()
+			let attempts = 0
+			while (attempts < 5 && isActiveCanvasInit(initId)) {
+				const uploads = await waitForCollageUploadsReady(expected)
+				if (!uploads.length && expected > 0) {
+					attempts++
+					continue
+				}
+				if (uploads.length) await syncCollageSlots()
+				if (!isActiveCanvasInit(initId)) return
+				if (!expected || collagePhotoObjects.length >= expected) break
+				await new Promise<void>((r) => setTimeout(r, 120))
+				attempts++
+			}
+		}
+		if (!isActiveCanvasInit(initId)) return
 
 		canvasReady = true
+		syncCanvasDerivedPreviews()
+		scheduleCanvasPreview()
+	} finally {
+			if (showCollageLoader) {
+				isCanvasInitializing.value = false
+				if (!canvasReady) isLoadingImage.value = false
+			}
+		}
 	}
 
 	const tryInitOrSyncFormats = async () => {
@@ -808,10 +1459,21 @@ export function useProductCanvasEditor(options: {
 		syncSelectionFromFormats()
 
 		if (!fabricCanvas || !canvasReady) {
+			if (canvasInitInFlight) {
+				canvasInitPending = true
+				return
+			}
+			canvasInitInFlight = true
 			try {
 				await initCanvas()
 			} catch {
 				/* aborted */
+			} finally {
+				canvasInitInFlight = false
+				if (canvasInitPending) {
+					canvasInitPending = false
+					void tryInitOrSyncFormats()
+				}
 			}
 			return
 		}
@@ -821,11 +1483,35 @@ export function useProductCanvasEditor(options: {
 
 	watch(formatPresets, () => void tryInitOrSyncFormats())
 	watch(frameOptions, syncFrameSelection)
-	watch([hasCollageLayout, uploadImages, collageLayout, productBackgroundUrl], () => {
+
+	watch(
+		() => uploadImages.value.length,
+		(len) => {
+			if (len === 0) return
+			if (!fabricCanvas || !canvasReady) {
+				void tryInitOrSyncFormats()
+				return
+			}
+			if (hasCollageLayout.value) {
+				const expected = expectedCollageUploadCount()
+				if (expected > 0 && collagePhotoObjects.length < expected) {
+					void syncCollageSlots()
+				}
+			}
+		}
+	)
+
+	watch([collageLayout, productBackgroundUrl], () => {
 		if (!fabricCanvas || !canvasReady) return
 		void (async () => {
 			await applyViewportBackground()
-			await syncPhotos()
+			if (!fabricCanvas || !canvasReady) return
+
+			if (hasCollageLayout.value) {
+				await syncCollageSlots()
+			} else {
+				await syncPhotos()
+			}
 		})()
 	})
 
@@ -837,8 +1523,25 @@ export function useProductCanvasEditor(options: {
 	)
 
 	watch(
+		() => options.product?.value?.id,
+		() => {
+			activeProductImageIndex.value = 0
+		}
+	)
+
+	watch(
+		() => productBackgroundThumbs.value.length,
+		(len) => {
+			if (len > 0 && activeProductImageIndex.value >= len) {
+				activeProductImageIndex.value = 0
+			}
+		}
+	)
+
+	watch(
 		() => options.productId.value,
 		async () => {
+			activeProductImageIndex.value = 0
 			if (fabricCanvas && uploadImages.value.length) {
 				await selectUploadImage(0)
 			}
@@ -853,11 +1556,20 @@ export function useProductCanvasEditor(options: {
 		viewportW,
 		viewportH,
 		uploadImages,
+		thumbImages,
+		productBackgroundThumbs,
+		thumbsAreProductImages,
+		innerThumbImages,
+		thumbPreviewByIndex,
+		getThumbPreviewSrc,
+		canvasPreviewSrc,
+		formatPreviewById,
 		activeImage,
 		activeImageIndex,
 		isThumbActive,
 		previewUrl,
 		isLoadingImage,
+		isCanvasLoading,
 		selectedFormat,
 		selectedSize,
 		selectedFrame,
@@ -868,7 +1580,9 @@ export function useProductCanvasEditor(options: {
 		sizeOptions: computed(() => selectedFormat.value?.sizes ?? []),
 		frameOptions,
 		initCanvas,
+		selectThumb,
 		selectUploadImage,
+		selectProductBackground,
 		applyFormat,
 		applyFormatById,
 		applySizeById,

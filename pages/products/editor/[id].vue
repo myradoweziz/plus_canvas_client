@@ -3,7 +3,6 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { getProductImageUrl } from '~/utils/collageLayout'
 	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
@@ -13,7 +12,7 @@
 	const designStore = useProductDesignStore()
 
 	const productId = computed(() => {
-		const id = route.params.productId
+		const id = route.params.id
 		if (Array.isArray(id)) return id[0] ?? ''
 		return String(id ?? '')
 	})
@@ -41,29 +40,12 @@
 
 	const product = computed(() => productData.value?.data)
 
-	// Manage session and redirection based on product category
+	// Redirect canvas paintings back to the regular product detail page
 	watch(
 		product,
 		(newProduct) => {
-			if (!newProduct) return
-			if (newProduct.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-				const tempImages = (newProduct.inner_images ?? [])
-					.map((img, idx) => ({
-						url: getProductImageUrl(img),
-						id: idx + 1,
-						session_id: 'canvas-painting'
-					}))
-					.filter((item) => item.url.length > 0)
-				if (tempImages.length > 0) {
-					designStore.setSession(productId.value, tempImages)
-				}
-			} else {
-				// Standard product: if session exists, go to editor, else catalog
-				if (designStore.hasSessionFor(String(newProduct.id))) {
-					router.replace(`/products/editor/${newProduct.id}`)
-				} else {
-					router.replace('/products')
-				}
+			if (newProduct?.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
+				router.replace(`/products/${newProduct.id}`)
 			}
 		},
 		{ immediate: true }
@@ -103,6 +85,12 @@
 	const onThumbSelect = (index: number) => {
 		void selectThumb(index)
 	}
+
+	onMounted(async () => {
+		if (!designStore.hasSessionFor(productId.value)) {
+			await router.replace('/products')
+		}
+	})
 
 	onBeforeRouteLeave((to) => {
 		const nextId = to.params.id || to.params.productId

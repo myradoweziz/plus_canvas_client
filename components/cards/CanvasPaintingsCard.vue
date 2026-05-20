@@ -2,19 +2,19 @@
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import type { Product, TempDesignImage } from '~/utils/types'
+	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
 	const props = withDefaults(
 		defineProps<{
 			product: Product
 			showButton?: boolean
-			/** true: только emit `openUploader`, без встроенного модала (страница сама показывает uploader) */
 			delegateUploader?: boolean
 		}>(),
 		{ delegateUploader: false }
 	)
 
 	const emit = defineEmits<{
-		(e: 'openUploader', productId: number): void
+		(e: 'openUploader', product: Product): void
 	}>()
 
 	const router = useRouter()
@@ -23,7 +23,11 @@
 
 	const openUploader = () => {
 		if (props.delegateUploader) {
-			emit('openUploader', props.product.id)
+			emit('openUploader', props.product)
+			return
+		}
+		if (props.product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
+			router.push(`/products/${props.product.id}`)
 			return
 		}
 		isUploaderOpen.value = true
@@ -39,7 +43,7 @@
 		if (!payload.images.length) return
 		designStore.setSession(props.product.id, payload.images)
 		closeUploader()
-		await router.push(`/products/${props.product.id}`)
+		await router.push(`/products/editor/${props.product.id}`)
 	}
 
 	const discountedPrice = computed(() => {

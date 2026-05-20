@@ -5,7 +5,6 @@
 
 	import {
 		CANVAS_PAINTING_CATEGORY_SLUG,
-		PERSONALIZED_CANVAS_PAINTINGS_CATEGORY,
 		PERSONALIZED_CANVAS_SLUG,
 		type FeaturedCategory,
 		type MainCategory,
@@ -70,7 +69,7 @@
 	})
 
 	const mainCategoryIcon = (main: MainCategory) =>
-		main.category_type === PERSONALIZED_CANVAS_PAINTINGS_CATEGORY ? 'palette' : 'landscape'
+		main.slug === PERSONALIZED_CANVAS_SLUG ? 'palette' : 'landscape'
 
 	const setActiveMain = (id: number | null) => {
 		activeMainId.value = id

@@ -2,10 +2,9 @@ import { defineStore } from 'pinia'
 
 import type { Banner, DisCount, Faq, FeaturedCategory, MainCategory, Product, SubCategory } from '~/utils/types'
 import {
-	CANVAS_PAINTING_CATEGORY,
+	CANVAS_PAINTING_CATEGORY_SLUG,
 	FEATURED_CATEGORY,
 	MOST_SEARCHED_CATEGORY,
-	PERSONALIZED_CANVAS_PAINTINGS_CATEGORY,
 	PERSONALIZED_CANVAS_SLUG
 } from '~/utils/types'
 
@@ -44,15 +43,19 @@ export const useHomeStore = defineStore('home', () => {
 	const mainCategoryId = computed(() => mainCategories.value?.find((c) => c.slug === PERSONALIZED_CANVAS_SLUG)?.id)
 
 	const canvasPaintingCategories = computed(() =>
-		featuredCategoriesAll.value.filter((c) => c.main_category?.name === CANVAS_PAINTING_CATEGORY)
+		featuredCategoriesAll.value.filter((c) => c.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG)
 	)
 
 	const personalizedCanvasPaintingsCategories = computed(() =>
-		featuredCategoriesAll.value.filter((c) => c.main_category?.name === PERSONALIZED_CANVAS_PAINTINGS_CATEGORY)
+		featuredCategoriesAll.value.filter((c) => c.main_category?.slug === PERSONALIZED_CANVAS_SLUG)
 	)
 
 	const canvasPaintingProducts = computed(() =>
-		products.value.filter((p) => p.main_category?.name === CANVAS_PAINTING_CATEGORY)
+		products.value.filter((p) => p.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG)
+	)
+
+	const personalizedCanvasProducts = computed(() =>
+		products.value.filter((p) => p.main_category?.slug === PERSONALIZED_CANVAS_SLUG)
 	)
 
 	async function fetchBanners() {
@@ -135,6 +138,7 @@ export const useHomeStore = defineStore('home', () => {
 		products,
 		canvasPaintingProducts,
 		subCategories,
+		personalizedCanvasProducts,
 		fetchBanners,
 		fetchFeaturedCategories,
 		fetchMainCategories,

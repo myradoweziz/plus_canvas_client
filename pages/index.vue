@@ -13,7 +13,7 @@
 		<home-canvas-steps />
 		<home-featured-categories :categories="homeStore.featuredCategories" />
 
-		<home-personalized-canvas-paintings :products="homeStore.canvasPaintingProducts" />
+		<home-personalized-canvas-paintings :products="homeStore.personalizedCanvasProducts" />
 		<home-popular-categories :categories="homeStore.mostSearchedCategories" />
 		<home-best-sellers :products="homeStore.canvasPaintingProducts" />
 		<home-discounts :discounts="homeStore.discounts" />

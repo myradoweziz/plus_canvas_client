@@ -5,10 +5,12 @@
 	defineProps<{
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
-		previewUrl: (url: string) => string
+		getThumbPreviewSrc: (index: number) => string
 		formatPresets: CanvasFormat[]
-		formatPreviewSrc: string
+		formatPreviewById: Record<number, string>
+		canvasPreviewSrc?: string
 		activeFormatId: number | null
+		isCanvasLoading?: boolean
 		product: Product
 	}>()
 
@@ -23,16 +25,41 @@
 		<ProductDesignThumbs
 			:images="images"
 			:is-thumb-active="isThumbActive"
-			:preview-url="previewUrl"
+			:get-thumb-preview-src="getThumbPreviewSrc"
 			@select="$emit('thumb-select', $event)"
 		/>
 
 		<section class="product-editor-main w-full min-w-0 max-w-4xl">
-			<slot name="canvas" />
+			<div class="product-editor-canvas relative w-full min-h-[620px]">
+				<slot name="canvas" />
+				<div
+					v-if="isCanvasLoading"
+					class="canvas-loading-overlay absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-[20px] bg-[#F5F2ED]/85 backdrop-blur-[2px]"
+					aria-live="polite"
+					aria-busy="true"
+				>
+					<svg
+						class="h-10 w-10 animate-spin text-[#2B7FFF]"
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+						<path
+							class="opacity-75"
+							fill="currentColor"
+							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+						/>
+					</svg>
+					<span class="text-sm font-medium text-[#364153]">Görseller yükleniyor…</span>
+				</div>
+			</div>
 
 			<ProductDesignFormatStrip
 				:formats="formatPresets"
-				:preview-src="formatPreviewSrc"
+				:format-preview-by-id="formatPreviewById"
+				:canvas-preview-src="canvasPreviewSrc"
 				:active-format-id="activeFormatId"
 				@select-format="$emit('select-format', $event)"
 			/>

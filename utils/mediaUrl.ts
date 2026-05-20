@@ -1,7 +1,26 @@
+/** Уже проксированный путь — не добавлять `/media-proxy` повторно. */
+function canvasMediaUrlAlreadyProxied(raw: string): boolean {
+	if (raw.startsWith('/media-proxy')) return true
+	try {
+		return new URL(raw).pathname.startsWith('/media-proxy')
+	} catch {
+		return false
+	}
+}
+
 /** В dev проксируем API/storage через same-origin — Fabric и canvas без CORS. */
 export function mediaUrlForCanvas(rawUrl: string): string {
 	const raw = String(rawUrl ?? '').trim()
 	if (!raw || !import.meta.client || !import.meta.dev) return raw
+	if (canvasMediaUrlAlreadyProxied(raw)) {
+		if (raw.startsWith('/')) return raw
+		try {
+			const u = new URL(raw)
+			return `${u.pathname}${u.search}`
+		} catch {
+			return raw
+		}
+	}
 
 	const base = String(useRuntimeConfig().public.baseUrl ?? '')
 		.trim()

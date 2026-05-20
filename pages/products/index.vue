@@ -16,6 +16,7 @@
 		SubCategory,
 		TempDesignImage
 	} from '~/utils/types'
+	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
 	const route = useRoute()
 	const router = useRouter()
@@ -148,7 +149,6 @@
 		baseURL: rc.public.baseUrl
 	})
 
-	/** Eski `?color=İsim` linkleri → `color_id` (API yalnızca id kullanıyor). */
 	watch(
 		[() => route.query.color, () => route.query.color_id, () => colorsLabelData.value?.data],
 		() => {
@@ -239,9 +239,7 @@
 		}
 	)
 
-	/** Ana kategorinin tüm görselleri → swiper slaytları (Banner[]). */
 	const mainCategoryHeroBanners = computed((): Banner[] => {
-		/** Alt/featured seçilince kahraman swiper gizlenir; başlık `catalogHeading` ile gelir. */
 		if (filters.category_id != null || filters.sub_category_id != null) return []
 		const id = filters.main_category_id
 		if (id == null) return []
@@ -265,7 +263,6 @@
 			.filter((b): b is Banner => b != null)
 	})
 
-	/** Swiper kahramanı: `main_category_id` ile eşleşen tam kayıt (ortada başlık için). */
 	const heroMainCategoryForBanner = computed((): MainCategory | undefined => {
 		if (filters.category_id != null || filters.sub_category_id != null) return undefined
 		const id = filters.main_category_id
@@ -444,7 +441,6 @@
 	}
 
 	const applyAndCloseFilters = () => {
-		// Фильтры применяются реактивно; на мобиле просто закрываем панель.
 		closeFilters()
 	}
 
@@ -616,11 +612,15 @@
 	}
 
 	const isUploaderOpen = ref(false)
-	/** Товар, с карточки которого открыли модал (delegate-uploader). */
 	const uploaderProductId = ref<number | null>(null)
 
-	const openUploader = (productId: number) => {
-		uploaderProductId.value = productId
+	const openUploader = (product: Product) => {
+		if (product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
+			navigateTo(`/products/${product.id}`)
+			return
+		}
+
+		uploaderProductId.value = product.id
 		isUploaderOpen.value = true
 	}
 
@@ -647,7 +647,7 @@
 		if (id == null || !payload.images.length) return
 		designStore.setSession(id, payload.images)
 		closeUploader()
-		await router.push(`/products/${id}`)
+		await router.push(`/products/editor/${id}`)
 	}
 </script>
 
