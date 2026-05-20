@@ -6,11 +6,11 @@
 	useHead({ title: 'Kuponlarım | PlusCanvas' })
 
 	onMounted(async () => {
-		const token = useCookie('Authorization')
-		const router = useRouter()
-		if (!token.value) {
-			router.push('/login')
-		}
+		// const token = useCookie('Authorization')
+		// const router = useRouter()
+		// if (!token.value) {
+		// 	router.push('/login')
+		// }
 	})
 </script>
 

@@ -200,50 +200,52 @@
 					<h2 class="text-[#101828] text-2xl md:text-3xl lg:text-4xl font-bold">Bu tabloyu alanlar bunları da aldı</h2>
 				</div>
 
-				<Swiper
-					v-if="relatedProducts.length"
-					:modules="swiperModules"
-					:autoplay="{ delay: 3500, disableOnInteraction: false }"
-					:speed="2000"
-					:loop="false"
-					@swiper="onRelatedSwiper"
-					:navigation="{ prevEl: '.related-prev', nextEl: '.related-next' }"
-					:slides-per-view="1.2"
-					:space-between="16"
-					:breakpoints="{
-						640: { slidesPerView: 2.2, spaceBetween: 20 },
-						1024: { slidesPerView: 4, spaceBetween: 24 }
-					}"
-				>
-					<SwiperSlide v-for="relatedItem in relatedProducts" :key="relatedItem.id" class="h-auto">
-						<cards-canvas-paintings-card :product="relatedItem" show-button />
-					</SwiperSlide>
-				</Swiper>
-
-				<p v-else class="text-[#364153]">Benzer ürün bulunamadı.</p>
-
-				<div>
+				<div v-if="relatedProducts.length" class="related-swiper-wrap relative">
 					<button
 						type="button"
 						:class="[
 							'related-prev',
 							{ 'swiper-button-disabled': relatedSwiperBeginning },
-							'w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#101828] hover:bg-[#101828]/80	 text-white flex items-center justify-center transition-all shadow-md pointer-events-auto'
+							'related-swiper-nav related-swiper-nav--prev'
 						]"
+						aria-label="Önceki"
 					>
-						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 rotate-90 flex justify-center" />
+						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 rotate-90" />
 					</button>
+
+					<Swiper
+						:modules="swiperModules"
+						:autoplay="{ delay: 3500, disableOnInteraction: false }"
+						:speed="2000"
+						:loop="false"
+						@swiper="onRelatedSwiper"
+						:navigation="{ prevEl: '.related-prev', nextEl: '.related-next' }"
+						:slides-per-view="1.2"
+						:space-between="16"
+						:breakpoints="{
+							640: { slidesPerView: 2.2, spaceBetween: 20 },
+							1024: { slidesPerView: 4, spaceBetween: 24 }
+						}"
+					>
+						<SwiperSlide v-for="relatedItem in relatedProducts" :key="relatedItem.id" class="h-auto">
+							<cards-canvas-paintings-card :product="relatedItem" show-button />
+						</SwiperSlide>
+					</Swiper>
+
 					<button
 						type="button"
 						:class="[
 							'related-next',
 							{ 'swiper-button-disabled': relatedSwiperEnd },
-							'w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#101828] hover:bg-[#101828]/80 text-white flex items-center justify-center transition-all shadow-md pointer-events-auto'
+							'related-swiper-nav related-swiper-nav--next'
 						]"
+						aria-label="Sonraki"
 					>
-						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 -rotate-90 flex justify-center" />
+						<Icon name="arrowBottom" class="w-4 h-4 md:w-5 md:h-5 -rotate-90" />
 					</button>
 				</div>
+
+				<p v-else class="text-[#364153]">Benzer ürün bulunamadı.</p>
 			</div>
 		</section>
 	</div>
@@ -283,6 +285,60 @@
 			margin: 0 auto;
 			border-radius: 20px;
 			overflow: hidden;
+		}
+	}
+
+	.related-swiper-wrap {
+		padding-left: 3rem;
+		padding-right: 3rem;
+
+		@media (min-width: 768px) {
+			padding-left: 3.5rem;
+			padding-right: 3.5rem;
+		}
+	}
+
+	.related-swiper-nav {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		z-index: 10;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 9999px;
+		background-color: #101828;
+		color: #fff;
+		box-shadow: 0 4px 14px rgba(16, 24, 40, 0.18);
+		transition:
+			background-color 0.2s ease,
+			opacity 0.2s ease;
+		pointer-events: auto;
+
+		@media (min-width: 768px) {
+			width: 3rem;
+			height: 3rem;
+		}
+
+		&:hover:not(.swiper-button-disabled) {
+			background-color: rgb(16 24 40 / 0.8);
+		}
+
+		&.swiper-button-disabled {
+			opacity: 0.45;
+			background-color: #a5a5a5;
+			cursor: not-allowed;
+			pointer-events: none;
+		}
+
+		&--prev {
+			left: 0;
+		}
+
+		&--next {
+			right: 0;
 		}
 	}
 </style>
