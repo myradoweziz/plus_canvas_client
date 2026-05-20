@@ -17,4 +17,7 @@ export type ProductDesignPayload = {
 	printSizeId?: number
 	printPrice?: number
 	frameId?: string
+	framePrice?: number
+	/** Boyut + çerçeve */
+	totalPrice?: number
 }

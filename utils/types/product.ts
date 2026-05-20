@@ -1,6 +1,7 @@
 import type { MainCategory } from './category'
 import type { Image } from './home'
-import type { CanvasFormat } from '~/utils/productDesignConfig'
+import type { CanvasFormat, FrameOption } from '~/utils/productDesignConfig'
+import type { CollageLayout } from '~/utils/collageLayout'
 
 export interface Product {
 	id: number
@@ -25,4 +26,6 @@ export interface Product {
 	color?: string
 	color_id?: number | null
 	canvas_formats?: CanvasFormat[]
+	frames?: FrameOption[]
+	collage_layout?: CollageLayout | null
 }

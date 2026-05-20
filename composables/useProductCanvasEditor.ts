@@ -1,34 +1,62 @@
 import { useFabricImageLoader } from '~/composables/useFabricImageLoader'
-import { mediaUrlForCanvas } from '~/utils/mediaUrl'
-import { createPlusCanvasWatermarkTile } from '~/utils/plusCanvasWatermarkPattern'
 import {
-	FRAME_OPTIONS,
+	extractCollageLayoutFromProduct,
+	getPrimaryProductBackgroundUrl,
+	insetSlotRect,
+	slotRectOnMockup,
+	sortLayoutSlots,
+	type CollageLayoutSlot,
+	detectSlotCoordinateMode,
+	collageLayoutReferenceBounds,
+	slotRectInContainer
+} from '~/utils/collageLayout'
+import { mediaUrlForCanvas } from '~/utils/mediaUrl'
+import {
 	formatOrientationAspect,
 	getDefaultSize,
-	sizeAspect,
+	isNoFrame,
+	normalizeFrameColor,
 	printBoxInViewport,
+	withNoFrameOption,
 	type CanvasFormat,
 	type FrameOption,
 	type PrintSizeOption
 } from '~/utils/productDesignConfig'
-import type { ProductDesignPayload, TempDesignImage } from '~/utils/types'
+import type { Product, ProductDesignPayload, TempDesignImage } from '~/utils/types'
 
 const DEFAULT_VIEWPORT_W = 560
 const DEFAULT_VIEWPORT_H = 520
+const FRAME_BORDER_WIDTH = 14
 
 export function useProductCanvasEditor(options: {
 	productId: Ref<string>
 	wrapRef: Ref<HTMLElement | null>
 	canvasFormats: Ref<CanvasFormat[]>
+	canvasFrames?: Ref<FrameOption[]>
+	product?: Ref<Product | null | undefined>
 	onDesignUpdate?: (payload: ProductDesignPayload) => void
 }) {
 	const designStore = useProductDesignStore()
 	const { loadHtmlImage } = useFabricImageLoader()
 
 	const formatPresets = computed(() => options.canvasFormats.value)
+	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
+	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
+	const productBackgroundUrl = computed(() => getPrimaryProductBackgroundUrl(options.product?.value))
+	const hasCollageLayout = computed(() => (collageLayout.value?.layout_json.length ?? 0) > 0)
 	const selectedFormat = ref<CanvasFormat | null>(null)
 	const selectedSize = ref<PrintSizeOption | null>(null)
-	const selectedFrame = ref<FrameOption>(FRAME_OPTIONS[0])
+	const selectedFrame = ref<FrameOption | null>(null)
+
+	const syncFrameSelection = () => {
+		const list = frameOptions.value
+		if (!list.length) {
+			selectedFrame.value = null
+			return
+		}
+		const current = selectedFrame.value
+		selectedFrame.value = current && list.some((f) => f.id === current.id) ? current : list[0]
+	}
 
 	const syncSelectionFromFormats = () => {
 		const formats = formatPresets.value
@@ -43,9 +71,7 @@ export function useProductCanvasEditor(options: {
 		const sizeList = format.sizes
 		const sizeCurrent = selectedSize.value
 		selectedSize.value =
-			sizeCurrent && sizeList.some((s) => s.id === sizeCurrent.id)
-				? sizeCurrent
-				: getDefaultSize(format)
+			sizeCurrent && sizeList.some((s) => s.id === sizeCurrent.id) ? sizeCurrent : getDefaultSize(format)
 	}
 	const isLoadingImage = ref(false)
 	const viewportW = ref(DEFAULT_VIEWPORT_W)
@@ -59,9 +85,13 @@ export function useProductCanvasEditor(options: {
 	let fabricCanvas: import('fabric').fabric.Canvas | null = null
 	let canvasReady = false
 	let photoObject: import('fabric').fabric.Image | null = null
+	let collagePhotoObjects: import('fabric').fabric.Object[] = []
+	let viewportBgImage: import('fabric').fabric.Image | null = null
+	let mockupNaturalW = 0
+	let mockupNaturalH = 0
 	let printAreaRect: import('fabric').fabric.Rect | null = null
 	let frameObject: import('fabric').fabric.Object | null = null
-	let watermarkBg: import('fabric').fabric.Rect | null = null
+	let frameBorderRect: import('fabric').fabric.Rect | null = null
 
 	const uploadImages = computed(() => designStore.getSessionImages(options.productId.value))
 
@@ -74,7 +104,12 @@ export function useProductCanvasEditor(options: {
 
 	const isThumbActive = (index: number) => activeImageIndex.value === index
 
-	const previewUrl = (url: string) => mediaUrlForCanvas(url)
+	const previewUrl = (url: string) => {
+		const raw = String(url ?? '').trim()
+		if (!raw) return ''
+		if (raw.startsWith('blob:') || raw.startsWith('data:')) return raw
+		return mediaUrlForCanvas(raw)
+	}
 
 	const getViewportSize = () => {
 		const el = options.wrapRef.value
@@ -113,22 +148,62 @@ export function useProductCanvasEditor(options: {
 			printPrice: selectedSize.value?.price,
 			formatId: selectedFormat.value?.id,
 			formatLabel: selectedFormat.value?.name,
-			frameId: selectedFrame.value.id
+			frameId: selectedFrame.value?.id ?? undefined
 		}
 		options.onDesignUpdate(payload)
 	}
 
-	const makeClipRect = (w: number, h: number) => {
-		if (!fabricLib) return undefined
-		return new fabricLib.Rect({
-			width: w,
-			height: h,
+	const updatePhotoClipPath = () => {
+		if (!photoObject || !printAreaRect || !fabricLib) return
+		const width = printAreaRect.width ?? 1
+		const height = printAreaRect.height ?? 1
+		photoObject.clipPath = new fabricLib.Rect({
+			width: width,
+			height: height,
 			left: cx(),
 			top: cy(),
 			originX: 'center',
 			originY: 'center',
 			absolutePositioned: true
 		})
+		photoObject.dirty = true
+		photoObject.setCoords()
+	}
+
+	const removeCollagePhotos = () => {
+		if (!fabricCanvas) return
+		for (const img of collagePhotoObjects) {
+			fabricCanvas.remove(img)
+		}
+		collagePhotoObjects = []
+	}
+
+	const removeSinglePhoto = () => {
+		if (photoObject && fabricCanvas) {
+			fabricCanvas.remove(photoObject)
+			photoObject = null
+		}
+	}
+
+	const fitImageInSlot = (
+		img: import('fabric').fabric.Image,
+		slotW: number,
+		slotH: number,
+		slotCx: number,
+		slotCy: number
+	) => {
+		const iw = img.width || 1
+		const ih = img.height || 1
+		const scale = Math.max(slotW / iw, slotH / ih)
+		img.set({
+			scaleX: scale,
+			scaleY: scale,
+			left: slotCx,
+			top: slotCy,
+			originX: 'center',
+			originY: 'center'
+		})
+		img.setCoords()
 	}
 
 	const getPrintDimensions = () => {
@@ -156,10 +231,22 @@ export function useProductCanvasEditor(options: {
 			originY: 'center'
 		})
 		photoObject.setCoords()
+		updatePhotoClipPath()
+		fabricCanvas?.requestRenderAll()
 	}
 
-	const lockPhotoInteractions = (img: import('fabric').fabric.Image) => {
-		img.set({
+	/** Пересчёт cover + clip без перезагрузки изображения (смена формата / resize). */
+	const refitSinglePhoto = async () => {
+		if (!fabricCanvas || !photoObject || !printAreaRect || hasCollageLayout.value) return
+		fitPhotoCover()
+		await updateFrame()
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
+		emitDesign()
+	}
+
+	const lockFabricObject = (obj: import('fabric').fabric.Object) => {
+		obj.set({
 			lockScalingX: true,
 			lockScalingY: true,
 			lockRotation: true,
@@ -171,75 +258,114 @@ export function useProductCanvasEditor(options: {
 			hoverCursor: 'default',
 			moveCursor: 'default'
 		})
-		img.setControlsVisibility({
-			tl: false,
-			tr: false,
-			bl: false,
-			br: false,
-			ml: false,
-			mt: false,
-			mr: false,
-			mb: false,
-			mtr: false
-		})
+		if ('setControlsVisibility' in obj && typeof obj.setControlsVisibility === 'function') {
+			obj.setControlsVisibility({
+				tl: false,
+				tr: false,
+				bl: false,
+				br: false,
+				ml: false,
+				mt: false,
+				mr: false,
+				mb: false,
+				mtr: false
+			})
+		}
 	}
 
-	const constrainPhoto = () => {
-		if (!photoObject || !printAreaRect || !fabricLib) return
-		const pw = (printAreaRect.width ?? 0) * (printAreaRect.scaleX ?? 1)
-		const ph = (printAreaRect.height ?? 0) * (printAreaRect.scaleY ?? 1)
-		const padX = ((photoObject.width ?? 0) * (photoObject.scaleX ?? 1)) / 2
-		const padY = ((photoObject.height ?? 0) * (photoObject.scaleY ?? 1)) / 2
-		const minX = cx() - pw / 2 + padX * 0.35
-		const maxX = cx() + pw / 2 - padX * 0.35
-		const minY = cy() - ph / 2 + padY * 0.35
-		const maxY = cy() + ph / 2 - padY * 0.35
-		const left = Math.min(maxX, Math.max(minX, photoObject.left ?? cx()))
-		const top = Math.min(maxY, Math.max(minY, photoObject.top ?? cy()))
-		photoObject.set({ left, top })
-		photoObject.setCoords()
+	const lockPhotoInteractions = (img: import('fabric').fabric.Image) => {
+		lockFabricObject(img)
+	}
+
+	const fitImageInViewport = (img: import('fabric').fabric.Image, fit: 'contain' | 'cover') => {
+		const vw = viewportW.value
+		const vh = viewportH.value
+		const iw = img.width || 1
+		const ih = img.height || 1
+		const scale = fit === 'contain' ? Math.min(vw / iw, vh / ih) : Math.max(vw / iw, vh / ih)
+		img.set({
+			scaleX: scale,
+			scaleY: scale,
+			left: vw / 2,
+			top: vh / 2,
+			originX: 'center',
+			originY: 'center'
+		})
+		img.setCoords()
+	}
+
+	const removeViewportBackground = () => {
+		if (viewportBgImage && fabricCanvas) {
+			fabricCanvas.remove(viewportBgImage)
+			viewportBgImage = null
+		}
 	}
 
 	const reorderLayers = () => {
 		if (!fabricCanvas) return
-		if (watermarkBg) fabricCanvas.sendToBack(watermarkBg)
+		if (viewportBgImage) fabricCanvas.sendToBack(viewportBgImage)
 		let z = 1
 		if (printAreaRect) {
 			fabricCanvas.moveTo(printAreaRect, z)
+			z += 1
+		}
+		for (const img of collagePhotoObjects) {
+			fabricCanvas.moveTo(img, z)
+			z += 1
+		}
+		if (photoObject) {
+			fabricCanvas.moveTo(photoObject, z)
+			z += 1
+		}
+		if (frameBorderRect) {
+			fabricCanvas.moveTo(frameBorderRect, z)
 			z += 1
 		}
 		if (frameObject) {
 			fabricCanvas.moveTo(frameObject, z)
 			z += 1
 		}
-		if (photoObject) fabricCanvas.moveTo(photoObject, z)
 	}
 
-	const applyWatermarkBackground = async (initId?: number) => {
+	/** Фон canvas — изображение товара (product.images), без паттерна PlusCanvas. */
+	const applyViewportBackground = async (initId?: number) => {
 		if (initId !== undefined && !isActiveCanvasInit(initId)) return
 		if (!fabricCanvas || !fabricLib) return
-		const tile = await createPlusCanvasWatermarkTile()
-		if (initId !== undefined && !isActiveCanvasInit(initId)) return
-		if (!fabricCanvas || !fabricLib) return
-		const pattern = new fabricLib.Pattern({
-			source: tile as unknown as HTMLImageElement,
-			repeat: 'repeat'
-		})
-		if (!watermarkBg) {
-			watermarkBg = new fabricLib.Rect({
-				left: 0,
-				top: 0,
-				width: viewportW.value,
-				height: viewportH.value,
-				fill: pattern,
-				selectable: false,
-				evented: false
-			})
-			fabricCanvas.add(watermarkBg)
-		} else {
-			watermarkBg.set('fill', pattern)
+
+		removeViewportBackground()
+		const url = productBackgroundUrl.value
+
+		if (!url) {
+			fabricCanvas.backgroundColor = '#F5F2ED'
+			fabricCanvas.requestRenderAll()
+			return
 		}
-		reorderLayers()
+
+		try {
+			const el = await loadHtmlImage(url)
+			if (initId !== undefined && !isActiveCanvasInit(initId)) return
+			if (!fabricCanvas || !fabricLib) return
+
+			const img = new fabricLib.Image(el, {
+				selectable: false,
+				evented: false,
+				originX: 'center',
+				originY: 'center'
+			})
+			lockPhotoInteractions(img)
+			mockupNaturalW = el.naturalWidth || img.width || 1
+			mockupNaturalH = el.naturalHeight || img.height || 1
+			const mockupFit = hasCollageLayout.value ? 'contain' : 'cover'
+			fitImageInViewport(img, mockupFit)
+			viewportBgImage = img
+			fabricCanvas.add(viewportBgImage)
+			fabricCanvas.backgroundColor = 'transparent'
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
+		} catch {
+			fabricCanvas.backgroundColor = '#F5F2ED'
+			fabricCanvas.requestRenderAll()
+		}
 	}
 
 	const removeFrame = () => {
@@ -247,60 +373,216 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas.remove(frameObject)
 			frameObject = null
 		}
+		if (frameBorderRect && fabricCanvas) {
+			fabricCanvas.remove(frameBorderRect)
+			frameBorderRect = null
+		}
 	}
 
 	const updateFrame = async () => {
 		if (!fabricCanvas || !fabricLib || !printAreaRect) return
 		removeFrame()
-		const frame = selectedFrame.value
-		if (frame.id === 'none' || !frame.src) {
+		
+		if (hasCollageLayout.value) {
 			fabricCanvas.requestRenderAll()
 			return
 		}
+
+		const frame = selectedFrame.value
+		if (!frame || isNoFrame(frame)) {
+			fabricCanvas.requestRenderAll()
+			return
+		}
+
 		const pw = printAreaRect.width ?? 0
 		const ph = printAreaRect.height ?? 0
-		const bw = frame.borderWidth ?? 12
-		const src = frame.src.startsWith('http') ? frame.src : `${window.location.origin}${frame.src}`
-		try {
-			const el = await loadHtmlImage(src)
-			const img = new fabricLib.Image(el, {
-				left: cx(),
-				top: cy(),
-				originX: 'center',
-				originY: 'center',
-				selectable: false,
-				evented: false
-			})
-			const scale = Math.max((pw + bw * 2) / (img.width || 1), (ph + bw * 2) / (img.height || 1))
-			img.set({ scaleX: scale, scaleY: scale })
-			frameObject = img
-			fabricCanvas.add(frameObject)
-			if (photoObject) fabricCanvas.bringToFront(photoObject)
-		} catch {
-			frameObject = new fabricLib.Rect({
-				width: pw + bw * 2,
-				height: ph + bw * 2,
-				left: cx(),
-				top: cy(),
-				originX: 'center',
-				originY: 'center',
-				fill: 'transparent',
-				stroke: '#6b4f2a',
-				strokeWidth: bw,
-				selectable: false,
-				evented: false
-			})
-			fabricCanvas.add(frameObject)
-			if (photoObject) fabricCanvas.bringToFront(photoObject)
+		const bw = FRAME_BORDER_WIDTH
+		const borderColor = normalizeFrameColor(frame.color_hex)
+
+		frameBorderRect = new fabricLib.Rect({
+			width: pw + bw * 2,
+			height: ph + bw * 2,
+			left: cx(),
+			top: cy(),
+			originX: 'center',
+			originY: 'center',
+			fill: 'transparent',
+			stroke: borderColor,
+			strokeWidth: bw,
+			selectable: false,
+			evented: false
+		})
+		fabricCanvas.add(frameBorderRect)
+
+		const imageUrl = frame.image_url?.trim()
+		if (imageUrl) {
+			try {
+				const el = await loadHtmlImage(mediaUrlForCanvas(imageUrl))
+				const img = new fabricLib.Image(el, {
+					left: cx(),
+					top: cy(),
+					originX: 'center',
+					originY: 'center',
+					selectable: false,
+					evented: false
+				})
+				const scale = Math.max((pw + bw * 2) / (img.width || 1), (ph + bw * 2) / (img.height || 1))
+				img.set({ scaleX: scale, scaleY: scale })
+				frameObject = img
+				fabricCanvas.add(frameObject)
+			} catch {
+				/* только цветная обводка */
+			}
 		}
+
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
+	}
+
+	const addUploadToCollageSlot = async (
+		upload: TempDesignImage,
+		slotDef: CollageLayoutSlot,
+		allSlots: CollageLayoutSlot[],
+		mockupW: number,
+		mockupH: number,
+		layoutRef?: { width?: number; height?: number }
+	) => {
+		if (!fabricCanvas || !fabricLib) return
+
+		const el = await loadHtmlImage(upload.url)
+		const rawRect = slotRectOnMockup(
+			slotDef,
+			allSlots,
+			viewportW.value,
+			viewportH.value,
+			cx(),
+			cy(),
+			mockupW,
+			mockupH,
+			layoutRef
+		)
+		const rect = insetSlotRect(rawRect)
+
+		const img = new fabricLib.Image(el, {
+			originX: 'center',
+			originY: 'center',
+			objectCaching: false
+		})
+		fitImageInSlot(img, rect.width, rect.height, 0, 0)
+
+		const clipRect = new fabricLib.Rect({
+			width: rect.width,
+			height: rect.height,
+			originX: 'center',
+			originY: 'center',
+			left: 0,
+			top: 0,
+			absolutePositioned: false
+		})
+
+		const group = new fabricLib.Group([img], {
+			left: rect.left,
+			top: rect.top,
+			originX: 'center',
+			originY: 'center',
+			width: rect.width,
+			height: rect.height,
+			selectable: false,
+			evented: false,
+			objectCaching: false,
+			subTargetCheck: false
+		})
+		group.clipPath = clipRect
+		lockFabricObject(group)
+
+		fabricCanvas.add(group)
+		collagePhotoObjects.push(group)
+	}
+
+	const syncCollageSlots = async () => {
+		if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
+
+		removeSinglePhoto()
+		removeCollagePhotos()
+
+		const uploads = uploadImages.value.filter((u) => u?.url?.trim())
+		if (!uploads.length) return
+
+		const layout = collageLayout.value
+		const allSlots = layout.layout_json
+		const sortedSlots = sortLayoutSlots(allSlots)
+		const mockupW = layout.reference_width || mockupNaturalW || viewportW.value
+		const mockupH = layout.reference_height || mockupNaturalH || viewportH.value
+		const layoutRef = { width: layout.reference_width, height: layout.reference_height }
+
+		const slotCount = sortedSlots.length
+		const imageCount = uploads.length
+		const pairCount = Math.min(slotCount, imageCount)
+
+		for (let i = 0; i < pairCount; i++) {
+			const upload = uploads[i]
+			const slotDef = sortedSlots[i]
+			if (!upload?.url || !slotDef) continue
+
+			try {
+				await addUploadToCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+			} catch {
+				/* слот без фото */
+			}
+		}
+
+		await updateFrame()
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
+		emitDesign()
+	}
+
+	const syncPhotos = async () => {
+		if (!fabricCanvas || !fabricLib || !printAreaRect) return
+
+		isLoadingImage.value = true
+		try {
+			const useTemplateBg = Boolean(productBackgroundUrl.value)
+			if (printAreaRect) {
+				printAreaRect.set({
+					fill: useTemplateBg ? 'transparent' : '#ffffff'
+				})
+			}
+
+			if (hasCollageLayout.value) {
+				await syncCollageSlots()
+				return
+			}
+
+			removeCollagePhotos()
+			const list = uploadImages.value
+			if (list.length > 0) {
+				if (photoObject) {
+					await refitSinglePhoto()
+				} else {
+					const idx = Math.min(designStore.activeImageIndex, list.length - 1)
+					await setPhotoFromUrl(list[idx]?.url ?? list[0].url, list[idx] ?? list[0], {
+						skipBackground: true
+					})
+				}
+			} else {
+				removeSinglePhoto()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				emitDesign()
+			}
+		} finally {
+			isLoadingImage.value = false
+		}
 	}
 
 	const syncPrintArea = async () => {
 		if (!fabricCanvas || !fabricLib || !selectedFormat.value) return
 
 		const { width, height } = getPrintDimensions()
+
+		const useTemplateBg = Boolean(productBackgroundUrl.value)
 
 		if (!printAreaRect) {
 			printAreaRect = new fabricLib.Rect({
@@ -310,9 +592,9 @@ export function useProductCanvasEditor(options: {
 				top: cy(),
 				originX: 'center',
 				originY: 'center',
-				fill: '#ffffff',
-				stroke: '#d1d5db',
-				strokeWidth: 1,
+				fill: useTemplateBg ? 'transparent' : '#ffffff',
+				stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
+				strokeWidth: hasCollageLayout.value ? 0 : 1,
 				selectable: false,
 				evented: false
 			})
@@ -324,30 +606,27 @@ export function useProductCanvasEditor(options: {
 				scaleX: 1,
 				scaleY: 1,
 				left: cx(),
-				top: cy()
+				top: cy(),
+				stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
+				strokeWidth: hasCollageLayout.value ? 0 : 1
 			})
 			printAreaRect.setCoords()
 		}
 
-		if (photoObject) {
-			const clip = makeClipRect(width, height)
-			photoObject.set({ clipPath: clip })
-			photoObject.dirty = true
-			fitPhotoCover()
-			lockPhotoInteractions(photoObject)
-			fabricCanvas.bringToFront(photoObject)
-		}
-
-		await updateFrame()
-		reorderLayers()
-		fabricCanvas.requestRenderAll()
-		emitDesign()
+		await syncPhotos()
 	}
 
-	const setPhotoFromUrl = async (url: string, meta?: TempDesignImage | null) => {
+	const setPhotoFromUrl = async (url: string, meta?: TempDesignImage | null, opts?: { skipBackground?: boolean }) => {
 		if (!fabricCanvas || !fabricLib) return
-		isLoadingImage.value = true
+		const manageLoading = !opts?.skipBackground
+		if (manageLoading) isLoadingImage.value = true
 		try {
+			if (!opts?.skipBackground && printAreaRect) {
+				printAreaRect.set({
+					fill: productBackgroundUrl.value ? 'transparent' : '#ffffff'
+				})
+			}
+
 			const el = await loadHtmlImage(url)
 			if (photoObject) {
 				fabricCanvas.remove(photoObject)
@@ -357,11 +636,10 @@ export function useProductCanvasEditor(options: {
 				originX: 'center',
 				originY: 'center',
 				left: cx(),
-				top: cy()
+				top: cy(),
+				objectCaching: false
 			})
 			lockPhotoInteractions(img)
-			const { width, height } = getPrintDimensions()
-			img.clipPath = makeClipRect(width, height)
 			fabricCanvas.add(img)
 			photoObject = img
 			fabricCanvas.discardActiveObject()
@@ -371,7 +649,7 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas.requestRenderAll()
 			emitDesign()
 		} finally {
-			isLoadingImage.value = false
+			if (manageLoading) isLoadingImage.value = false
 		}
 	}
 
@@ -379,8 +657,7 @@ export function useProductCanvasEditor(options: {
 		const list = uploadImages.value
 		if (index < 0 || index >= list.length) return
 		designStore.setActiveImageIndex(index)
-		const img = list[index]
-		await setPhotoFromUrl(img.url, img)
+		await syncPhotos()
 	}
 
 	const applyFormat = async (format: CanvasFormat) => {
@@ -390,6 +667,7 @@ export function useProductCanvasEditor(options: {
 			await tryInitOrSyncFormats()
 			return
 		}
+		// printAreaRect + photo/collage пересчитываются по formatOrientationAspect(format)
 		await syncPrintArea()
 	}
 
@@ -418,7 +696,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyFrameByIndex = async (index: number) => {
-		const frame = FRAME_OPTIONS[index]
+		const frame = frameOptions.value[index]
 		if (frame) await applyFrame(frame)
 	}
 
@@ -430,9 +708,8 @@ export function useProductCanvasEditor(options: {
 		viewportH.value = height
 		fabricCanvas.setDimensions({ width, height })
 		fabricCanvas.calcOffset()
-		if (watermarkBg) {
-			watermarkBg.set({ left: 0, top: 0, width, height })
-			watermarkBg.setCoords()
+		if (viewportBgImage) {
+			fitImageInViewport(viewportBgImage, hasCollageLayout.value ? 'contain' : 'cover')
 		}
 		applyWrapLayoutStyles()
 		await syncPrintArea()
@@ -453,9 +730,13 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas = null
 		}
 		photoObject = null
+		collagePhotoObjects = []
+		viewportBgImage = null
+		mockupNaturalW = 0
+		mockupNaturalH = 0
 		printAreaRect = null
 		frameObject = null
-		watermarkBg = null
+		frameBorderRect = null
 		if (options.wrapRef.value) options.wrapRef.value.innerHTML = ''
 	}
 
@@ -506,20 +787,18 @@ export function useProductCanvasEditor(options: {
 		})
 		resizeObserver.observe(options.wrapRef.value)
 
-		await applyWatermarkBackground(initId)
+		await applyViewportBackground(initId)
 		if (!isActiveCanvasInit(initId)) return
 
 		await resizeCanvasToContainer()
 		if (!isActiveCanvasInit(initId)) return
 
 		syncSelectionFromFormats()
+		syncFrameSelection()
 		await syncPrintArea()
 		if (!isActiveCanvasInit(initId)) return
 
-		const list = uploadImages.value
-		if (list.length > 0) {
-			await selectUploadImage(designStore.activeImageIndex)
-		}
+		await syncPhotos()
 
 		canvasReady = true
 	}
@@ -544,6 +823,14 @@ export function useProductCanvasEditor(options: {
 	}
 
 	watch(formatPresets, () => void tryInitOrSyncFormats())
+	watch(frameOptions, syncFrameSelection)
+	watch([hasCollageLayout, uploadImages, collageLayout, productBackgroundUrl], () => {
+		if (!fabricCanvas || !canvasReady) return
+		void (async () => {
+			await applyViewportBackground()
+			await syncPhotos()
+		})()
+	})
 
 	watch(
 		() => options.wrapRef.value,
@@ -578,8 +865,11 @@ export function useProductCanvasEditor(options: {
 		selectedSize,
 		selectedFrame,
 		formatPresets,
+		collageLayout,
+		hasCollageLayout,
+		productBackgroundUrl,
 		sizeOptions: computed(() => selectedFormat.value?.sizes ?? []),
-		frameOptions: FRAME_OPTIONS,
+		frameOptions,
 		initCanvas,
 		selectUploadImage,
 		applyFormat,
@@ -589,6 +879,7 @@ export function useProductCanvasEditor(options: {
 		applyFrameByIndex,
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
-		isFrameActive: (id: string) => selectedFrame.value.id === id
+		activeFrameId: computed(() => selectedFrame.value?.id ?? null),
+		isFrameActive: (id: string) => selectedFrame.value?.id === id
 	}
 }

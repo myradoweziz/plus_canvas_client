@@ -17,23 +17,54 @@ export type PrintSizeOption = {
 
 export type FrameOption = {
 	id: string
-	label: string
-	/** null = çerçeve yok */
-	src: string | null
-	borderWidth?: number
+	name: string
+	image_url: string
+	color_hex: string
+	price?: number
 }
 
-export const FRAME_OPTIONS: FrameOption[] = [
-	{ id: 'none', label: 'Çerçeve yok', src: null },
-	{ id: 'wood-light', label: 'Açık ahşap', src: '/images/cerceve.png', borderWidth: 14 },
-	{ id: 'wood-dark', label: 'Koyu ahşap', src: '/images/cerceve.png', borderWidth: 14 },
-	{ id: 'black', label: 'Siyah', src: '/images/cerceve.png', borderWidth: 12 },
-	{ id: 'white', label: 'Beyaz', src: '/images/cerceve.png', borderWidth: 12 },
-	{ id: 'gold', label: 'Altın', src: '/images/cerceve.png', borderWidth: 14 },
-	{ id: 'silver', label: 'Gümüş', src: '/images/cerceve.png', borderWidth: 12 },
-	{ id: 'natural', label: 'Doğal', src: '/images/cerceve.png', borderWidth: 14 },
-	{ id: 'walnut', label: 'Ceviz', src: '/images/cerceve.png', borderWidth: 14 }
-]
+/** Без рамки — первый пункт в списке çerçeve. */
+export const FRAME_NONE_ID = 'none'
+
+export const FRAME_NONE_OPTION: FrameOption = {
+	id: FRAME_NONE_ID,
+	name: 'Çerçeve yok',
+	image_url: '',
+	color_hex: '#B0B8C4',
+	price: 0
+}
+
+export function getFramePrice(frame: FrameOption | null | undefined): number {
+	if (!frame || isNoFrame(frame)) return 0
+	const p = frame.price ?? 0
+	return Number.isFinite(p) && p > 0 ? p : 0
+}
+
+export function isNoFrame(frame: FrameOption | null | undefined): boolean {
+	if (!frame) return true
+	if (frame.id === FRAME_NONE_ID) return true
+	const n = frame.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+	return n.includes('cerceve yok') || n.includes('çerçeve yok') || n.includes('no frame') || n.includes('frameless')
+}
+
+/** «Çerçeve yok» всегда первым; дубликаты с API убираем. */
+export function withNoFrameOption(frames: FrameOption[]): FrameOption[] {
+	const rest = frames.filter((f) => f.id !== FRAME_NONE_ID && !isNoFrame(f))
+	return [FRAME_NONE_OPTION, ...rest]
+}
+
+/** @deprecated используйте withNoFrameOption */
+export const withDefaultNoFrameOption = withNoFrameOption
+
+/** Цвет рамки (#RRGGBB) из API. */
+export function normalizeFrameColor(hex: string | undefined | null, fallback = '#6b4f2a'): string {
+	const raw = String(hex ?? '').trim()
+	if (!raw) return fallback
+	if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(raw)) return raw
+	if (/^[0-9a-fA-F]{6}$/.test(raw)) return `#${raw}`
+	if (/^[0-9a-fA-F]{3}$/.test(raw)) return `#${raw}`
+	return fallback
+}
 
 const pickString = (...values: unknown[]): string => {
 	for (const v of values) {
@@ -83,12 +114,7 @@ const parseAspectFromRow = (row: Record<string, unknown>): number | undefined =>
 	return undefined
 }
 
-const normalizeLabel = (value: string) =>
-	value
-		.normalize('NFD')
-		.replace(/\p{M}/gu, '')
-		.toLowerCase()
-		.trim()
+const normalizeLabel = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 
 /** По названию формата (Dikey, Kare, Yatay 2/1…). */
 export function inferFormatAspectFromName(name: string, slug?: string): number | null {
@@ -111,7 +137,11 @@ export function inferFormatAspectFromName(name: string, slug?: string): number |
 }
 
 export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
-	const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw as Record<string, unknown>) : []
+	const list = Array.isArray(raw)
+		? raw
+		: raw && typeof raw === 'object'
+			? Object.values(raw as Record<string, unknown>)
+			: []
 	return list
 		.map((item) => {
 			const row = item as Record<string, unknown>
@@ -136,13 +166,45 @@ export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 export function extractCanvasFormatsFromProduct(product: unknown): CanvasFormat[] {
 	if (!product || typeof product !== 'object') return []
 	const row = product as Record<string, unknown>
-	const raw =
-		row.canvas_formats ??
-		row.canvasFormats ??
-		row.formats ??
-		row.canvas_format ??
-		row.canvas_product_formats
-	return normalizeCanvasFormats(raw)
+	return normalizeCanvasFormats(row.canvas_formats)
+}
+
+export function normalizeCanvasFrames(raw: unknown): FrameOption[] {
+	const list = Array.isArray(raw)
+		? raw
+		: raw && typeof raw === 'object'
+			? Object.values(raw as Record<string, unknown>)
+			: []
+
+	return list
+		.map((item) => {
+			const row = item as Record<string, unknown>
+			const idRaw = row.id ?? row.frame_id ?? row.uuid
+			const id = idRaw != null && String(idRaw).trim() !== '' ? String(idRaw).trim() : ''
+			const name = pickString(row.name, row.title, row.label)
+			const image_url = pickString(row.image_url, row.image, row.src, row.url, row.thumbnail)
+			const color_hex = normalizeFrameColor(
+				pickString(row.color_hex, row.color, row.hex, row.border_color, row.frame_color)
+			)
+			const priceRaw = Number(row.price ?? row.frame_price ?? row.additional_price)
+			const price = Number.isFinite(priceRaw) ? priceRaw : undefined
+			if (!id || !name) return null
+			return {
+				id,
+				name,
+				image_url,
+				color_hex,
+				...(price !== undefined ? { price } : {})
+			} satisfies FrameOption
+		})
+		.filter((f): f is FrameOption => f !== null)
+}
+
+export function extractCanvasFramesFromProduct(product: unknown): FrameOption[] {
+	if (!product || typeof product !== 'object') return [FRAME_NONE_OPTION]
+	const row = product as Record<string, unknown>
+	const raw = row.frames ?? row.canvas_frames ?? row.frame_options ?? row.product_frames
+	return withNoFrameOption(normalizeCanvasFrames(raw))
 }
 
 export function getDefaultSize(format: CanvasFormat): PrintSizeOption {

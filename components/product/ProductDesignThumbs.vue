@@ -54,11 +54,17 @@
 			<swiper-slide
 				v-for="(img, index) in images"
 				:key="img.id"
-				class="cursor-pointer"
+				class="thumb-slide cursor-pointer"
 				:class="{ 'is-thumb-active': isThumbActive(index) }"
 				@click="onThumbClick(index)"
 			>
-				<img :src="previewUrl(img.url)" :alt="`upload-${img.id}`" />
+				<img
+					:src="previewUrl(img.url)"
+					:alt="`upload-${img.id}`"
+					class="thumb-slide__img"
+					loading="lazy"
+					@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
+				/>
 			</swiper-slide>
 			<swiper-slide v-if="!images.length">
 				<img src="/images/banner.png" alt="placeholder" />
@@ -81,24 +87,30 @@
 		margin: 0;
 		margin-top: 40px;
 
-		:deep(.swiper-slide) {
+		:deep(.swiper-slide.thumb-slide) {
 			width: 100px;
+			height: 100px;
+			flex-shrink: 0;
 			border-radius: 12px;
 			overflow: hidden;
-			opacity: 0.5;
+			opacity: 0.55;
+			background: #e5e7eb;
 			transition: all 0.3s ease;
 
 			&:hover {
 				opacity: 1;
 			}
 
-			img {
+			.thumb-slide__img {
+				display: block;
 				width: 100%;
 				height: 100%;
+				object-fit: cover;
 			}
 
 			&.is-thumb-active {
 				opacity: 1;
+				box-shadow: 0 0 0 2px #2563eb;
 			}
 		}
 	}

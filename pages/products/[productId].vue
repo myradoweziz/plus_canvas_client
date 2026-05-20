@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { extractCanvasFormatsFromProduct } from '~/utils/productDesignConfig'
+	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 
 	const route = useRoute()
@@ -34,7 +34,9 @@
 	)
 
 	const product = computed(() => productData.value?.data)
+
 	const canvasFormats = computed(() => extractCanvasFormatsFromProduct(product.value))
+	const frames = computed(() => extractCanvasFramesFromProduct(product.value))
 
 	const {
 		uploadImages,
@@ -49,13 +51,15 @@
 		applySizeById,
 		applyFrameByIndex,
 		activeFormatId,
-		isFrameActive,
+		activeFrameId,
 		selectedFormat,
 		selectedSize
 	} = useProductCanvasEditor({
 		productId,
 		wrapRef: canvasWrapRef,
 		canvasFormats,
+		canvasFrames: frames,
+		product,
 		onDesignUpdate
 	})
 
@@ -63,8 +67,9 @@
 		void selectUploadImage(index)
 	}
 
-	const currentPreviewSrc = computed(() => {
-		const url = activeImage.value?.url ?? uploadImages.value[0]?.url
+	const formatPreviewSrc = computed(() => {
+		const list = uploadImages.value
+		const url = activeImage.value?.url ?? list[0]?.url
 		return url ? previewUrl(url) : ''
 	})
 
@@ -105,7 +110,7 @@
 						:is-thumb-active="isThumbActive"
 						:preview-url="previewUrl"
 						:format-presets="formatPresets"
-						:format-preview-src="currentPreviewSrc"
+						:format-preview-src="formatPreviewSrc"
 						:active-format-id="activeFormatId"
 						@thumb-select="onThumbSelect"
 						@select-format="(id) => void applyFormatById(id)"
@@ -127,10 +132,10 @@
 						:product="product"
 						:format-presets="formatPresets"
 						:size-options="sizeOptions"
-						:frame-options="frameOptions"
+						:frames="frameOptions"
 						:selected-format-id="selectedFormat?.id ?? null"
 						:selected-size-id="selectedSize?.id ?? null"
-						:is-frame-active="isFrameActive"
+						:active-frame-id="activeFrameId"
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"

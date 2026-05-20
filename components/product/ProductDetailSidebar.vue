@@ -1,15 +1,15 @@
 <script setup lang="ts">
+	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import type { FrameOption, PrintSizeOption } from '~/utils/productDesignConfig'
+	import { getFramePrice, isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
 	import type { Product } from '~/utils/types'
-
 	const props = defineProps<{
 		sizeOptions: PrintSizeOption[]
-		frameOptions: FrameOption[]
+		frames: FrameOption[]
 		selectedFormatId: number | null
 		selectedSizeId: number | null
-		isFrameActive: (id: string) => boolean
+		activeFrameId: string | null
 		product: Product
 	}>()
 
@@ -22,10 +22,30 @@
 		emit('size-change', Number((e.target as HTMLSelectElement).value))
 	}
 
+	const frameImageSrc = (frame: FrameOption) => {
+		const url = frame.image_url?.trim()
+		return url ? mediaUrlForCanvas(url) : '/images/cerceve.png'
+	}
+
+	const isFrameActive = (id: string) => String(props.activeFrameId ?? '') === String(id)
+
+	const framePreviewStyle = (frame: FrameOption) => {
+		const insetColor = frame.color_hex || '#6b4f2a'
+		const colorRing = `inset 0 0 0 3px ${insetColor}`
+		if (!isFrameActive(frame.id)) return { boxShadow: colorRing }
+		return {
+			boxShadow: `${colorRing}, inset 0 0 0 5px #2563eb`
+		}
+	}
+
+	const selectedFrame = computed(() => props.frames.find((f) => f.id === props.activeFrameId) ?? null)
+
 	const displayPrice = computed(() => {
 		const size = props.sizeOptions.find((s) => s.id === props.selectedSizeId)
-		if (size?.price) return size.price
-		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
+		const base = size?.price
+			? size.price
+			: Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
+		return Math.round(base + getFramePrice(selectedFrame.value))
 	})
 </script>
 
@@ -65,16 +85,38 @@
 		</div>
 
 		<div class="mt-8">Çerçeve Seçin</div>
-		<div class="grid grid-cols-7 gap-3 mt-3">
-			<img
-				v-for="(frame, index) in frameOptions.slice(0, 9)"
+		<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
+			<button
+				v-for="(frame, index) in frames"
 				:key="frame.id"
-				:src="frame.src ?? '/images/cerceve.png'"
-				:alt="frame.label"
-				class="border border-transparent hover:border-blue-600 transition-all cursor-pointer rounded-md"
-				:class="{ 'border-blue-600': isFrameActive(frame.id) }"
+				type="button"
+				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-md border-2 cursor-pointer transition-all hover:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+				:class="
+					isFrameActive(frame.id) ? 'frame-tile--active border-blue-600 ring-2 ring-blue-500/50' : 'border-transparent'
+				"
+				:aria-pressed="isFrameActive(frame.id)"
+				:title="frame.name"
 				@click="emit('frame-select', index)"
-			/>
+			>
+				<div
+					v-if="isNoFrame(frame)"
+					class="frame-tile__empty pointer-events-none absolute inset-0 flex items-center justify-center bg-white"
+				>
+					<span class="frame-tile__x" :style="{ color: frame.color_hex }" aria-hidden="true">×</span>
+				</div>
+				<img
+					v-else
+					:src="frameImageSrc(frame)"
+					:alt="frame.name"
+					class="h-full w-full object-cover pointer-events-none"
+					:style="framePreviewStyle(frame)"
+				/>
+				<span
+					class="frame-tile__label pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+				>
+					{{ frame.name }}
+				</span>
+			</button>
 		</div>
 
 		<div class="mt-8 flex items-center gap-5">
@@ -100,5 +142,20 @@
 <style lang="scss" scoped>
 	.pcSelect {
 		box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.06);
+	}
+
+	.frame-tile__label {
+		background: rgba(16, 24, 40, 0.62);
+		backdrop-filter: blur(2px);
+	}
+
+	.frame-tile__x {
+		font-size: 2rem;
+		line-height: 1;
+		font-weight: 300;
+	}
+
+	.frame-tile--active {
+		border-color: #2563eb !important;
 	}
 </style>

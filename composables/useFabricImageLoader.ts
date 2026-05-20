@@ -6,10 +6,11 @@ export function useFabricImageLoader() {
 
 	const loadHtmlImage = async (rawUrl: string): Promise<HTMLImageElement> => {
 		const raw = String(rawUrl ?? '').trim()
-		if (raw.startsWith('/') && !raw.startsWith('/media-proxy')) {
+		if (!raw) throw new Error('Görsel adresi boş')
+
+		if (raw.startsWith('blob:') || raw.startsWith('data:')) {
 			return await new Promise((resolve, reject) => {
 				const el = new Image()
-				el.crossOrigin = 'anonymous'
 				el.onload = () => resolve(el)
 				el.onerror = () => reject(new Error('Görsel yüklenemedi'))
 				el.src = raw
