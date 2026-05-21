@@ -1,17 +1,17 @@
 import { useFabricImageLoader } from '~/composables/useFabricImageLoader'
 import {
-	extractCollageLayoutFromProduct,
-	extractProductImageUrls,
-	getProductImageUrl,
-	COLLAGE_FRAME_CONTENT_MARGIN_PX,
 	centerRectsIntersect,
 	clampCenterRectToFrameInner,
+	COLLAGE_FRAME_CONTENT_MARGIN_PX,
 	collageSlotsBoundsInPrintArea,
 	collageSlotsBoundsOnMockup,
 	collageSlotsToLoad,
+	extractCollageLayoutFromProduct,
+	extractProductImageUrls,
+	getProductImageUrl,
 	insetCenterRectByPx,
-	slotRectInPrintArea,
 	resolveLayoutRefBounds,
+	slotRectInPrintArea,
 	slotRectOnMockup,
 	sortLayoutSlots,
 	type CollageLayoutSlot
@@ -19,6 +19,7 @@ import {
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	formatAspect,
+	FRAME_NONE_OPTION,
 	getDefaultSize,
 	isNoFrame,
 	normalizeFrameColor,
@@ -307,8 +308,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	/** Коллаж: mockup заполняет холст (cover), слоты считаются так же. */
-	const mockupViewportFit = (): 'contain' | 'cover' =>
-		hasCollageLayout.value ? 'cover' : 'cover'
+	const mockupViewportFit = (): 'contain' | 'cover' => (hasCollageLayout.value ? 'cover' : 'cover')
 
 	const applyWrapLayoutStyles = () => {
 		const wrap = options.wrapRef.value
@@ -673,10 +673,8 @@ export function useProductCanvasEditor(options: {
 			return collageSlotsBoundsInPrintArea(allSlots, pw, ph, cx(), cy(), layoutRef)
 		}
 
-		const mockupW =
-			mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
-		const mockupH =
-			mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
+		const mockupW = mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
+		const mockupH = mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
 		if (!mockupW || !mockupH) return null
 
 		return collageSlotsBoundsOnMockup(
@@ -787,12 +785,7 @@ export function useProductCanvasEditor(options: {
 		return insetCenterRectByPx(outer, inset)
 	}
 
-	const resolveCollageSlotRect = (rawRect: {
-		left: number
-		top: number
-		width: number
-		height: number
-	}) => {
+	const resolveCollageSlotRect = (rawRect: { left: number; top: number; width: number; height: number }) => {
 		const content = getCollageContentRect()
 		if (!content) return rawRect
 
@@ -833,18 +826,23 @@ export function useProductCanvasEditor(options: {
 		inner?.setCoords()
 	}
 
-	const refitCollageSlotRects = () => {
+	const refitCollageSlotRects = (uploadCount?: number) => {
 		if (!fabricCanvas || !fabricLib || !collagePhotoObjects.length) return
 
 		const metrics = getCollageMetrics()
 		if (!metrics) return
 
 		const { allSlots, sortedSlots, mockupW, mockupH, layoutRef } = metrics
-		const pairs = collageSlotsToLoad(sortedSlots, allSlots, getCollageUploads().length)
+		const count = uploadCount ?? getCollageUploads().length
+		const pairs = collageSlotsToLoad(sortedSlots, allSlots, count)
 
 		for (let i = 0; i < collagePhotoObjects.length; i++) {
 			const group = collagePhotoObjects[i] as import('fabric').fabric.Group
-			const slotDef = pairs[i]?.slotDef ?? sortedSlots[i]
+			const layoutSlot = (group as { data?: { layoutSlot?: number } }).data?.layoutSlot
+			const slotDef =
+				layoutSlot != null
+					? (pairs.find((p) => p.slotDef.slot === layoutSlot)?.slotDef ?? sortedSlots[i])
+					: (pairs[i]?.slotDef ?? sortedSlots[i])
 			if (!group || !slotDef) continue
 
 			const rawRect = rawSlotRectForCollage(slotDef, allSlots, layoutRef, mockupW, mockupH)
@@ -872,10 +870,8 @@ export function useProductCanvasEditor(options: {
 		const layout = collageLayout.value
 		if (!layout) return null
 		const allSlots = layout.layout_json
-		const mockupW =
-			mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
-		const mockupH =
-			mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
+		const mockupW = mockupNaturalW > 0 ? mockupNaturalW : layout.reference_width || viewportW.value
+		const mockupH = mockupNaturalH > 0 ? mockupNaturalH : layout.reference_height || viewportH.value
 
 		return {
 			layout,
@@ -934,10 +930,45 @@ export function useProductCanvasEditor(options: {
 			subTargetCheck: false
 		})
 		group.clipPath = clipRect
+		group.set({ data: { role: 'collage-photo', layoutSlot: slotDef.slot } })
 		lockFabricObject(group)
 
 		fabricCanvas.add(group)
 		collagePhotoObjects.push(group)
+	}
+
+	const waitNextPaint = () =>
+		new Promise<void>((resolve) => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		})
+
+	const markCollageGroupsDirty = () => {
+		for (const obj of collagePhotoObjects) {
+			obj.dirty = true
+			obj.setCoords()
+		}
+	}
+
+	const collagePairCount = (uploadCount: number) => {
+		const metrics = getCollageMetrics()
+		if (!metrics || uploadCount <= 0) return 0
+		return collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploadCount).length
+	}
+
+	const finalizeCollageCanvas = async (uploadCount?: number) => {
+		if (!fabricCanvas || !collagePhotoObjects.length) return
+		const count = uploadCount ?? getCollageUploads().length
+		refitCollageSlotRects(count)
+		markCollageGroupsDirty()
+		await updateFrame()
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
+		await waitNextPaint()
+		if (!fabricCanvas || !collagePhotoObjects.length) return
+		refitCollageSlotRects(count)
+		markCollageGroupsDirty()
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
 	}
 
 	const isMockupDimensionsReady = () => mockupNaturalW > 0 && mockupNaturalH > 0
@@ -958,15 +989,24 @@ export function useProductCanvasEditor(options: {
 		await waitForMockupDimensions()
 	}
 
-	const expectedCollageUploadCount = () => {
+	const getCollageSourceStats = () => {
 		const p = options.product?.value
-		const fromProduct = (p?.inner_images ?? [])
+		const innerRaw = p?.inner_images ?? []
+		const innerWithUrl = innerRaw
 			.map((img) => getProductImageUrl(img))
-			.filter((u) => u.length > 0).length
-		const fromSession = getCollageUploads().length
+			.filter((u) => u.length > 0)
+		const sessionUploads = getCollageUploads()
 		const layoutSlots = collageLayout.value?.layout_json.length ?? 0
-		return Math.max(fromProduct, fromSession, layoutSlots > 0 ? layoutSlots : 0)
+		return {
+			innerImagesTotal: innerRaw.length,
+			innerImagesWithUrl: innerWithUrl.length,
+			sessionUploads: sessionUploads.length,
+			layoutSlots,
+			expected: Math.max(innerWithUrl.length, sessionUploads.length, layoutSlots > 0 ? layoutSlots : 0)
+		}
 	}
+
+	const expectedCollageUploadCount = () => getCollageSourceStats().expected
 
 	const getCollageUploads = () => uploadImages.value.filter((u) => u?.url?.trim())
 
@@ -1008,6 +1048,8 @@ export function useProductCanvasEditor(options: {
 	) => {
 		const { allSlots, sortedSlots, mockupW, mockupH, layoutRef } = metrics
 		const pairs = collageSlotsToLoad(sortedSlots, allSlots, uploads.length)
+		let loaded = 0
+		let failed = 0
 
 		for (const { slotDef, uploadIndex } of pairs) {
 			if (!fabricCanvas) break
@@ -1015,10 +1057,12 @@ export function useProductCanvasEditor(options: {
 			const upload = uploads[uploadIndex]
 			if (!upload?.url || !slotDef) continue
 
-			await loadOneCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+			const ok = await loadOneCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+			if (ok) loaded++
+			else failed++
 		}
 
-		return pairs.length
+		return { pairsToLoad: pairs.length, loaded, failed }
 	}
 
 	const syncCollageSlots = async (): Promise<void> => {
@@ -1028,6 +1072,7 @@ export function useProductCanvasEditor(options: {
 		try {
 			if (collageSyncInFlight) {
 				await collageSyncInFlight
+				await finalizeCollageCanvas()
 				return
 			}
 
@@ -1038,7 +1083,8 @@ export function useProductCanvasEditor(options: {
 				await ensureMockupReady()
 				if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
 
-				const expected = expectedCollageUploadCount()
+				const source = getCollageSourceStats()
+				const expected = source.expected
 				const uploads = await waitForCollageUploadsReady(expected)
 				if (!uploads.length) return
 
@@ -1051,7 +1097,7 @@ export function useProductCanvasEditor(options: {
 				const pairs = collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploads.length)
 				const expectedLoaded = pairs.length
 				let pass = 0
-				while (pass < 3 && fabricCanvas) {
+				while (pass < 10 && fabricCanvas) {
 					if (pass > 0) {
 						removeCollagePhotos()
 						await new Promise<void>((r) => setTimeout(r, 200))
@@ -1062,10 +1108,7 @@ export function useProductCanvasEditor(options: {
 				}
 
 				if (!fabricCanvas) return
-				if (collagePhotoObjects.length > 0) refitCollageSlotRects()
-				await updateFrame()
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
+				await finalizeCollageCanvas(uploads.length)
 				emitDesign()
 				if (canvasReady) syncCanvasDerivedPreviews()
 			}
@@ -1163,10 +1206,7 @@ export function useProductCanvasEditor(options: {
 
 		if (hasCollageLayout.value) {
 			if (collagePhotoObjects.length) {
-				refitCollageSlotRects()
-				await updateFrame()
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
+				await finalizeCollageCanvas()
 				emitDesign()
 				scheduleCanvasPreview()
 			} else {
@@ -1282,12 +1322,12 @@ export function useProductCanvasEditor(options: {
 		if (hasCollageLayout.value && !collagePhotoObjects.length) {
 			await syncCollageSlots()
 		} else if (hasCollageLayout.value && collagePhotoObjects.length) {
-			refitCollageSlotRects()
+			await finalizeCollageCanvas()
+		} else {
+			await updateFrame()
+			reorderLayers()
+			fabricCanvas?.requestRenderAll()
 		}
-		await updateFrame()
-
-		reorderLayers()
-		fabricCanvas?.requestRenderAll()
 		emitDesign()
 		scheduleCanvasPreview()
 	}
@@ -1362,88 +1402,93 @@ export function useProductCanvasEditor(options: {
 			isLoadingImage.value = true
 		}
 		try {
-		disposeCanvas()
-		const initId = canvasInitId
+			disposeCanvas()
+			const initId = canvasInitId
 
-		const mod = await import('fabric')
-		if (!isActiveCanvasInit(initId)) return
+			const mod = await import('fabric')
+			if (!isActiveCanvasInit(initId)) return
 
-		const lib = mod.fabric
-		if (!lib?.Canvas || !lib.Pattern) return
-		fabricLib = lib
+			const lib = mod.fabric
+			if (!lib?.Canvas || !lib.Pattern) return
+			fabricLib = lib
 
-		if (!options.wrapRef.value) return
+			if (!options.wrapRef.value) return
 
-		applyWrapLayoutStyles()
-		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-		if (!isActiveCanvasInit(initId) || !options.wrapRef.value) return
+			applyWrapLayoutStyles()
+			await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+			if (!isActiveCanvasInit(initId) || !options.wrapRef.value) return
 
-		let { width, height } = getViewportSize()
-		if (width < 2 || height < 2) {
-			width = DEFAULT_VIEWPORT_W
-			height = DEFAULT_VIEWPORT_H
-		}
-		viewportW.value = width
-		viewportH.value = height
-
-		const el = document.createElement('canvas')
-		options.wrapRef.value.appendChild(el)
-
-		fabricCanvas = new fabricLib.Canvas(el, {
-			width,
-			height,
-			backgroundColor: '#F5F2ED',
-			preserveObjectStacking: true,
-			selection: false,
-			skipTargetFind: true,
-			defaultCursor: 'default',
-			hoverCursor: 'default'
-		})
-		fabricCanvas.calcOffset()
-		applyWrapLayoutStyles()
-
-		resizeObserver = new ResizeObserver(() => {
-			void resizeCanvasToContainer()
-		})
-		resizeObserver.observe(options.wrapRef.value)
-
-		await applyViewportBackground(initId)
-		if (!isActiveCanvasInit(initId)) return
-
-		if (productBackgroundUrl.value && !isMockupDimensionsReady()) {
-			await waitForMockupDimensions()
-		}
-
-		await resizeCanvasToContainer()
-		if (!isActiveCanvasInit(initId)) return
-
-		syncSelectionFromFormats()
-		syncFrameSelection()
-		await syncPrintArea()
-		if (!isActiveCanvasInit(initId)) return
-
-		if (hasCollageLayout.value) {
-			const expected = expectedCollageUploadCount()
-			let attempts = 0
-			while (attempts < 5 && isActiveCanvasInit(initId)) {
-				const uploads = await waitForCollageUploadsReady(expected)
-				if (!uploads.length && expected > 0) {
-					attempts++
-					continue
-				}
-				if (uploads.length) await syncCollageSlots()
-				if (!isActiveCanvasInit(initId)) return
-				if (!expected || collagePhotoObjects.length >= expected) break
-				await new Promise<void>((r) => setTimeout(r, 120))
-				attempts++
+			let { width, height } = getViewportSize()
+			if (width < 2 || height < 2) {
+				width = DEFAULT_VIEWPORT_W
+				height = DEFAULT_VIEWPORT_H
 			}
-		}
-		if (!isActiveCanvasInit(initId)) return
+			viewportW.value = width
+			viewportH.value = height
 
-		canvasReady = true
-		syncCanvasDerivedPreviews()
-		scheduleCanvasPreview()
-	} finally {
+			const el = document.createElement('canvas')
+			options.wrapRef.value.appendChild(el)
+
+			fabricCanvas = new fabricLib.Canvas(el, {
+				width,
+				height,
+				backgroundColor: '#F5F2ED',
+				preserveObjectStacking: true,
+				selection: false,
+				skipTargetFind: true,
+				defaultCursor: 'default',
+				hoverCursor: 'default'
+			})
+			fabricCanvas.calcOffset()
+			applyWrapLayoutStyles()
+
+			resizeObserver = new ResizeObserver(() => {
+				void resizeCanvasToContainer()
+			})
+			resizeObserver.observe(options.wrapRef.value)
+
+			await applyViewportBackground(initId)
+			if (!isActiveCanvasInit(initId)) return
+
+			if (productBackgroundUrl.value && !isMockupDimensionsReady()) {
+				await waitForMockupDimensions()
+			}
+
+			await resizeCanvasToContainer()
+			if (!isActiveCanvasInit(initId)) return
+
+			syncSelectionFromFormats()
+			syncFrameSelection()
+			await syncPrintArea()
+			if (!isActiveCanvasInit(initId)) return
+
+			if (hasCollageLayout.value) {
+				const expected = expectedCollageUploadCount()
+				let attempts = 0
+				while (attempts < 5 && isActiveCanvasInit(initId)) {
+					const uploads = await waitForCollageUploadsReady(expected)
+					if (!uploads.length && expected > 0) {
+						attempts++
+						continue
+					}
+					if (uploads.length) await syncCollageSlots()
+					if (!isActiveCanvasInit(initId)) return
+					const slotTarget = collagePairCount(uploads.length)
+					if (!slotTarget || collagePhotoObjects.length >= slotTarget) break
+					await new Promise<void>((r) => setTimeout(r, 120))
+					attempts++
+				}
+
+				if (collagePhotoObjects.length) {
+					await applyFrame(FRAME_NONE_OPTION)
+				}
+			}
+			if (!isActiveCanvasInit(initId)) return
+
+			canvasReady = true
+			syncCanvasDerivedPreviews()
+			scheduleCanvasPreview()
+		} finally {
 			if (showCollageLoader) {
 				isCanvasInitializing.value = false
 				if (!canvasReady) isLoadingImage.value = false
@@ -1493,8 +1538,9 @@ export function useProductCanvasEditor(options: {
 				return
 			}
 			if (hasCollageLayout.value) {
-				const expected = expectedCollageUploadCount()
-				if (expected > 0 && collagePhotoObjects.length < expected) {
+				const uploads = getCollageUploads()
+				const slotTarget = collagePairCount(uploads.length)
+				if (slotTarget > 0 && collagePhotoObjects.length < slotTarget) {
 					void syncCollageSlots()
 				}
 			}

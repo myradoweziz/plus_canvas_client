@@ -95,7 +95,7 @@
 			const size = props.sizeOptions.find((s) => s.id === props.selectedSizeId)
 			const sizeLabel = size?.display_name || 'Standart'
 			const frameLabel = selectedFrame.value?.name || 'Çerçevesiz'
-			
+
 			triggerToast(
 				'Sepete Eklendi!',
 				`Ürün: ${props.product.name}\nBoyut: ${sizeLabel}\nÇerçeve: ${frameLabel}\nFiyat: ${displayPrice.value}₺`
@@ -112,7 +112,9 @@
 				v-if="showToast"
 				class="fixed top-6 right-6 z-[9999] flex items-start gap-4 max-w-sm w-full bg-white/90 backdrop-blur-xl rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-white/20"
 			>
-				<div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-[#2B7FFF]/10 text-[#2B7FFF]">
+				<div
+					class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-[#2B7FFF]/10 text-[#2B7FFF]"
+				>
 					<Icon name="favorite" class="w-6 h-6 text-red-500 fill-current" v-if="toastMessage.includes('Favorilere')" />
 					<Icon name="basket" class="w-6 h-6 text-[#2B7FFF]" v-else-if="toastMessage.includes('Sepete')" />
 					<Icon name="checkCircle" class="w-6 h-6 text-green-600" v-else />
@@ -145,10 +147,19 @@
 			class="mt-4 text-sm text-[#B3B3B3] hover:text-[#2B7FFF] transition-colors flex items-center gap-2 cursor-pointer outline-none select-none group"
 			@click="copyProductCode"
 		>
-			<span>Ürün Kodu: <span class="font-bold text-gray-700 group-hover:text-[#2B7FFF] transition-colors">{{ product.product_qode }}</span></span>
+			<span
+				>Ürün Kodu:
+				<span class="font-bold text-gray-700 group-hover:text-[#2B7FFF] transition-colors">{{
+					product.product_qode
+				}}</span></span
+			>
 			<Icon name="copyIcon" class="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
 			<Transition name="fade">
-				<span v-if="copied" class="text-xs text-green-600 font-bold ml-2 bg-green-50 px-2 py-0.5 rounded-md border border-green-200">Kopyalandı!</span>
+				<span
+					v-if="copied"
+					class="text-xs text-green-600 font-bold ml-2 bg-green-50 px-2 py-0.5 rounded-md border border-green-200"
+					>Kopyalandı!</span
+				>
 			</Transition>
 		</button>
 
@@ -178,7 +189,9 @@
 				type="button"
 				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-all hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF]"
 				:class="
-					isFrameActive(frame.id) ? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10 scale-[1.03]' : 'border-gray-200'
+					isFrameActive(frame.id)
+						? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10 scale-[1.03]'
+						: 'border-gray-200'
 				"
 				:aria-pressed="isFrameActive(frame.id)"
 				:title="frame.name"
@@ -219,21 +232,32 @@
 				:disabled="isAddingToCart"
 			>
 				<template v-if="isAddingToCart">
-					<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+					<svg
+						class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+					>
 						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						<path
+							class="opacity-75"
+							fill="currentColor"
+							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+						></path>
 					</svg>
 					Ekleniyor...
 				</template>
-				<template v-else>
-					Sepete Ekle
-				</template>
+				<template v-else> Sepete Ekle </template>
 			</button>
 			<button
 				type="button"
 				@click="toggleFavorite"
 				class="flex items-center justify-center rounded-full w-[54px] h-[54px] border-2 transition-all active:scale-[0.9] cursor-pointer shadow-md"
-				:class="isFavorited ? 'bg-red-50 border-red-200 text-red-500 shadow-red-100 scale-105' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'"
+				:class="
+					isFavorited
+						? 'bg-red-50 border-red-200 text-red-500 shadow-red-100 scale-105'
+						: 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+				"
 			>
 				<Icon
 					name="favorite"
@@ -262,7 +286,7 @@
 	}
 
 	.frame-tile--active {
-		border-color: #2B7FFF !important;
+		border-color: #2b7fff !important;
 	}
 
 	/* Toast Transition */
