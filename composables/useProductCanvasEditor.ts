@@ -348,6 +348,16 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
+	/** Только активный mockup — после смены рамки/формата без цикла по всем фонам. */
+	const refreshActiveProductThumbCollageSoon = () => {
+		if (!shouldSyncProductThumbPreviews()) return
+		if (productThumbPreviewTimer) clearTimeout(productThumbPreviewTimer)
+		productThumbPreviewTimer = setTimeout(() => {
+			productThumbPreviewTimer = null
+			void refreshActiveProductThumbCollage()
+		}, 120)
+	}
+
 	const scheduleProductThumbPreviews = () => {
 		if (!shouldSyncProductThumbPreviews()) {
 			productThumbCollageByIndex.value = {}
@@ -377,12 +387,13 @@ export function useProductCanvasEditor(options: {
 		return url ? previewUrl(url) : ''
 	}
 
-	const scheduleCanvasPreview = () => {
+	const scheduleCanvasPreview = (opts?: { productThumbsActiveOnly?: boolean }) => {
 		if (!import.meta.client || !isCanvasAlive()) return
 		nextTick(() => {
 			requestAnimationFrame(() => {
 				syncCanvasDerivedPreviews()
-				scheduleProductThumbPreviews()
+				if (opts?.productThumbsActiveOnly) refreshActiveProductThumbCollageSoon()
+				else scheduleProductThumbPreviews()
 			})
 		})
 	}
@@ -1465,18 +1476,22 @@ export function useProductCanvasEditor(options: {
 
 	const applyFrame = async (frame: FrameOption) => {
 		selectedFrame.value = frame
+		if (!fabricCanvas || !canvasReady) return
 
 		if (hasCollageLayout.value && !collagePhotoObjects.length) {
 			await syncCollageSlots()
 		} else if (hasCollageLayout.value && collagePhotoObjects.length) {
-			await finalizeCollageCanvas()
+			refitCollageSlotRects()
+			await updateFrame()
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
 		} else {
 			await updateFrame()
 			reorderLayers()
-			fabricCanvas?.requestRenderAll()
+			fabricCanvas.requestRenderAll()
 		}
 		emitDesign()
-		scheduleCanvasPreview()
+		scheduleCanvasPreview({ productThumbsActiveOnly: true })
 	}
 
 	const applyFrameByIndex = async (index: number) => {
@@ -1705,7 +1720,7 @@ export function useProductCanvasEditor(options: {
 		}
 	)
 
-	watch([selectedFormat, selectedSize, selectedFrame], () => {
+	watch([selectedFormat, selectedSize], () => {
 		if (!fabricCanvas || !canvasReady) return
 		scheduleProductThumbPreviews()
 	})
