@@ -19,6 +19,7 @@ import {
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	formatAspect,
+	formatOrientationAspect,
 	FRAME_NONE_OPTION,
 	getDefaultSize,
 	isNoFrame,
@@ -83,10 +84,28 @@ export function useProductCanvasEditor(options: {
 	}
 	const isLoadingImage = ref(false)
 	const isCanvasInitializing = ref(false)
-	const isProductThumbPreviewSyncing = ref(false)
-	const isCanvasLoading = computed(
-		() => isLoadingImage.value || isCanvasInitializing.value || isProductThumbPreviewSyncing.value
-	)
+	let canvasLoadingDepth = 0
+
+	const beginCanvasLoading = () => {
+		canvasLoadingDepth++
+		isLoadingImage.value = true
+	}
+
+	const endCanvasLoading = () => {
+		canvasLoadingDepth = Math.max(0, canvasLoadingDepth - 1)
+		if (canvasLoadingDepth === 0) isLoadingImage.value = false
+	}
+
+	const runWithCanvasLoading = async <T>(fn: () => Promise<T>): Promise<T> => {
+		beginCanvasLoading()
+		try {
+			return await fn()
+		} finally {
+			endCanvasLoading()
+		}
+	}
+
+	const isCanvasLoading = computed(() => isLoadingImage.value || isCanvasInitializing.value)
 	const viewportW = ref(DEFAULT_VIEWPORT_W)
 	const viewportH = ref(DEFAULT_VIEWPORT_H)
 
@@ -182,6 +201,8 @@ export function useProductCanvasEditor(options: {
 	const productThumbCollageByIndex = ref<Record<number, string>>({})
 	let productThumbPreviewSyncId = 0
 	let productThumbPreviewTimer: ReturnType<typeof setTimeout> | null = null
+	let framePreviewSyncId = 0
+	let suppressFormatPreviewWatch = false
 
 	const isCanvasAlive = () => Boolean(fabricCanvas && fabricLib && canvasReady)
 
@@ -289,62 +310,26 @@ export function useProductCanvasEditor(options: {
 		canvasPreviewSrc.value = snap
 		const id = selectedFormat.value?.id
 		if (id == null) return
-		const activeKey = Number(id)
-		const next: Record<number, string> = { [activeKey]: snap }
-		for (const format of formatPresets.value) {
-			next[Number(format.id)] = snap
+		formatPreviewById.value = {
+			...formatPreviewById.value,
+			[Number(id)]: snap
 		}
-		formatPreviewById.value = next
 	}
 
 	const shouldSyncProductThumbPreviews = () =>
 		thumbsAreProductImages.value && hasCollageLayout.value && getCollageUploads().length > 0
 
-	const syncProductThumbPreviews = async () => {
+	const syncProductThumbPreviews = async (opts?: { manageLoading?: boolean }) => {
 		if (!import.meta.client || !shouldSyncProductThumbPreviews()) return
 		if (!fabricCanvas || !fabricLib || !canvasReady) return
 
-		const count = productBackgroundThumbs.value.length
-		if (!count) return
-		if (count === 1) {
-			syncCanvasDerivedPreviews()
-			return
-		}
-
-		const syncId = ++productThumbPreviewSyncId
-		const savedIdx = activeProductImageIndex.value
-		const uploads = getCollageUploads()
-
-		isProductThumbPreviewSyncing.value = true
-		const next: Record<number, string> = { ...productThumbCollageByIndex.value }
+		const manageLoading = opts?.manageLoading !== false
+		if (manageLoading) beginCanvasLoading()
 		try {
-			for (let i = 0; i < count; i++) {
-				if (syncId !== productThumbPreviewSyncId) break
-				activeProductImageIndex.value = i
-				await applyViewportBackground()
-				if (hasCollageLayout.value) await syncCollageSlots()
-				else await syncPhotos()
-				if (!fabricCanvas || syncId !== productThumbPreviewSyncId) break
-				await finalizeCollageCanvas(uploads.length)
-				const snap = captureProductThumbCollageOverlay()
-				if (snap) next[i] = snap
-			}
-
-			if (syncId === productThumbPreviewSyncId) {
-				productThumbCollageByIndex.value = next
-			}
+			await refreshAllProductThumbCollagesLight()
+			syncCanvasDerivedPreviews()
 		} finally {
-			isProductThumbPreviewSyncing.value = false
-			activeProductImageIndex.value = savedIdx
-			if (fabricCanvas && canvasReady) {
-				await applyViewportBackground()
-				if (hasCollageLayout.value) await syncCollageSlots()
-				else await syncPhotos()
-				await finalizeCollageCanvas(uploads.length)
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
-				syncCanvasDerivedPreviews()
-			}
+			if (manageLoading) endCanvasLoading()
 		}
 	}
 
@@ -506,12 +491,20 @@ export function useProductCanvasEditor(options: {
 		img.setCoords()
 	}
 
-	const getPrintDimensions = () => {
+	/** Ориентация области печати: по формату (Dikey/Kare/Yatay); Boyut — только при preferSize. */
+	const getPrintDimensions = (opts?: { preferSize?: boolean }) => {
 		const maxW = viewportW.value * 0.9
 		const maxH = viewportH.value * 0.9
 		const format = selectedFormat.value
 		if (!format) return printBoxInViewport(1, maxW, maxH)
-		return printBoxInViewport(formatAspect(format, selectedSize.value), maxW, maxH)
+
+		const size = selectedSize.value
+		const aspect =
+			opts?.preferSize && size && size.height > 0
+				? formatAspect(format, size)
+				: formatOrientationAspect(format)
+
+		return printBoxInViewport(aspect, maxW, maxH)
 	}
 
 	const layoutRefForCollage = (allSlots: CollageLayoutSlot[]) => {
@@ -759,24 +752,51 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	/** PNG коллажа без mockup — накладывается поверх фона в левом слайдере. */
-	const captureProductThumbCollageOverlay = (): string | null => {
-		if (!fabricCanvas || !collagePhotoObjects.length) return null
+	const isThumbOverlayObject = (obj: import('fabric').fabric.Object) => {
+		if (collagePhotoObjects.includes(obj)) return true
+		if (obj === frameObject) return true
+		const role = (obj as { data?: { role?: string } }).data?.role
+		return role === 'frame-border'
+	}
+
+	const getProductThumbCollageExportBounds = () => {
+		const outer = getFrameOuterBounds()
+		if (outer && outer.width >= 1 && outer.height >= 1) {
+			const padRatio = 0.1
+			const w = outer.width * (1 + padRatio * 2)
+			const h = outer.height * (1 + padRatio * 2)
+			return {
+				left: Math.max(0, Math.floor(outer.left - w / 2)),
+				top: Math.max(0, Math.floor(outer.top - h / 2)),
+				width: Math.min(viewportW.value, Math.ceil(w)),
+				height: Math.min(viewportH.value, Math.ceil(h))
+			}
+		}
+
 		const bounds = getCollageBoundsFromObjects()
 		if (!bounds || bounds.width < 1 || bounds.height < 1) return null
 
 		const padRatio = 0.06
 		const w = bounds.width * (1 + padRatio * 2)
 		const h = bounds.height * (1 + padRatio * 2)
-		const left = Math.max(0, Math.floor(bounds.left - w / 2))
-		const top = Math.max(0, Math.floor(bounds.top - h / 2))
-		const width = Math.min(viewportW.value, Math.ceil(w))
-		const height = Math.min(viewportH.value, Math.ceil(h))
+		return {
+			left: Math.max(0, Math.floor(bounds.left - w / 2)),
+			top: Math.max(0, Math.floor(bounds.top - h / 2)),
+			width: Math.min(viewportW.value, Math.ceil(w)),
+			height: Math.min(viewportH.value, Math.ceil(h))
+		}
+	}
 
-		const collageSet = new Set(collagePhotoObjects)
+	/** PNG коллажа + рамка (без mockup) — слой поверх фона в левом слайдере. */
+	const captureProductThumbCollageOverlay = (): string | null => {
+		if (!fabricCanvas || !collagePhotoObjects.length) return null
+		const exportBounds = getProductThumbCollageExportBounds()
+		if (!exportBounds) return null
+
+		const { left, top, width, height } = exportBounds
 		const toggled: { obj: import('fabric').fabric.Object; visible: boolean }[] = []
 		for (const obj of fabricCanvas.getObjects()) {
-			if (!collageSet.has(obj)) {
+			if (!isThumbOverlayObject(obj)) {
 				toggled.push({ obj, visible: obj.visible !== false })
 				obj.visible = false
 			}
@@ -809,13 +829,144 @@ export function useProductCanvasEditor(options: {
 	const refreshActiveProductThumbCollage = () => {
 		if (!isCanvasAlive() || !thumbsAreProductImages.value || !hasCollageLayout.value) return
 		if (!getCollageUploads().length) return
-		if (isProductThumbPreviewSyncing.value) return
+		if (isLoadingImage.value) return
 		const snap = captureProductThumbCollageOverlay()
 		if (!snap) return
 		productThumbCollageByIndex.value = {
 			...productThumbCollageByIndex.value,
 			[activeProductImageIndex.value]: snap
 		}
+	}
+
+	const restoreCanvasLayoutAfterPreviewPass = async () => {
+		if (!fabricCanvas || !canvasReady) return
+		const format = selectedFormat.value
+		if (!format) return
+		const { width, height } = getPrintDimensions()
+		if (printAreaRect) {
+			printAreaRect.set({
+				width,
+				height,
+				scaleX: 1,
+				scaleY: 1,
+				left: cx(),
+				top: cy()
+			})
+			printAreaRect.setCoords()
+		}
+		if (hasCollageLayout.value && collagePhotoObjects.length) {
+			refitCollageSlotRects()
+		} else if (photoObject) {
+			fitPhotoCover()
+		}
+		await updateFrame()
+		reorderLayers()
+		fabricCanvas.requestRenderAll()
+	}
+
+	/** Лёгкое обновление миниатюр слева: refit + снимок, без syncCollageSlots. */
+	const refreshAllProductThumbCollagesLight = async () => {
+		if (!shouldSyncProductThumbPreviews() || !fabricCanvas || !canvasReady) return
+
+		const count = productBackgroundThumbs.value.length
+		if (count <= 1) {
+			refreshActiveProductThumbCollage()
+			return
+		}
+
+		const syncId = ++productThumbPreviewSyncId
+		const savedIdx = activeProductImageIndex.value
+		const next = { ...productThumbCollageByIndex.value }
+
+		try {
+			for (let i = 0; i < count; i++) {
+				if (syncId !== productThumbPreviewSyncId) break
+				activeProductImageIndex.value = i
+				await applyViewportBackground()
+				refitCollageSlotRects()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				const snap = captureProductThumbCollageOverlay()
+				if (snap) next[i] = snap
+			}
+			if (syncId === productThumbPreviewSyncId) {
+				productThumbCollageByIndex.value = next
+			}
+		} finally {
+			if (syncId !== productThumbPreviewSyncId) return
+			activeProductImageIndex.value = savedIdx
+			await applyViewportBackground()
+			await restoreCanvasLayoutAfterPreviewPass()
+		}
+	}
+
+	/** Превью всех форматов в полосе (только refit, без перезагрузки фото). */
+	const refreshAllFormatPreviewsLight = async (syncId: number) => {
+		if (!fabricCanvas || !canvasReady || !formatPresets.value.length) return
+
+		const savedFormat = selectedFormat.value
+		const savedSize = selectedSize.value
+		const next = { ...formatPreviewById.value }
+
+		suppressFormatPreviewWatch = true
+		try {
+			for (const format of formatPresets.value) {
+				if (syncId !== framePreviewSyncId) return
+				selectedFormat.value = format
+				selectedSize.value = getDefaultSize(format)
+				const { width, height } = getPrintDimensions()
+				if (printAreaRect) {
+					printAreaRect.set({
+						width,
+						height,
+						scaleX: 1,
+						scaleY: 1,
+						left: cx(),
+						top: cy()
+					})
+					printAreaRect.setCoords()
+				}
+				if (hasCollageLayout.value && collagePhotoObjects.length) {
+					refitCollageSlotRects()
+				} else if (photoObject) {
+					fitPhotoCover()
+				}
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				const snap = captureCanvasPreview()
+				if (snap) next[Number(format.id)] = snap
+			}
+
+			if (syncId !== framePreviewSyncId) return
+			if (savedFormat) selectedFormat.value = savedFormat
+			if (savedSize) selectedSize.value = savedSize
+			formatPreviewById.value = next
+			await restoreCanvasLayoutAfterPreviewPass()
+		} finally {
+			suppressFormatPreviewWatch = false
+		}
+	}
+
+	const refreshLayoutDerivedPreviews = async (opts?: {
+		refreshAllFormatPreviews?: boolean
+		refreshLeftThumbs?: boolean
+	}) => {
+		if (!fabricCanvas || !canvasReady) return
+		await waitNextPaint()
+
+		if (opts?.refreshAllFormatPreviews && formatPresets.value.length) {
+			const syncId = ++framePreviewSyncId
+			await refreshAllFormatPreviewsLight(syncId)
+			if (syncId !== framePreviewSyncId) return
+		}
+
+		if (opts?.refreshLeftThumbs !== false) {
+			await refreshAllProductThumbCollagesLight()
+		}
+
+		syncCanvasDerivedPreviews()
 	}
 
 	const getCollageBoundsFromLayout = () => {
@@ -1122,7 +1273,6 @@ export function useProductCanvasEditor(options: {
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
 		await waitNextPaint()
-		if (!fabricCanvas || !collagePhotoObjects.length) return
 		refitCollageSlotRects(count)
 		markCollageGroupsDirty()
 		reorderLayers()
@@ -1223,10 +1373,11 @@ export function useProductCanvasEditor(options: {
 		return { pairsToLoad: pairs.length, loaded, failed }
 	}
 
-	const syncCollageSlots = async (): Promise<void> => {
+	const syncCollageSlots = async (opts?: { manageLoading?: boolean }): Promise<void> => {
 		if (!fabricCanvas || !fabricLib || !printAreaRect || !collageLayout.value) return
 
-		isLoadingImage.value = true
+		const manageLoading = opts?.manageLoading !== false
+		if (manageLoading) beginCanvasLoading()
 		try {
 			if (collageSyncInFlight) {
 				await collageSyncInFlight
@@ -1275,16 +1426,17 @@ export function useProductCanvasEditor(options: {
 			await collageSyncInFlight
 		} finally {
 			collageSyncInFlight = null
-			isLoadingImage.value = false
+			if (manageLoading) endCanvasLoading()
 		}
 	}
 
-	const syncPhotos = async (opts?: { syncCollage?: boolean }) => {
+	const syncPhotos = async (opts?: { syncCollage?: boolean; manageLoading?: boolean }) => {
 		if (!fabricCanvas || !fabricLib || !printAreaRect) return
 
 		const shouldSyncCollage = opts?.syncCollage !== false
+		const manageLoading = opts?.manageLoading !== false
 
-		isLoadingImage.value = true
+		if (manageLoading) beginCanvasLoading()
 		try {
 			const useTemplateBg = Boolean(productBackgroundUrl.value)
 			if (printAreaRect) {
@@ -1294,7 +1446,7 @@ export function useProductCanvasEditor(options: {
 			}
 
 			if (hasCollageLayout.value) {
-				if (shouldSyncCollage) await syncCollageSlots()
+				if (shouldSyncCollage) await syncCollageSlots({ manageLoading: false })
 				return
 			}
 
@@ -1318,15 +1470,22 @@ export function useProductCanvasEditor(options: {
 				emitDesign()
 			}
 		} finally {
-			isLoadingImage.value = false
+			if (manageLoading) endCanvasLoading()
 			scheduleCanvasPreview()
 		}
 	}
 
-	const syncPrintArea = async () => {
+	const syncPrintArea = async (opts?: {
+		preferSize?: boolean
+		syncCollage?: boolean
+		manageLoading?: boolean
+	}) => {
 		if (!fabricCanvas || !fabricLib || !selectedFormat.value) return
 
-		const { width, height } = getPrintDimensions()
+		const manageLoading = opts?.manageLoading !== false
+		if (manageLoading) beginCanvasLoading()
+		try {
+		const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
 
 		const useTemplateBg = Boolean(productBackgroundUrl.value)
 
@@ -1359,24 +1518,33 @@ export function useProductCanvasEditor(options: {
 			printAreaRect.setCoords()
 		}
 
-		await syncPhotos({ syncCollage: !hasCollageLayout.value })
+		await syncPhotos({
+			syncCollage: opts?.syncCollage ?? !hasCollageLayout.value,
+			manageLoading: false
+		})
 		if (!fabricCanvas) return
 
 		if (hasCollageLayout.value) {
 			if (collagePhotoObjects.length) {
-				await finalizeCollageCanvas()
+				refitCollageSlotRects()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
 				emitDesign()
 				scheduleCanvasPreview()
 			} else {
-				await syncCollageSlots()
+				await syncCollageSlots({ manageLoading: false })
 			}
+		}
+		} finally {
+			if (manageLoading) endCanvasLoading()
 		}
 	}
 
 	const setPhotoFromUrl = async (url: string, meta?: TempDesignImage | null, opts?: { skipBackground?: boolean }) => {
 		if (!fabricCanvas || !fabricLib) return
 		const manageLoading = !opts?.skipBackground
-		if (manageLoading) isLoadingImage.value = true
+		if (manageLoading) beginCanvasLoading()
 		try {
 			if (!opts?.skipBackground && printAreaRect) {
 				printAreaRect.set({
@@ -1407,7 +1575,7 @@ export function useProductCanvasEditor(options: {
 			emitDesign()
 			scheduleCanvasPreview()
 		} finally {
-			if (manageLoading) isLoadingImage.value = false
+			if (manageLoading) endCanvasLoading()
 		}
 	}
 
@@ -1415,26 +1583,32 @@ export function useProductCanvasEditor(options: {
 		const count = productBackgroundThumbs.value.length
 		if (index < 0 || index >= count) return
 		if (activeProductImageIndex.value === index) return
-		activeProductImageIndex.value = index
 
-		if (!fabricCanvas || !canvasReady) return
+		await runWithCanvasLoading(async () => {
+			activeProductImageIndex.value = index
+			if (!fabricCanvas || !canvasReady) return
 
-		await applyViewportBackground()
-		if (hasCollageLayout.value) {
-			await syncCollageSlots()
-		} else {
-			await syncPhotos()
-		}
-		reorderLayers()
-		fabricCanvas.requestRenderAll()
-		scheduleCanvasPreview()
+			await applyViewportBackground()
+			if (hasCollageLayout.value) {
+				await syncCollageSlots({ manageLoading: false })
+			} else {
+				await syncPhotos({ manageLoading: false })
+			}
+			if (!fabricCanvas) return
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
+			scheduleCanvasPreview()
+			await refreshLayoutDerivedPreviews({ refreshLeftThumbs: true })
+		})
 	}
 
 	const selectUploadImage = async (index: number) => {
 		const list = uploadImages.value
 		if (index < 0 || index >= list.length) return
-		designStore.setActiveImageIndex(index)
-		await syncPhotos()
+		await runWithCanvasLoading(async () => {
+			designStore.setActiveImageIndex(index)
+			await syncPhotos({ manageLoading: false })
+		})
 	}
 
 	/** Клик по миниатюре слева. */
@@ -1447,13 +1621,21 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyFormat = async (format: CanvasFormat) => {
-		selectedFormat.value = format
-		selectedSize.value = getDefaultSize(format)
-		if (!fabricCanvas) {
-			await tryInitOrSyncFormats()
-			return
-		}
-		await syncPrintArea()
+		await runWithCanvasLoading(async () => {
+			suppressFormatPreviewWatch = true
+			try {
+				selectedFormat.value = format
+				selectedSize.value = getDefaultSize(format)
+				if (!fabricCanvas || !canvasReady) {
+					await tryInitOrSyncFormats()
+					return
+				}
+				await syncPrintArea({ manageLoading: false })
+				await refreshLayoutDerivedPreviews({ refreshLeftThumbs: true })
+			} finally {
+				suppressFormatPreviewWatch = false
+			}
+		})
 	}
 
 	const applyFormatById = async (formatId: number) => {
@@ -1467,31 +1649,43 @@ export function useProductCanvasEditor(options: {
 		const format = selectedFormat.value
 		if (!format) return
 		const s = format.sizes.find((x) => x.id === sizeId)
-		if (s) {
-			selectedSize.value = s
-			await syncPrintArea()
-			emitDesign()
-		}
+		if (!s) return
+		await runWithCanvasLoading(async () => {
+			suppressFormatPreviewWatch = true
+			try {
+				selectedSize.value = s
+				await syncPrintArea({ preferSize: true, manageLoading: false })
+				emitDesign()
+				await refreshLayoutDerivedPreviews({ refreshLeftThumbs: true })
+			} finally {
+				suppressFormatPreviewWatch = false
+			}
+		})
 	}
 
 	const applyFrame = async (frame: FrameOption) => {
-		selectedFrame.value = frame
-		if (!fabricCanvas || !canvasReady) return
+		await runWithCanvasLoading(async () => {
+			selectedFrame.value = frame
+			if (!fabricCanvas || !canvasReady) return
 
-		if (hasCollageLayout.value && !collagePhotoObjects.length) {
-			await syncCollageSlots()
-		} else if (hasCollageLayout.value && collagePhotoObjects.length) {
-			refitCollageSlotRects()
-			await updateFrame()
-			reorderLayers()
-			fabricCanvas.requestRenderAll()
-		} else {
-			await updateFrame()
-			reorderLayers()
-			fabricCanvas.requestRenderAll()
-		}
-		emitDesign()
-		scheduleCanvasPreview({ productThumbsActiveOnly: true })
+			if (hasCollageLayout.value && !collagePhotoObjects.length) {
+				await syncCollageSlots({ manageLoading: false })
+			} else if (hasCollageLayout.value && collagePhotoObjects.length) {
+				refitCollageSlotRects()
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+			} else {
+				await updateFrame()
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+			}
+			emitDesign()
+			await refreshLayoutDerivedPreviews({
+				refreshAllFormatPreviews: true,
+				refreshLeftThumbs: true
+			})
+		})
 	}
 
 	const applyFrameByIndex = async (index: number) => {
@@ -1534,11 +1728,14 @@ export function useProductCanvasEditor(options: {
 		thumbPreviewByIndex.value = {}
 		productThumbCollageByIndex.value = {}
 		productThumbPreviewSyncId++
+		framePreviewSyncId++
 		if (productThumbPreviewTimer) {
 			clearTimeout(productThumbPreviewTimer)
 			productThumbPreviewTimer = null
 		}
 		canvasPreviewSrc.value = ''
+		canvasLoadingDepth = 0
+		isLoadingImage.value = false
 		canvasInitId++
 		canvasReady = false
 		resizeObserver?.disconnect()
@@ -1719,11 +1916,6 @@ export function useProductCanvasEditor(options: {
 			}
 		}
 	)
-
-	watch([selectedFormat, selectedSize], () => {
-		if (!fabricCanvas || !canvasReady) return
-		scheduleProductThumbPreviews()
-	})
 
 	watch([collageLayout, productBackgroundUrl], () => {
 		if (!fabricCanvas || !canvasReady) return
