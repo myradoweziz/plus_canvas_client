@@ -6,6 +6,8 @@
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
 		getThumbPreviewSrc: (index: number) => string
+		getProductThumbBackgroundSrc?: (index: number) => string
+		getProductThumbCollageSrc?: (index: number) => string
 		formatPresets: CanvasFormat[]
 		formatPreviewById: Record<number, string>
 		canvasPreviewSrc?: string
@@ -26,6 +28,8 @@
 			:images="images"
 			:is-thumb-active="isThumbActive"
 			:get-thumb-preview-src="getThumbPreviewSrc"
+			:get-product-thumb-background-src="getProductThumbBackgroundSrc"
+			:get-product-thumb-collage-src="getProductThumbCollageSrc"
 			@select="$emit('thumb-select', $event)"
 		/>
 

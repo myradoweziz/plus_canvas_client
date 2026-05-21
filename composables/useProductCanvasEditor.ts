@@ -51,12 +51,6 @@ export function useProductCanvasEditor(options: {
 	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
 	const activeProductImageIndex = ref(0)
 
-	const productBackgroundUrl = computed(() => {
-		const urls = extractProductImageUrls(options.product?.value)
-		if (!urls.length) return null
-		const idx = Math.min(activeProductImageIndex.value, urls.length - 1)
-		return urls[idx] ?? null
-	})
 	const hasCollageLayout = computed(() => (collageLayout.value?.layout_json.length ?? 0) > 0)
 	const selectedFormat = ref<CanvasFormat | null>(null)
 	const selectedSize = ref<PrintSizeOption | null>(null)
@@ -89,7 +83,10 @@ export function useProductCanvasEditor(options: {
 	}
 	const isLoadingImage = ref(false)
 	const isCanvasInitializing = ref(false)
-	const isCanvasLoading = computed(() => isLoadingImage.value || isCanvasInitializing.value)
+	const isProductThumbPreviewSyncing = ref(false)
+	const isCanvasLoading = computed(
+		() => isLoadingImage.value || isCanvasInitializing.value || isProductThumbPreviewSyncing.value
+	)
 	const viewportW = ref(DEFAULT_VIEWPORT_W)
 	const viewportH = ref(DEFAULT_VIEWPORT_H)
 
@@ -149,6 +146,15 @@ export function useProductCanvasEditor(options: {
 
 	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
 
+	/** Тот же URL mockup, что и в левом слайдере (product.images). */
+	const productBackgroundUrl = computed(() => {
+		const bg = productBackgroundThumbs.value
+		if (!bg.length) return null
+		const idx = Math.min(activeProductImageIndex.value, bg.length - 1)
+		const url = String(bg[idx]?.url ?? '').trim()
+		return url || null
+	})
+
 	const activeImage = computed(() => designStore.getActiveImage(options.productId.value))
 
 	const activeImageIndex = computed(() => {
@@ -172,6 +178,10 @@ export function useProductCanvasEditor(options: {
 	const canvasPreviewSrc = ref('')
 	const formatPreviewById = ref<Record<number, string>>({})
 	const thumbPreviewByIndex = ref<Record<number, string>>({})
+	/** Слева: только коллаж inner_images (прозрачный PNG поверх mockup в слайде). */
+	const productThumbCollageByIndex = ref<Record<number, string>>({})
+	let productThumbPreviewSyncId = 0
+	let productThumbPreviewTimer: ReturnType<typeof setTimeout> | null = null
 
 	const isCanvasAlive = () => Boolean(fabricCanvas && fabricLib && canvasReady)
 
@@ -265,9 +275,15 @@ export function useProductCanvasEditor(options: {
 		thumbPreviewByIndex.value = next
 	}
 
+	const scheduleActiveProductThumbCollage = () => {
+		if (!import.meta.client || !shouldSyncProductThumbPreviews()) return
+		requestAnimationFrame(() => refreshActiveProductThumbCollage())
+	}
+
 	const syncCanvasDerivedPreviews = () => {
 		if (!isCanvasAlive()) return
 		captureSlotThumbnails()
+		scheduleActiveProductThumbCollage()
 		const snap = captureCanvasPreview()
 		if (!snap) return
 		canvasPreviewSrc.value = snap
@@ -281,10 +297,79 @@ export function useProductCanvasEditor(options: {
 		formatPreviewById.value = next
 	}
 
+	const shouldSyncProductThumbPreviews = () =>
+		thumbsAreProductImages.value && hasCollageLayout.value && getCollageUploads().length > 0
+
+	const syncProductThumbPreviews = async () => {
+		if (!import.meta.client || !shouldSyncProductThumbPreviews()) return
+		if (!fabricCanvas || !fabricLib || !canvasReady) return
+
+		const count = productBackgroundThumbs.value.length
+		if (!count) return
+		if (count === 1) {
+			syncCanvasDerivedPreviews()
+			return
+		}
+
+		const syncId = ++productThumbPreviewSyncId
+		const savedIdx = activeProductImageIndex.value
+		const uploads = getCollageUploads()
+
+		isProductThumbPreviewSyncing.value = true
+		const next: Record<number, string> = { ...productThumbCollageByIndex.value }
+		try {
+			for (let i = 0; i < count; i++) {
+				if (syncId !== productThumbPreviewSyncId) break
+				activeProductImageIndex.value = i
+				await applyViewportBackground()
+				if (hasCollageLayout.value) await syncCollageSlots()
+				else await syncPhotos()
+				if (!fabricCanvas || syncId !== productThumbPreviewSyncId) break
+				await finalizeCollageCanvas(uploads.length)
+				const snap = captureProductThumbCollageOverlay()
+				if (snap) next[i] = snap
+			}
+
+			if (syncId === productThumbPreviewSyncId) {
+				productThumbCollageByIndex.value = next
+			}
+		} finally {
+			isProductThumbPreviewSyncing.value = false
+			activeProductImageIndex.value = savedIdx
+			if (fabricCanvas && canvasReady) {
+				await applyViewportBackground()
+				if (hasCollageLayout.value) await syncCollageSlots()
+				else await syncPhotos()
+				await finalizeCollageCanvas(uploads.length)
+				reorderLayers()
+				fabricCanvas.requestRenderAll()
+				syncCanvasDerivedPreviews()
+			}
+		}
+	}
+
+	const scheduleProductThumbPreviews = () => {
+		if (!shouldSyncProductThumbPreviews()) {
+			productThumbCollageByIndex.value = {}
+			return
+		}
+		if (productThumbPreviewTimer) clearTimeout(productThumbPreviewTimer)
+		productThumbPreviewTimer = setTimeout(() => {
+			productThumbPreviewTimer = null
+			void syncProductThumbPreviews()
+		}, 450)
+	}
+
+	const getProductThumbBackgroundSrc = (index: number) => {
+		const url = productBackgroundThumbs.value[index]?.url
+		return url ? previewUrl(url) : ''
+	}
+
+	const getProductThumbCollageSrc = (index: number) => productThumbCollageByIndex.value[index] ?? ''
+
 	const getThumbPreviewSrc = (index: number) => {
 		if (thumbsAreProductImages.value) {
-			const url = productBackgroundThumbs.value[index]?.url
-			return url ? previewUrl(url) : ''
+			return getProductThumbBackgroundSrc(index)
 		}
 		const fromCanvas = thumbPreviewByIndex.value[index]
 		if (fromCanvas) return fromCanvas
@@ -295,7 +380,10 @@ export function useProductCanvasEditor(options: {
 	const scheduleCanvasPreview = () => {
 		if (!import.meta.client || !isCanvasAlive()) return
 		nextTick(() => {
-			requestAnimationFrame(() => syncCanvasDerivedPreviews())
+			requestAnimationFrame(() => {
+				syncCanvasDerivedPreviews()
+				scheduleProductThumbPreviews()
+			})
 		})
 	}
 
@@ -657,6 +745,65 @@ export function useProductCanvasEditor(options: {
 			top: (minT + maxB) / 2,
 			width: maxR - minL,
 			height: maxB - minT
+		}
+	}
+
+	/** PNG коллажа без mockup — накладывается поверх фона в левом слайдере. */
+	const captureProductThumbCollageOverlay = (): string | null => {
+		if (!fabricCanvas || !collagePhotoObjects.length) return null
+		const bounds = getCollageBoundsFromObjects()
+		if (!bounds || bounds.width < 1 || bounds.height < 1) return null
+
+		const padRatio = 0.06
+		const w = bounds.width * (1 + padRatio * 2)
+		const h = bounds.height * (1 + padRatio * 2)
+		const left = Math.max(0, Math.floor(bounds.left - w / 2))
+		const top = Math.max(0, Math.floor(bounds.top - h / 2))
+		const width = Math.min(viewportW.value, Math.ceil(w))
+		const height = Math.min(viewportH.value, Math.ceil(h))
+
+		const collageSet = new Set(collagePhotoObjects)
+		const toggled: { obj: import('fabric').fabric.Object; visible: boolean }[] = []
+		for (const obj of fabricCanvas.getObjects()) {
+			if (!collageSet.has(obj)) {
+				toggled.push({ obj, visible: obj.visible !== false })
+				obj.visible = false
+			}
+		}
+		const prevBg = fabricCanvas.backgroundColor
+		fabricCanvas.backgroundColor = 'transparent'
+
+		try {
+			fabricCanvas.renderAll()
+			return fabricCanvas.toDataURL({
+				format: 'png',
+				quality: 0.9,
+				multiplier: 0.38,
+				left,
+				top,
+				width,
+				height
+			})
+		} catch {
+			return null
+		} finally {
+			for (const { obj, visible } of toggled) obj.visible = visible
+			if (viewportBgImage) viewportBgImage.visible = true
+			fabricCanvas.backgroundColor = prevBg
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
+		}
+	}
+
+	const refreshActiveProductThumbCollage = () => {
+		if (!isCanvasAlive() || !thumbsAreProductImages.value || !hasCollageLayout.value) return
+		if (!getCollageUploads().length) return
+		if (isProductThumbPreviewSyncing.value) return
+		const snap = captureProductThumbCollageOverlay()
+		if (!snap) return
+		productThumbCollageByIndex.value = {
+			...productThumbCollageByIndex.value,
+			[activeProductImageIndex.value]: snap
 		}
 	}
 
@@ -1370,6 +1517,12 @@ export function useProductCanvasEditor(options: {
 	const disposeCanvas = () => {
 		formatPreviewById.value = {}
 		thumbPreviewByIndex.value = {}
+		productThumbCollageByIndex.value = {}
+		productThumbPreviewSyncId++
+		if (productThumbPreviewTimer) {
+			clearTimeout(productThumbPreviewTimer)
+			productThumbPreviewTimer = null
+		}
 		canvasPreviewSrc.value = ''
 		canvasInitId++
 		canvasReady = false
@@ -1488,6 +1641,7 @@ export function useProductCanvasEditor(options: {
 			canvasReady = true
 			syncCanvasDerivedPreviews()
 			scheduleCanvasPreview()
+			scheduleProductThumbPreviews()
 		} finally {
 			if (showCollageLoader) {
 				isCanvasInitializing.value = false
@@ -1532,7 +1686,10 @@ export function useProductCanvasEditor(options: {
 	watch(
 		() => uploadImages.value.length,
 		(len) => {
-			if (len === 0) return
+			if (len === 0) {
+				productThumbCollageByIndex.value = {}
+				return
+			}
 			if (!fabricCanvas || !canvasReady) {
 				void tryInitOrSyncFormats()
 				return
@@ -1543,9 +1700,15 @@ export function useProductCanvasEditor(options: {
 				if (slotTarget > 0 && collagePhotoObjects.length < slotTarget) {
 					void syncCollageSlots()
 				}
+				scheduleProductThumbPreviews()
 			}
 		}
 	)
+
+	watch([selectedFormat, selectedSize, selectedFrame], () => {
+		if (!fabricCanvas || !canvasReady) return
+		scheduleProductThumbPreviews()
+	})
 
 	watch([collageLayout, productBackgroundUrl], () => {
 		if (!fabricCanvas || !canvasReady) return
@@ -1581,6 +1744,7 @@ export function useProductCanvasEditor(options: {
 			if (len > 0 && activeProductImageIndex.value >= len) {
 				activeProductImageIndex.value = 0
 			}
+			scheduleProductThumbPreviews()
 		}
 	)
 
@@ -1608,6 +1772,8 @@ export function useProductCanvasEditor(options: {
 		innerThumbImages,
 		thumbPreviewByIndex,
 		getThumbPreviewSrc,
+		getProductThumbBackgroundSrc,
+		getProductThumbCollageSrc,
 		canvasPreviewSrc,
 		formatPreviewById,
 		activeImage,

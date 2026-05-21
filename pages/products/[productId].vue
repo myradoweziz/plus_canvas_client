@@ -80,6 +80,8 @@
 		previewUrl,
 		selectThumb,
 		getThumbPreviewSrc,
+		getProductThumbBackgroundSrc,
+		getProductThumbCollageSrc,
 		formatPresets,
 		sizeOptions,
 		frameOptions,
@@ -175,6 +177,8 @@
 						:images="thumbImages"
 						:is-thumb-active="isThumbActive"
 						:get-thumb-preview-src="getThumbPreviewSrc"
+						:get-product-thumb-background-src="getProductThumbBackgroundSrc"
+						:get-product-thumb-collage-src="getProductThumbCollageSrc"
 						:format-presets="formatPresets"
 						:format-preview-by-id="formatPreviewById"
 						:canvas-preview-src="canvasPreviewSrc"

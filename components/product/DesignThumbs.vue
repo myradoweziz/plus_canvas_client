@@ -13,7 +13,13 @@
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
 		getThumbPreviewSrc: (index: number) => string
+		getProductThumbBackgroundSrc?: (index: number) => string
+		getProductThumbCollageSrc?: (index: number) => string
 	}>()
+
+	const useStackedProductThumb = (img: TempDesignImage) =>
+		img.session_id === 'product-image' &&
+		Boolean(props.getProductThumbBackgroundSrc && props.getProductThumbCollageSrc)
 
 	const emit = defineEmits<{
 		(e: 'select', index: number): void
@@ -55,10 +61,30 @@
 				v-for="(img, index) in images"
 				:key="`${img.session_id}-${img.id}`"
 				class="thumb-slide cursor-pointer"
-				:class="{ 'is-thumb-active': isThumbActive(index) }"
+				:class="{
+					'is-thumb-active': isThumbActive(index),
+					'thumb-slide--product': useStackedProductThumb(img)
+				}"
 				@click="onThumbClick(index)"
 			>
+				<div v-if="useStackedProductThumb(img)" class="thumb-slide__stack">
+					<img
+						:src="getProductThumbBackgroundSrc!(index)"
+						:alt="`mockup-bg-${img.id}`"
+						class="thumb-slide__bg"
+						loading="lazy"
+						@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
+					/>
+					<img
+						v-if="getProductThumbCollageSrc!(index)"
+						:src="getProductThumbCollageSrc!(index)"
+						:alt="`mockup-collage-${img.id}`"
+						class="thumb-slide__collage"
+						loading="lazy"
+					/>
+				</div>
 				<img
+					v-else
 					:src="getThumbPreviewSrc(index)"
 					:alt="img.session_id === 'product-image' ? `mockup-${img.id}` : `upload-${img.id}`"
 					class="thumb-slide__img"
@@ -106,6 +132,35 @@
 				width: 100%;
 				height: 100%;
 				object-fit: cover;
+			}
+
+			.thumb-slide__stack {
+				position: relative;
+				width: 100%;
+				height: 100%;
+			}
+
+			.thumb-slide__bg {
+				position: absolute;
+				inset: 0;
+				display: block;
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				object-position: center;
+			}
+
+			.thumb-slide__collage {
+				position: absolute;
+				inset: 0;
+				display: block;
+				width: 100%;
+				height: 100%;
+				object-fit: contain;
+				object-position: center;
+				box-sizing: border-box;
+				padding: 14px;
+				pointer-events: none;
 			}
 
 			&.is-thumb-active {
