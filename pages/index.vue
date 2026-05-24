@@ -16,7 +16,7 @@
 		<home-personalized-canvas-paintings :products="homeStore.personalizedCanvasProducts" />
 		<home-popular-categories :categories="homeStore.mostSearchedCategories" />
 		<home-best-sellers :products="homeStore.canvasPaintingProducts" />
-		<home-discounts :discounts="homeStore.discounts" />
+		<home-stocks :stocks="homeStore.stocks" />
 		<home-gallery />
 		<home-frequently-asked-questions :faqs="homeStore.faqs" />
 		<home-custom-text />

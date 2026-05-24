@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-import type { Banner, DisCount, Faq, FeaturedCategory, MainCategory, Product, SubCategory } from '~/utils/types'
+import type { Banner, Faq, FeaturedCategory, MainCategory, Product, Stock, SubCategory } from '~/utils/types'
 import {
 	CANVAS_PAINTING_CATEGORY_SLUG,
 	FEATURED_CATEGORY,
@@ -11,7 +11,7 @@ import {
 type BannersApiResponse = { data: Banner[] }
 type FeaturedCategoriesApiResponse = { data: FeaturedCategory[] }
 type MainCategoriesApiResponse = { data: MainCategory[] }
-type DiscountsApiResponse = { data: DisCount[] }
+type StocksApiResponse = { data: Stock[] }
 type FaqsApiResponse = { data: Faq[] }
 type ProductsApiResponse = { data: Product[] }
 type SubCategoriesApiResponse = { data: SubCategory[] }
@@ -28,7 +28,7 @@ export const useHomeStore = defineStore('home', () => {
 
 	const featuredCategoriesAll = ref<FeaturedCategory[]>([])
 	const mainCategories = ref<MainCategory[]>([])
-	const discounts = ref<DisCount[]>([])
+	const stocks = ref<Stock[]>([])
 	const faqs = ref<Faq[]>([])
 	const products = ref<Product[]>([])
 	const subCategories = ref<SubCategory[]>([])
@@ -93,9 +93,9 @@ export const useHomeStore = defineStore('home', () => {
 		if (!error.value) subCategories.value = data.value?.data ?? []
 	}
 
-	async function fetchDiscounts() {
-		const { data, error } = await useFetch<DiscountsApiResponse>('/api/discounts', homeFetchOptions('/api/discounts'))
-		if (!error.value) discounts.value = data.value?.data ?? []
+	async function fetchStocks() {
+		const { data, error } = await useFetch<StocksApiResponse>('/api/stocks', homeFetchOptions('/api/stocks'))
+		if (!error.value) stocks.value = data.value?.data ?? []
 	}
 
 	async function fetchFaqs() {
@@ -117,7 +117,7 @@ export const useHomeStore = defineStore('home', () => {
 		await fetchBanners()
 		await fetchFeaturedCategories()
 		await fetchMainCategories()
-		await fetchDiscounts()
+		await fetchStocks()
 		await fetchFaqs()
 		await fetchProducts()
 		await fetchSubCategories()
@@ -128,7 +128,7 @@ export const useHomeStore = defineStore('home', () => {
 		bannersStatus,
 		featuredCategoriesAll,
 		mainCategories,
-		discounts,
+		stocks,
 		faqs,
 		featuredCategories,
 		mostSearchedCategories,
@@ -142,7 +142,7 @@ export const useHomeStore = defineStore('home', () => {
 		fetchBanners,
 		fetchFeaturedCategories,
 		fetchMainCategories,
-		fetchDiscounts,
+		fetchStocks,
 		fetchFaqs,
 		fetchHomePage,
 		fetchProducts,

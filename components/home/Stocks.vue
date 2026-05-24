@@ -3,13 +3,11 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import type { DisCount } from '~/utils/types'
+	import type { Stock } from '~/utils/types'
 
 	defineProps<{
-		discounts: DisCount[]
+		stocks: Stock[]
 	}>()
-
-	const homeStore = useHomeStore()
 
 	const modules = [Navigation, Autoplay]
 
@@ -34,7 +32,7 @@
 			<h2 class="text-2xl md:text-3xl lg:text-[40px] font-bold text-[#1a3355] text-center">İndirimler</h2>
 
 			<SwiperButtons
-				v-if="discounts.length > 2"
+				v-if="stocks.length > 2"
 				prev-class="dist-prev"
 				next-class="dist-next"
 				:disabled-prev="isBeginning"
@@ -58,7 +56,7 @@
 			}"
 			class="mySwiper"
 		>
-			<SwiperSlide v-for="(item, index) in discounts" :key="index">
+			<SwiperSlide v-for="(item, index) in stocks" :key="index">
 				<nuxt-link
 					:to="`/products?discount=${item.id}`"
 					class="relative rounded-3xl overflow-hidden min-h-[350px] text-white flex items-center justify-center"

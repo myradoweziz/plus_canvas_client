@@ -7,19 +7,17 @@ export interface FilterColor {
 	image_url?: string
 }
 
-export interface FilterBrand {
+export interface FilterTag {
 	id: number | null
 	name: string
 	slug: string
-	is_active: boolean
-	featured_order: number
 }
 
 export interface FilterProduct {
 	main_category_id: number | null
 	category_id: number | null
 	sub_category_id: number | null
-	brand_id: number | null
+	tag_id: number | null
 	color_id: number | null
 	limit?: number
 	offset?: number

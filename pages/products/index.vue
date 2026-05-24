@@ -8,9 +8,9 @@
 	import type {
 		Banner,
 		FeaturedCategory,
-		FilterBrand,
 		FilterColor,
 		FilterProduct,
+		FilterTag,
 		MainCategory,
 		Product,
 		SubCategory,
@@ -37,7 +37,7 @@
 		main_category_id: null,
 		category_id: null,
 		sub_category_id: null,
-		brand_id: null,
+		tag_id: null,
 		color_id: null,
 		sort_by: null,
 		categories: [],
@@ -81,7 +81,7 @@
 			filters.main_category_id = toNum(q.main_category_id)
 			filters.category_id = toNum(q.category_id)
 			filters.sub_category_id = toNum(q.sub_category_id)
-			filters.brand_id = toNum(q.brand_id)
+			filters.tag_id = toNum(q.tag_id ?? q.brand_id)
 			filters.color_id = toNum(q.color_id)
 			const catRaw = typeof q.cat === 'string' ? q.cat : Array.isArray(q.cat) ? q.cat.join(',') : ''
 			if (!catRaw.trim()) {
@@ -123,7 +123,7 @@
 		main_category_id: filters.main_category_id,
 		category_id: filters.category_id,
 		sub_category_id: filters.sub_category_id,
-		brand_id: filters.brand_id,
+		tag_id: filters.tag_id,
 		color_id: filters.color_id,
 		sort_by: filters.sort_by || undefined,
 		categories: filters.categories?.length ? filters.categories : undefined,
@@ -133,17 +133,17 @@
 
 	const rc = useRuntimeConfig()
 
-	type BrandsApiResponse = { data: FilterBrand[] }
 	type ColorsApiResponse = { data: FilterColor[] }
 	type ProductsApiResponse = {
 		data: Product[]
 		total?: number
 	}
 
-	const { data: brandsLabelData } = await useCustomFetch<BrandsApiResponse>('/api/brands', {
+	const { data: tagsLabelData } = await useCustomFetch<FilterTag[]>('/api/product-tags', {
 		method: 'GET',
 		baseURL: rc.public.baseUrl
 	})
+
 	const { data: colorsLabelData } = await useCustomFetch<ColorsApiResponse>('/api/colors', {
 		method: 'GET',
 		baseURL: rc.public.baseUrl
@@ -198,7 +198,7 @@
 			filters.main_category_id,
 			filters.category_id,
 			filters.sub_category_id,
-			filters.brand_id,
+			filters.tag_id,
 			filters.color_id,
 			filters.sort_by,
 			(filters.categories ?? [])
@@ -368,10 +368,10 @@
 		if (sid != null) {
 			res.push({ id: `sub:${sid}`, label: subNameById(sid) ?? `Alt #${sid}` })
 		}
-		const bid = filters.brand_id
-		if (bid != null) {
-			const b = brandsLabelData.value?.data?.find((x) => x.id != null && Number(x.id) === Number(bid))
-			res.push({ id: `brand:${bid}`, label: b?.name ?? `Marka #${bid}` })
+		const tid = filters.tag_id
+		if (tid != null) {
+			const t = tagsLabelData.value?.find((x) => x.id != null && Number(x.id) === Number(tid))
+			res.push({ id: `tag:${tid}`, label: t?.name ?? `Etiket #${tid}` })
 		}
 		const colorId = filters.color_id
 		if (colorId != null) {
@@ -392,7 +392,7 @@
 		filters.main_category_id = null
 		filters.category_id = null
 		filters.sub_category_id = null
-		filters.brand_id = null
+		filters.tag_id = null
 		filters.color_id = null
 		filters.sort_by = null
 		filters.categories = []
@@ -412,8 +412,8 @@
 			filters.sub_category_id = null
 			return
 		}
-		if (id.startsWith('brand:')) {
-			filters.brand_id = null
+		if (id.startsWith('tag:') || id.startsWith('brand:')) {
+			filters.tag_id = null
 			return
 		}
 		if (id.startsWith('color:')) {
@@ -454,7 +454,7 @@
 		if (filters.main_category_id != null) q.main_category_id = String(filters.main_category_id)
 		if (filters.category_id != null) q.category_id = String(filters.category_id)
 		if (filters.sub_category_id != null) q.sub_category_id = String(filters.sub_category_id)
-		if (filters.brand_id != null) q.brand_id = String(filters.brand_id)
+		if (filters.tag_id != null) q.tag_id = String(filters.tag_id)
 		if (filters.color_id != null) q.color_id = String(filters.color_id)
 		if (filters.sort_by) q.sort_by = filters.sort_by
 		const validCats = (filters.categories ?? []).filter((c) => Number.isFinite(c) && c > 0)
@@ -564,11 +564,11 @@
 		}
 	}
 
-	const toggleBrandId = (id: number) => {
+	const toggleTagId = (id: number) => {
 		const n = Number(id)
 		if (!Number.isFinite(n)) return
-		const cur = filters.brand_id
-		filters.brand_id = cur != null && Number(cur) === n ? null : n
+		const cur = filters.tag_id
+		filters.tag_id = cur != null && Number(cur) === n ? null : n
 	}
 
 	const toggleColorId = (id: number) => {
@@ -598,8 +598,8 @@
 		toggleColorId(id)
 		mobileDrawerAfterFilter()
 	}
-	const mobileToggleBrand = (id: number) => {
-		toggleBrandId(id)
+	const mobileToggleTag = (id: number) => {
+		toggleTagId(id)
 		mobileDrawerAfterFilter()
 	}
 	const mobileRemoveFilter = (id: string) => {
@@ -717,7 +717,7 @@
 								@toggle-category="mobileToggleCategory"
 								@toggle-sub="mobileToggleSub"
 								@toggle-color="mobileToggleColor"
-								@toggle-brand="mobileToggleBrand"
+								@toggle-tag="mobileToggleTag"
 								@remove-filter="mobileRemoveFilter"
 								@close="closeFilters"
 								@clear="mobileClearFilters"
@@ -745,7 +745,7 @@
 							@toggle-category="toggleCategoryId"
 							@toggle-sub="toggleSubId"
 							@toggle-color="toggleColorId"
-							@toggle-brand="toggleBrandId"
+							@toggle-tag="toggleTagId"
 							@clear="clearFilters"
 							@apply="applyAndCloseFilters"
 						/>

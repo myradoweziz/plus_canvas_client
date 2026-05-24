@@ -18,7 +18,7 @@ export interface Banner {
 	}
 }
 
-export interface DisCount {
+export interface Stock {
 	id: number
 	title: string
 	description: string

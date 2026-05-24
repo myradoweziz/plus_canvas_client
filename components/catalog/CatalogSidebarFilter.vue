@@ -4,18 +4,17 @@
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import {
-	CANVAS_PAINTING_CATEGORY_SLUG,
-	PERSONALIZED_CANVAS_SLUG,
-	type FeaturedCategory,
-	type FilterBrand,
-	type FilterColor,
-	type FilterProduct,
-	type MainCategory,
-	type SubCategory
-} from '~/utils/types'
+		CANVAS_PAINTING_CATEGORY_SLUG,
+		PERSONALIZED_CANVAS_SLUG,
+		type FeaturedCategory,
+		type FilterColor,
+		type FilterProduct,
+		type FilterTag,
+		type MainCategory,
+		type SubCategory
+	} from '~/utils/types'
 
 	type ColorsApiResponse = { data: FilterColor[] }
-	type BrandsApiResponse = { data: FilterBrand[] }
 	type ActiveSummaryItem = { id: string; label: string }
 
 	const props = defineProps<{
@@ -31,17 +30,17 @@
 		(e: 'toggleCategory', categoryId: number, mainCategoryId: number | null): void
 		(e: 'toggleSub', id: number): void
 		(e: 'toggleColor', id: number): void
-		(e: 'toggleBrand', id: number): void
+		(e: 'toggleTag', id: number): void
 		(e: 'removeFilter', id: string): void
 		(e: 'close'): void
 		(e: 'clear'): void
 		(e: 'apply'): void
 	}>()
 
-	const onToggleBrand = (brand: FilterBrand) => {
-		const id = brand.id
+	const onToggleTag = (tag: FilterTag) => {
+		const id = tag.id
 		if (id == null) return
-		emit('toggleBrand', Number(id))
+		emit('toggleTag', Number(id))
 	}
 
 	const onToggleColor = (color: FilterColor) => {
@@ -53,8 +52,8 @@
 	const isColorActive = (color: FilterColor) =>
 		color.id != null && props.filters.color_id != null && Number(props.filters.color_id) === Number(color.id)
 
-	const isBrandActive = (brand: FilterBrand) =>
-		brand.id != null && props.filters.brand_id != null && Number(props.filters.brand_id) === Number(brand.id)
+	const isTagActive = (tag: FilterTag) =>
+		tag.id != null && props.filters.tag_id != null && Number(props.filters.tag_id) === Number(tag.id)
 
 	const isMainCategoryFilterActive = (main: MainCategory) =>
 		main.id != null &&
@@ -133,12 +132,12 @@
 
 	const colors = computed(() => colorData.value?.data ?? [])
 
-	const { data: brandData } = await useCustomFetch<BrandsApiResponse>('/api/brands', {
+	const { data: tagData } = await useCustomFetch<FilterTag[]>('/api/product-tags', {
 		baseURL: config.public.baseUrl,
 		method: 'GET'
 	})
 
-	const brands = computed(() => brandData.value?.data ?? [])
+	const tags = computed(() => tagData.value ?? [])
 
 	const getFeaturedForMain = (main: MainCategory) => {
 		const mid = main.id
@@ -238,15 +237,15 @@
 			<h3 class="text-sm font-semibold text-[#4A5565] mb-4">Popüler Etiketler</h3>
 			<div class="flex flex-wrap gap-2">
 				<button
-					v-for="brand in brands"
-					:key="brand.id ?? brand.slug"
+					v-for="tag in tags"
+					:key="tag.id ?? tag.slug"
 					type="button"
 					class="tag-pill"
-					:class="{ active: isBrandActive(brand) }"
-					:disabled="brand.id == null"
-					@click="onToggleBrand(brand)"
+					:class="{ active: isTagActive(tag) }"
+					:disabled="tag.id == null"
+					@click="onToggleTag(tag)"
 				>
-					{{ brand.name }}
+					{{ tag.name }}
 					<Icon name="filterPlus" class="w-4 h-4" />
 				</button>
 			</div>
