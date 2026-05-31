@@ -2,6 +2,7 @@ export type TempDesignImage = {
 	url: string
 	id: number
 	session_id: string
+	mockupScene?: import('./mockupScene').MockupScene | null
 }
 
 /** Fabric `toJSON` çıktısı + meta (sepet / sipariş için). */

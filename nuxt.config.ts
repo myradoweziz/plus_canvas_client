@@ -8,13 +8,13 @@ export default defineNuxtConfig({
 			charset: 'utf-8',
 			viewport: 'width=device-width, initial-scale=1.0, maximum-scale=1.0',
 			title: 'PlusCanvas',
-			link: [{ rel: 'shortcut icon', type: 'image/png', href: `/images/icons/plus_logo.svg` }],
+			link: [{ rel: 'shortcut icon', type: 'image/png', href: `/images/favicon-32x32.png` }],
 			meta: [
 				{ name: 'author', content: 'PlusCanvas' },
 				{ property: 'og:image:width', content: `500` },
 				{ property: 'og:image:height', content: `500` },
-				{ property: 'og:image', content: '/images/icons/plus_logo.svg' },
-				{ name: 'twitter:image', content: '/images/icons/plus_logo.svg' },
+				{ property: 'og:image', content: '/images/favicon-32x32.png' },
+				{ name: 'twitter:image', content: '/images/favicon-32x32.png' },
 				{ name: 'twitter:site', content: 'PlusCanvas' },
 				{ property: 'article:content_tier', content: 'metered' },
 				{ property: 'article:opinion', content: false }

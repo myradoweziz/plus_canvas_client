@@ -129,7 +129,7 @@
 			tokenCookie.value = token
 			toast.success('Kayıt başarılı')
 			await nextTick()
-			await navigateTo('/')
+			await navigateTo('/profile')
 			return
 		}
 

@@ -26,7 +26,6 @@
 		const value = form.value.email.trim()
 		if (!touched.value.email) return null
 		if (!value) return 'E-posta zorunludur.'
-		// Simple email format check (enough for client-side)
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Geçerli bir e-posta girin.'
 		return null
 	})
@@ -47,8 +46,6 @@
 		submitError.value = null
 
 		if (!isValid.value) return
-
-		const authStore = useAuthStore()
 
 		isSubmitting.value = true
 		try {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import type { CanvasFormat } from '~/utils/productDesignConfig'
-	import type { Product, TempDesignImage } from '~/utils/types'
+	import type { ActiveMockupSceneSetting, Product, TempDesignImage } from '~/utils/types'
 
 	defineProps<{
 		images: TempDesignImage[]
@@ -13,12 +13,15 @@
 		canvasPreviewSrc?: string
 		activeFormatId: number | null
 		isCanvasLoading?: boolean
+		isMockupSceneActive?: boolean
+		activeMockupSceneSettings?: ActiveMockupSceneSetting[]
 		product: Product
 	}>()
 
 	defineEmits<{
 		(e: 'thumb-select', index: number): void
 		(e: 'select-format', formatId: number): void
+		(e: 'mockup-scene-color-change', settingIndex: number, color: string): void
 	}>()
 </script>
 
@@ -36,6 +39,12 @@
 		<section class="product-editor-main w-full min-w-0 max-w-4xl">
 			<div class="product-editor-canvas relative w-full min-h-[620px]">
 				<slot name="canvas" />
+				<ProductMockupSceneHotspots
+					v-if="isMockupSceneActive && activeMockupSceneSettings?.length"
+					:settings="activeMockupSceneSettings"
+					:disabled="isCanvasLoading"
+					@color-change="(index, color) => $emit('mockup-scene-color-change', index, color)"
+				/>
 				<div
 					v-if="isCanvasLoading"
 					class="canvas-loading-overlay absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-[20px] bg-[#F5F2ED]/85 backdrop-blur-[2px]"

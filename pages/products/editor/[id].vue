@@ -74,7 +74,10 @@
 		activeFrameId,
 		isCanvasLoading,
 		selectedFormat,
-		selectedSize
+		selectedSize,
+		isMockupSceneActive,
+		activeMockupSceneSettings,
+		setMockupSceneColor
 	} = useProductCanvasEditor({
 		productId,
 		wrapRef: canvasWrapRef,
@@ -86,6 +89,10 @@
 
 	const onThumbSelect = (index: number) => {
 		void selectThumb(index)
+	}
+
+	const onMockupSceneColorChange = (settingIndex: number, color: string) => {
+		void setMockupSceneColor(settingIndex, color)
 	}
 
 	onMounted(async () => {
@@ -172,8 +179,11 @@
 						:canvas-preview-src="canvasPreviewSrc"
 						:active-format-id="activeFormatId"
 						:is-canvas-loading="isCanvasLoading"
+						:is-mockup-scene-active="isMockupSceneActive"
+						:active-mockup-scene-settings="activeMockupSceneSettings"
 						@thumb-select="onThumbSelect"
 						@select-format="(id) => void applyFormatById(id)"
+						@mockup-scene-color-change="onMockupSceneColorChange"
 					>
 						<template #canvas>
 							<div ref="canvasWrapRef" class="mySwiper2 relative w-full h-[620px] overflow-hidden" />

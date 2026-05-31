@@ -16,6 +16,13 @@ import {
 	sortLayoutSlots,
 	type CollageLayoutSlot
 } from '~/utils/collageLayout'
+import {
+	buildMockupSceneUrl,
+	getDefaultPaletteForSetting,
+	getInitialSceneColors,
+	getSettingPoint,
+	parseMockupSceneFromImage
+} from '~/utils/mockupScene'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	formatAspect,
@@ -51,6 +58,8 @@ export function useProductCanvasEditor(options: {
 	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
 	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
 	const activeProductImageIndex = ref(0)
+	/** Цвета sceneSettings по индексу mockup в product.images */
+	const mockupSceneColors = ref<Record<number, string[]>>({})
 
 	const hasCollageLayout = computed(() => (collageLayout.value?.layout_json.length ?? 0) > 0)
 	const selectedFormat = ref<CanvasFormat | null>(null)
@@ -143,7 +152,8 @@ export function useProductCanvasEditor(options: {
 					.map((img, idx) => ({
 						url: getProductImageUrl(img),
 						id: idx + 1,
-						session_id: 'product-image'
+						session_id: 'product-image',
+						mockupScene: parseMockupSceneFromImage(img)
 					}))
 					.filter((item) => item.url.length > 0)
 			: []
@@ -165,14 +175,82 @@ export function useProductCanvasEditor(options: {
 
 	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
 
-	/** Тот же URL mockup, что и в левом слайдере (product.images). */
-	const productBackgroundUrl = computed(() => {
-		const bg = productBackgroundThumbs.value
-		if (!bg.length) return null
-		const idx = Math.min(activeProductImageIndex.value, bg.length - 1)
-		const url = String(bg[idx]?.url ?? '').trim()
-		return url || null
+	const mockupSceneUrlOptions = () => ({
+		formatId: selectedFormat.value?.id ?? null,
+		sizeId: selectedSize.value?.id ?? null,
+		frameId: selectedFrame.value?.id ?? null,
+		productId: options.product?.value?.id ?? null,
+		width: 1400,
+		height: 720
 	})
+
+	const ensureMockupSceneColors = (thumbIndex: number) => {
+		const scene = productBackgroundThumbs.value[thumbIndex]?.mockupScene
+		if (!scene?.settings.length) return
+		if (mockupSceneColors.value[thumbIndex]?.length === scene.settings.length) return
+		mockupSceneColors.value = {
+			...mockupSceneColors.value,
+			[thumbIndex]: getInitialSceneColors(scene)
+		}
+	}
+
+	watch(
+		productBackgroundThumbs,
+		(thumbs) => {
+			const next = { ...mockupSceneColors.value }
+			let changed = false
+			thumbs.forEach((thumb, index) => {
+				const scene = thumb.mockupScene
+				if (!scene?.settings.length) return
+				if (next[index]?.length === scene.settings.length) return
+				next[index] = getInitialSceneColors(scene)
+				changed = true
+			})
+			if (changed) mockupSceneColors.value = next
+		},
+		{ immediate: true, deep: true }
+	)
+
+	const resolveMockupBackgroundUrl = (thumbIndex: number): string | null => {
+		const bg = productBackgroundThumbs.value
+		if (thumbIndex < 0 || thumbIndex >= bg.length) return null
+		const raw = String(bg[thumbIndex]?.url ?? '').trim()
+		if (!raw) return null
+
+		const scene = bg[thumbIndex]?.mockupScene
+		if (!scene?.settings.length) return raw
+
+		ensureMockupSceneColors(thumbIndex)
+		const colors =
+			mockupSceneColors.value[thumbIndex] ?? scene.settings.map((s) => s.value)
+		return buildMockupSceneUrl(raw, colors, mockupSceneUrlOptions())
+	}
+
+	const isMockupSceneActive = computed(() => {
+		const idx = activeProductImageIndex.value
+		return (productBackgroundThumbs.value[idx]?.mockupScene?.settings.length ?? 0) > 0
+	})
+
+	const activeMockupSceneSettings = computed(() => {
+		const idx = activeProductImageIndex.value
+		const scene = productBackgroundThumbs.value[idx]?.mockupScene
+		if (!scene?.settings.length) return []
+
+		const colors =
+			mockupSceneColors.value[idx] ?? getInitialSceneColors(scene)
+
+		return scene.settings.map((setting, index) => ({
+			index,
+			name: setting.name,
+			value: colors[index] ?? setting.value,
+			x: getSettingPoint(setting).x,
+			y: getSettingPoint(setting).y,
+			palette: setting.palette?.length ? setting.palette : getDefaultPaletteForSetting(setting.name)
+		}))
+	})
+
+	/** Тот же URL mockup, что и в левом слайдере (product.images). */
+	const productBackgroundUrl = computed(() => resolveMockupBackgroundUrl(activeProductImageIndex.value))
 
 	const activeImage = computed(() => designStore.getActiveImage(options.productId.value))
 
@@ -356,7 +434,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const getProductThumbBackgroundSrc = (index: number) => {
-		const url = productBackgroundThumbs.value[index]?.url
+		const url = resolveMockupBackgroundUrl(index)
 		return url ? previewUrl(url) : ''
 	}
 
@@ -1586,8 +1664,35 @@ export function useProductCanvasEditor(options: {
 
 		await runWithCanvasLoading(async () => {
 			activeProductImageIndex.value = index
+			ensureMockupSceneColors(index)
 			if (!fabricCanvas || !canvasReady) return
 
+			await applyViewportBackground()
+			if (hasCollageLayout.value) {
+				await syncCollageSlots({ manageLoading: false })
+			} else {
+				await syncPhotos({ manageLoading: false })
+			}
+			if (!fabricCanvas) return
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
+			scheduleCanvasPreview()
+			await refreshLayoutDerivedPreviews({ refreshLeftThumbs: true })
+		})
+	}
+
+	const setMockupSceneColor = async (settingIndex: number, color: string) => {
+		const thumbIndex = activeProductImageIndex.value
+		const scene = productBackgroundThumbs.value[thumbIndex]?.mockupScene
+		if (!scene?.settings.length || settingIndex < 0 || settingIndex >= scene.settings.length) return
+
+		ensureMockupSceneColors(thumbIndex)
+		const next = [...(mockupSceneColors.value[thumbIndex] ?? getInitialSceneColors(scene))]
+		next[settingIndex] = color
+		mockupSceneColors.value = { ...mockupSceneColors.value, [thumbIndex]: next }
+
+		await runWithCanvasLoading(async () => {
+			if (!fabricCanvas || !canvasReady) return
 			await applyViewportBackground()
 			if (hasCollageLayout.value) {
 				await syncCollageSlots({ manageLoading: false })
@@ -1942,6 +2047,26 @@ export function useProductCanvasEditor(options: {
 		() => options.product?.value?.id,
 		() => {
 			activeProductImageIndex.value = 0
+			mockupSceneColors.value = {}
+		}
+	)
+
+	watch(
+		() => [selectedFormat.value?.id, selectedSize.value?.id, selectedFrame.value?.id] as const,
+		async () => {
+			if (!isMockupSceneActive.value || !fabricCanvas || !canvasReady) return
+			await runWithCanvasLoading(async () => {
+				await applyViewportBackground()
+				if (hasCollageLayout.value) {
+					await syncCollageSlots({ manageLoading: false })
+				} else {
+					await syncPhotos({ manageLoading: false })
+				}
+				reorderLayers()
+				fabricCanvas?.requestRenderAll()
+				scheduleCanvasPreview()
+				await refreshLayoutDerivedPreviews({ refreshLeftThumbs: true })
+			})
 		}
 	)
 
@@ -2010,6 +2135,9 @@ export function useProductCanvasEditor(options: {
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
 		activeFrameId: computed(() => selectedFrame.value?.id ?? null),
-		isFrameActive: (id: string) => selectedFrame.value?.id === id
+		isFrameActive: (id: string) => selectedFrame.value?.id === id,
+		isMockupSceneActive,
+		activeMockupSceneSettings,
+		setMockupSceneColor
 	}
 }

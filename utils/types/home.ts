@@ -1,6 +1,10 @@
 export interface Image {
 	url: string
 	path: string
+	/** Динамический room-mockup (перекраска стены, дивана и т.д.) */
+	dynamic?: boolean
+	scene?: import('./mockupScene').MockupScene
+	mockup_scene?: import('./mockupScene').MockupScene
 }
 
 export interface Banner {
