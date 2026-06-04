@@ -244,7 +244,26 @@ export function slotRectInContainer(
 	}
 }
 
-/** Слот внутри области печати (меняется при смене формата Dikey / Kare / Yatay). */
+/**
+ * Коллаж внутри области печати: contain по пропорциям макета,
+ * чтобы при Yatay слоты не растягивались на всю ширину и фото не «раздувались».
+ */
+export function collageLayoutFittedInPrintArea(
+	slots: CollageLayoutSlot[],
+	printW: number,
+	printH: number,
+	printCenterX: number,
+	printCenterY: number,
+	layoutRef?: { width?: number; height?: number }
+): LayoutImageRect {
+	const ref = collageLayoutReferenceBounds(slots, {
+		width: layoutRef?.width,
+		height: layoutRef?.height
+	})
+	return fittedImageRectInViewport(ref.width, ref.height, printW, printH, printCenterX, printCenterY, 'contain')
+}
+
+/** Слот внутри области печати (формат Dikey / Kare / Yatay). */
 export function slotRectInPrintArea(
 	slot: CollageLayoutSlot,
 	slots: CollageLayoutSlot[],
@@ -259,7 +278,23 @@ export function slotRectInPrintArea(
 		width: layoutRef?.width,
 		height: layoutRef?.height
 	})
-	return slotRectInContainer(slot, printW, printH, printCenterX, printCenterY, mode, refBounds)
+	const fitted = collageLayoutFittedInPrintArea(
+		slots,
+		printW,
+		printH,
+		printCenterX,
+		printCenterY,
+		layoutRef
+	)
+	return slotRectInContainer(
+		slot,
+		fitted.width,
+		fitted.height,
+		fitted.centerX,
+		fitted.centerY,
+		mode,
+		refBounds
+	)
 }
 
 export function collageSlotsBoundsInPrintArea(

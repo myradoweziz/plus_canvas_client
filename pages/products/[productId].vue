@@ -3,10 +3,12 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { getProductImageUrl } from '~/utils/collageLayout'
+	import {
+		getCanvasPaintingArtworkUrl,
+		isCanvasPaintingGalleryProduct
+	} from '~/utils/canvasPaintingDisplay'
 	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
-	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
 	const route = useRoute()
 	const router = useRouter()
@@ -46,16 +48,12 @@
 		product,
 		(newProduct) => {
 			if (!newProduct) return
-			if (newProduct.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-				const tempImages = (newProduct.inner_images ?? [])
-					.map((img, idx) => ({
-						url: getProductImageUrl(img),
-						id: idx + 1,
-						session_id: 'canvas-painting'
-					}))
-					.filter((item) => item.url.length > 0)
-				if (tempImages.length > 0) {
-					designStore.setSession(productId.value, tempImages)
+			if (isCanvasPaintingGalleryProduct(newProduct)) {
+				const artworkUrl = getCanvasPaintingArtworkUrl(newProduct)
+				if (artworkUrl) {
+					designStore.setSession(productId.value, [
+						{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' }
+					])
 				}
 			} else {
 				// Standard product: if session exists, go to editor, else catalog
@@ -95,7 +93,8 @@
 		selectedSize,
 		isMockupSceneActive,
 		activeMockupSceneSettings,
-		setMockupSceneColor
+		setMockupSceneColor,
+		useStaticFormatPreviews
 	} = useProductCanvasEditor({
 		productId,
 		wrapRef: canvasWrapRef,
@@ -193,6 +192,8 @@
 						:is-canvas-loading="isCanvasLoading"
 						:is-mockup-scene-active="isMockupSceneActive"
 						:active-mockup-scene-settings="activeMockupSceneSettings"
+						:use-static-format-previews="useStaticFormatPreviews"
+						:hide-thumb-collage-overlay="useStaticFormatPreviews"
 						@thumb-select="onThumbSelect"
 						@select-format="(id) => void applyFormatById(id)"
 						@mockup-scene-color-change="onMockupSceneColorChange"
@@ -202,7 +203,10 @@
 						</template>
 					</ProductDesignEditorPanel>
 
-					<p v-if="!formatPresets.length" class="mt-4 text-sm text-amber-700">
+					<p
+						v-if="product && !extractCanvasFormatsFromProduct(product).length && !isCanvasPaintingGalleryProduct(product)"
+						class="mt-4 text-sm text-amber-700"
+					>>
 						Bu ürün için format bulunamadı (API: canvas_formats).
 					</p>
 

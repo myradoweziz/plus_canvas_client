@@ -15,9 +15,12 @@
 		getThumbPreviewSrc: (index: number) => string
 		getProductThumbBackgroundSrc?: (index: number) => string
 		getProductThumbCollageSrc?: (index: number) => string
+		/** Серый SVG-фон под миниатюрой (галерея) */
+		useStaticThumbBg?: boolean
 	}>()
 
 	const useStackedProductThumb = (img: TempDesignImage) =>
+		!props.useStaticThumbBg &&
 		img.session_id === 'product-image' &&
 		Boolean(props.getProductThumbBackgroundSrc && props.getProductThumbCollageSrc)
 
@@ -81,6 +84,21 @@
 						:alt="`mockup-collage-${img.id}`"
 						class="thumb-slide__collage"
 						loading="lazy"
+					/>
+				</div>
+				<div v-else-if="useStaticThumbBg" class="thumb-slide__stack">
+					<img
+						src="/images/product-card-bg.svg"
+						alt=""
+						class="thumb-slide__bg"
+						aria-hidden="true"
+					/>
+					<img
+						:src="getThumbPreviewSrc(index)"
+						:alt="`preview-${img.id}`"
+						class="thumb-slide__collage"
+						loading="lazy"
+						@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
 					/>
 				</div>
 				<img

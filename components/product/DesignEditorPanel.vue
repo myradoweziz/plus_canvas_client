@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import type { CanvasFormat } from '~/utils/productDesignConfig'
+	import { getFormatStaticPreviewSvg } from '~/utils/canvasPaintingDisplay'
 	import type { ActiveMockupSceneSetting, Product, TempDesignImage } from '~/utils/types'
 
 	defineProps<{
@@ -15,6 +16,9 @@
 		isCanvasLoading?: boolean
 		isMockupSceneActive?: boolean
 		activeMockupSceneSettings?: ActiveMockupSceneSetting[]
+		useStaticFormatPreviews?: boolean
+		/** Галерея: без overlay inner_images на миниатюрах */
+		hideThumbCollageOverlay?: boolean
 		product: Product
 	}>()
 
@@ -31,8 +35,9 @@
 			:images="images"
 			:is-thumb-active="isThumbActive"
 			:get-thumb-preview-src="getThumbPreviewSrc"
-			:get-product-thumb-background-src="getProductThumbBackgroundSrc"
-			:get-product-thumb-collage-src="getProductThumbCollageSrc"
+			:get-product-thumb-background-src="hideThumbCollageOverlay ? undefined : getProductThumbBackgroundSrc"
+			:get-product-thumb-collage-src="hideThumbCollageOverlay ? undefined : getProductThumbCollageSrc"
+			:use-static-thumb-bg="hideThumbCollageOverlay"
 			@select="$emit('thumb-select', $event)"
 		/>
 
@@ -74,6 +79,7 @@
 				:format-preview-by-id="formatPreviewById"
 				:canvas-preview-src="canvasPreviewSrc"
 				:active-format-id="activeFormatId"
+				:use-static-format-previews="useStaticFormatPreviews"
 				@select-format="$emit('select-format', $event)"
 			/>
 

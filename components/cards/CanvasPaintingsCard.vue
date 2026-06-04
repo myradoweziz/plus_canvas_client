@@ -1,7 +1,8 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import type { Product, TempDesignImage } from '~/utils/types'
+	import { extractCollageLayoutFromProduct, getProductImageUrl } from '~/utils/collageLayout'
+	import type { Image, Product, TempDesignImage } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
 	const props = withDefaults(
@@ -55,20 +56,50 @@
 		const n = props.product.upload_image_count
 		return typeof n === 'number' && n > 0 ? n : undefined
 	})
+
+	const cardImages = computed(() => {
+		const list = Array.isArray(props.product.images) ? props.product.images : []
+		return list.map((img) => getProductImageUrl(img as Image)).filter((url) => url.length > 0)
+	})
+
+	const hasCollageLayout = computed(() => {
+		const layout = extractCollageLayoutFromProduct(props.product)
+		return (layout?.layout_json.length ?? 0) > 0
+	})
 </script>
 
 <template>
 	<div class="flex flex-col h-full min-h-0">
 		<div class="group flex flex-col h-full rounded-2xl cursor-pointer" @click="openUploader">
 			<!-- Картинка -->
-			<div class="relative w-full rounded-2xl overflow-hidden bg-gray-100 aspect-[4/5]">
-				<img
-					v-for="image in product.images"
-					:key="image.path"
-					:src="image.url"
-					:alt="product.name"
-					class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-				/>
+			<div
+				class="canvas-card-media relative w-full rounded-2xl overflow-hidden aspect-[4/5]"
+				:class="!hasCollageLayout ? 'canvas-card-media--collage' : 'bg-gray-100'"
+			>
+				<template v-if="!hasCollageLayout">
+					<img
+						src="/images/product-card-bg.svg"
+						alt=""
+						class="canvas-card-media__bg absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+						aria-hidden="true"
+					/>
+					<img
+						v-for="(src, index) in cardImages"
+						:key="`${product.id}-${index}`"
+						:src="src"
+						:alt="product.name"
+						class="canvas-card-media__photo relative z-[1] w-full h-full object-contain p-3 md:p-4 transition-transform duration-500 group-hover:scale-[1.02]"
+					/>
+				</template>
+				<template v-else>
+					<img
+						v-for="(src, index) in cardImages"
+						:key="`${product.id}-${index}`"
+						:src="src"
+						:alt="product.name"
+						class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+					/>
+				</template>
 
 				<!-- Бейдж скидки -->
 				<div
@@ -132,4 +163,16 @@
 	</div>
 </template>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+	.canvas-card-media--collage {
+		background-color: #d4d4d4;
+	}
+
+	.canvas-card-media__bg {
+		z-index: 0;
+	}
+
+	.canvas-card-media__photo {
+		object-position: center;
+	}
+</style>

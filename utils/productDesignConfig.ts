@@ -57,6 +57,15 @@ export function withNoFrameOption(frames: FrameOption[]): FrameOption[] {
 export const withDefaultNoFrameOption = withNoFrameOption
 
 /** Цвет рамки (#RRGGBB) из API. */
+/** Толщина рамки на превью (~3 cm, как PlusCanvas). */
+export const CANVAS_FRAME_OUTER_PX = 22
+
+/** Зазор между лицом холста и рамкой (~2 cm) — «загиб» краёв canvas. */
+export const CANVAS_FRAME_GAP_PX = 12
+
+/** Суммарный отступ коллажа/фото от края области печати при выбранной рамке. */
+export const CANVAS_FRAME_EDGE_INSET_PX = CANVAS_FRAME_OUTER_PX + CANVAS_FRAME_GAP_PX
+
 export function normalizeFrameColor(hex: string | undefined | null, fallback = '#6b4f2a'): string {
 	const raw = String(hex ?? '').trim()
 	if (!raw) return fallback

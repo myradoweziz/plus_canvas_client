@@ -2,7 +2,6 @@ import { useFabricImageLoader } from '~/composables/useFabricImageLoader'
 import {
 	centerRectsIntersect,
 	clampCenterRectToFrameInner,
-	COLLAGE_FRAME_CONTENT_MARGIN_PX,
 	collageSlotsBoundsInPrintArea,
 	collageSlotsBoundsOnMockup,
 	collageSlotsToLoad,
@@ -17,6 +16,13 @@ import {
 	type CollageLayoutSlot
 } from '~/utils/collageLayout'
 import {
+	CANVAS_PAINTING_STATIC_BG,
+	getCanvasPaintingArtworkUrl,
+	getCanvasPaintingDefaultFormat,
+	getCanvasPaintingThumbImages,
+	isCanvasPaintingGalleryProduct
+} from '~/utils/canvasPaintingDisplay'
+import {
 	buildMockupSceneUrl,
 	getDefaultPaletteForSetting,
 	getInitialSceneColors,
@@ -25,6 +31,8 @@ import {
 } from '~/utils/mockupScene'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
+	CANVAS_FRAME_GAP_PX,
+	CANVAS_FRAME_OUTER_PX,
 	formatAspect,
 	formatOrientationAspect,
 	FRAME_NONE_OPTION,
@@ -41,7 +49,8 @@ import type { Product, ProductDesignPayload, TempDesignImage } from '~/utils/typ
 
 const DEFAULT_VIEWPORT_W = 560
 const DEFAULT_VIEWPORT_H = 520
-const FRAME_BORDER_WIDTH = 20
+/** Цвет «загиба» между холстом и рамкой (как PlusCanvas). */
+const FRAME_GAP_FILL = '#E8E4DC'
 
 export function useProductCanvasEditor(options: {
 	productId: Ref<string>
@@ -54,9 +63,17 @@ export function useProductCanvasEditor(options: {
 	const designStore = useProductDesignStore()
 	const { loadHtmlImage } = useFabricImageLoader()
 
-	const formatPresets = computed(() => options.canvasFormats.value)
+	const formatPresets = computed(() => {
+		const fromApi = options.canvasFormats.value
+		if (fromApi.length) return fromApi
+		if (isCanvasPaintingGallery.value) return [getCanvasPaintingDefaultFormat()]
+		return []
+	})
 	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
 	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
+	const isCanvasPaintingGallery = computed(() => isCanvasPaintingGalleryProduct(options.product?.value))
+	const useStaticFormatPreviews = computed(() => isCanvasPaintingGallery.value)
+	const canvasPaintingArtworkUrl = computed(() => getCanvasPaintingArtworkUrl(options.product?.value))
 	const activeProductImageIndex = ref(0)
 	/** Цвета sceneSettings по индексу mockup в product.images */
 	const mockupSceneColors = ref<Record<number, string[]>>({})
@@ -147,6 +164,10 @@ export function useProductCanvasEditor(options: {
 		const p = options.product?.value
 		if (!p) return []
 
+		if (isCanvasPaintingGallery.value) {
+			return getCanvasPaintingThumbImages(p)
+		}
+
 		const fromImages = Array.isArray(p.images)
 			? p.images
 					.map((img, idx) => ({
@@ -167,10 +188,11 @@ export function useProductCanvasEditor(options: {
 		}))
 	})
 
-	/** Миниатюры слева: images товара; если их нет — inner_images из сессии. */
+	/** Миниатюры слева: images товара; personalized — uploads из сессии (не inner_images на UI). */
 	const thumbImages = computed((): TempDesignImage[] => {
 		const bg = productBackgroundThumbs.value
-		return bg.length ? bg : innerThumbImages.value
+		if (bg.length || isCanvasPaintingGallery.value) return bg
+		return innerThumbImages.value
 	})
 
 	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
@@ -250,7 +272,10 @@ export function useProductCanvasEditor(options: {
 	})
 
 	/** Тот же URL mockup, что и в левом слайдере (product.images). */
-	const productBackgroundUrl = computed(() => resolveMockupBackgroundUrl(activeProductImageIndex.value))
+	const productBackgroundUrl = computed(() => {
+		if (isCanvasPaintingGallery.value) return CANVAS_PAINTING_STATIC_BG
+		return resolveMockupBackgroundUrl(activeProductImageIndex.value)
+	})
 
 	const activeImage = computed(() => designStore.getActiveImage(options.productId.value))
 
@@ -395,7 +420,10 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const shouldSyncProductThumbPreviews = () =>
-		thumbsAreProductImages.value && hasCollageLayout.value && getCollageUploads().length > 0
+		!isCanvasPaintingGallery.value &&
+		thumbsAreProductImages.value &&
+		hasCollageLayout.value &&
+		getCollageUploads().length > 0
 
 	const syncProductThumbPreviews = async (opts?: { manageLoading?: boolean }) => {
 		if (!import.meta.client || !shouldSyncProductThumbPreviews()) return
@@ -442,6 +470,10 @@ export function useProductCanvasEditor(options: {
 
 	const getThumbPreviewSrc = (index: number) => {
 		if (thumbsAreProductImages.value) {
+			if (isCanvasPaintingGallery.value) {
+				const url = productBackgroundThumbs.value[index]?.url
+				return url ? previewUrl(url) : ''
+			}
 			return getProductThumbBackgroundSrc(index)
 		}
 		const fromCanvas = thumbPreviewByIndex.value[index]
@@ -499,6 +531,51 @@ export function useProductCanvasEditor(options: {
 	const cx = () => viewportW.value / 2
 	const cy = () => viewportH.value / 2
 
+	/** Центр области печати (совпадает с центром фото на холсте). */
+	const getPrintAreaCenter = () => {
+		if (printAreaRect) {
+			printAreaRect.setCoords()
+			return {
+				left: printAreaRect.left ?? cx(),
+				top: printAreaRect.top ?? cy()
+			}
+		}
+		return { left: cx(), top: cy() }
+	}
+
+	/** Галерея: активная миниатюра product.images, не только [0]. */
+	const getGalleryArtworkUrl = () => {
+		const thumbs = productBackgroundThumbs.value
+		const idx = activeProductImageIndex.value
+		const fromThumb = thumbs[idx]?.url ?? thumbs[0]?.url ?? ''
+		if (fromThumb) return fromThumb
+		return canvasPaintingArtworkUrl.value ?? ''
+	}
+
+	const resolvePrintAreaFill = () => {
+		if (isCanvasPaintingGallery.value) return '#ffffff'
+		return productBackgroundUrl.value ? 'transparent' : '#ffffff'
+	}
+
+	const hasActiveFrame = () => {
+		const frame = selectedFrame.value
+		return Boolean(frame && !isNoFrame(frame))
+	}
+
+	/** Отступ «загиба» между фото и рамкой (PlusCanvas ~2 cm). */
+	const getActiveFrameGapPx = () => (hasActiveFrame() ? CANVAS_FRAME_GAP_PX : 0)
+
+	/** Размер лица холста под clip/cover — уже на gap, если выбрана рамка. */
+	const getPhotoFaceSize = () => {
+		const pw = printAreaRect?.width ?? 1
+		const ph = printAreaRect?.height ?? 1
+		const g = getActiveFrameGapPx()
+		return {
+			width: Math.max(1, pw - 2 * g),
+			height: Math.max(1, ph - 2 * g)
+		}
+	}
+
 	const emitDesign = () => {
 		if (!fabricCanvas || !options.onDesignUpdate) return
 		const payload: ProductDesignPayload = {
@@ -518,13 +595,13 @@ export function useProductCanvasEditor(options: {
 
 	const updatePhotoClipPath = () => {
 		if (!photoObject || !printAreaRect || !fabricLib) return
-		const width = printAreaRect.width ?? 1
-		const height = printAreaRect.height ?? 1
+		const { width, height } = getPhotoFaceSize()
+		const center = getPrintAreaCenter()
 		photoObject.clipPath = new fabricLib.Rect({
 			width: width,
 			height: height,
-			left: cx(),
-			top: cy(),
+			left: center.left,
+			top: center.top,
 			originX: 'center',
 			originY: 'center',
 			absolutePositioned: true
@@ -555,8 +632,10 @@ export function useProductCanvasEditor(options: {
 		slotCx: number,
 		slotCy: number
 	) => {
-		const iw = img.width || 1
-		const ih = img.height || 1
+		const sx = img.scaleX || 1
+		const sy = img.scaleY || 1
+		const iw = (img.width || 1) / sx
+		const ih = (img.height || 1) / sy
 		const scale = Math.max(slotW / iw, slotH / ih)
 		img.set({
 			scaleX: scale,
@@ -624,19 +703,19 @@ export function useProductCanvasEditor(options: {
 		)
 	}
 
-	/** Фото заполняет область печати на 100% (object-fit: cover), фиксированный масштаб. */
-	const fitPhotoCover = () => {
+	/** Фото по центру области печати, cover (заполняет «лицо» холста). */
+	const fitPhotoInPrintArea = () => {
 		if (!photoObject || !printAreaRect) return
-		const pw = printAreaRect.width ?? 1
-		const ph = printAreaRect.height ?? 1
+		const { width: pw, height: ph } = getPhotoFaceSize()
 		const iw = photoObject.width || 1
 		const ih = photoObject.height || 1
 		const scale = Math.max(pw / iw, ph / ih)
+		const center = getPrintAreaCenter()
 		photoObject.set({
 			scaleX: scale,
 			scaleY: scale,
-			left: cx(),
-			top: cy(),
+			left: center.left,
+			top: center.top,
 			originX: 'center',
 			originY: 'center'
 		})
@@ -648,7 +727,7 @@ export function useProductCanvasEditor(options: {
 	/** Пересчёт cover + clip без перезагрузки изображения (смена формата / resize). */
 	const refitSinglePhoto = async () => {
 		if (!fabricCanvas || !photoObject || !printAreaRect || hasCollageLayout.value) return
-		fitPhotoCover()
+		fitPhotoInPrintArea()
 		await updateFrame()
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
@@ -730,6 +809,13 @@ export function useProductCanvasEditor(options: {
 		}
 		for (const obj of fabricCanvas.getObjects()) {
 			const role = (obj as { data?: { role?: string } }).data?.role
+			if (role === 'frame-gap') {
+				fabricCanvas.moveTo(obj, z)
+				z += 1
+			}
+		}
+		for (const obj of fabricCanvas.getObjects()) {
+			const role = (obj as { data?: { role?: string } }).data?.role
 			if (role === 'frame-border') {
 				fabricCanvas.moveTo(obj, z)
 				z += 1
@@ -790,7 +876,7 @@ export function useProductCanvasEditor(options: {
 		}
 		for (const obj of [...fabricCanvas.getObjects()]) {
 			const role = (obj as { data?: { role?: string } }).data?.role
-			if (role === 'frame-border' || role === 'frame-image') {
+			if (role === 'frame-border' || role === 'frame-gap' || role === 'frame-image') {
 				fabricCanvas.remove(obj)
 			}
 		}
@@ -834,7 +920,7 @@ export function useProductCanvasEditor(options: {
 		if (collagePhotoObjects.includes(obj)) return true
 		if (obj === frameObject) return true
 		const role = (obj as { data?: { role?: string } }).data?.role
-		return role === 'frame-border'
+		return role === 'frame-border' || role === 'frame-gap'
 	}
 
 	const getProductThumbCollageExportBounds = () => {
@@ -935,7 +1021,7 @@ export function useProductCanvasEditor(options: {
 		if (hasCollageLayout.value && collagePhotoObjects.length) {
 			refitCollageSlotRects()
 		} else if (photoObject) {
-			fitPhotoCover()
+			fitPhotoInPrintArea()
 		}
 		await updateFrame()
 		reorderLayers()
@@ -1008,7 +1094,7 @@ export function useProductCanvasEditor(options: {
 				if (hasCollageLayout.value && collagePhotoObjects.length) {
 					refitCollageSlotRects()
 				} else if (photoObject) {
-					fitPhotoCover()
+					fitPhotoInPrintArea()
 				}
 				await updateFrame()
 				reorderLayers()
@@ -1105,6 +1191,27 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
+	const resolveFrameBarFill = async (
+		frame: FrameOption
+	): Promise<string | import('fabric').fabric.Pattern> => {
+		const lib = fabricLib
+		if (!lib) return normalizeFrameColor(frame.color_hex)
+
+		const url = frame.image_url?.trim()
+		if (!url) return normalizeFrameColor(frame.color_hex)
+
+		try {
+			const el = await loadHtmlImage(mediaUrlForCanvas(url))
+			return new lib.Pattern({
+				source: el,
+				repeat: 'repeat'
+			})
+		} catch {
+			return normalizeFrameColor(frame.color_hex)
+		}
+	}
+
+	/** Рамка снаружи холста + зазор (PlusCanvas: ~3 cm рамка, ~2 cm «загиб»). */
 	const drawSelectedFrame = async () => {
 		const canvas = fabricCanvas
 		const lib = fabricLib
@@ -1120,10 +1227,18 @@ export function useProductCanvasEditor(options: {
 		const ph = outer.height
 		const frameCx = outer.left
 		const frameCy = outer.top
-		const bw = FRAME_BORDER_WIDTH
-		const borderColor = normalizeFrameColor(frame.color_hex)
+		const bw = CANVAS_FRAME_OUTER_PX
+		const gap = CANVAS_FRAME_GAP_PX
+		const borderFill = await resolveFrameBarFill(frame)
 
-		const addBar = (width: number, height: number, left: number, top: number) => {
+		const addBar = (
+			width: number,
+			height: number,
+			left: number,
+			top: number,
+			role: 'frame-border' | 'frame-gap',
+			fill: string | import('fabric').fabric.Pattern
+		) => {
 			const rect = new lib.Rect({
 				width,
 				height,
@@ -1131,12 +1246,12 @@ export function useProductCanvasEditor(options: {
 				top,
 				originX: 'center',
 				originY: 'center',
-				fill: borderColor,
-				stroke: borderColor,
-				strokeWidth: 1,
+				fill,
+				stroke: role === 'frame-gap' ? FRAME_GAP_FILL : undefined,
+				strokeWidth: role === 'frame-gap' ? 0 : 1,
 				objectCaching: false
 			})
-			rect.set({ data: { role: 'frame-border' } })
+			rect.set({ data: { role } })
 			lockFabricObject(rect)
 			canvas.add(rect)
 		}
@@ -1144,19 +1259,23 @@ export function useProductCanvasEditor(options: {
 		const halfW = pw / 2
 		const halfH = ph / 2
 
-		// Полосы по краю коллажа (внутрь), не снаружи — иначе верх/низ обрезаются overflow.
-		addBar(pw, bw, frameCx, frameCy - halfH + bw / 2)
-		addBar(pw, bw, frameCx, frameCy + halfH - bw / 2)
-		addBar(bw, ph, frameCx - halfW + bw / 2, frameCy)
-		addBar(bw, ph, frameCx + halfW - bw / 2, frameCy)
+		// Зазор внутри print area — между фото и рамкой (видимый «загиб»).
+		addBar(pw, gap, frameCx, frameCy - halfH + gap / 2, 'frame-gap', FRAME_GAP_FILL)
+		addBar(pw, gap, frameCx, frameCy + halfH - gap / 2, 'frame-gap', FRAME_GAP_FILL)
+		const gapSideH = Math.max(1, ph - 2 * gap)
+		addBar(gap, gapSideH, frameCx - halfW + gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+		addBar(gap, gapSideH, frameCx + halfW - gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+
+		// Рамка сразу снаружи print area (после зазора).
+		addBar(pw + 2 * bw, bw, frameCx, frameCy - halfH - bw / 2, 'frame-border', borderFill)
+		addBar(pw + 2 * bw, bw, frameCx, frameCy + halfH + bw / 2, 'frame-border', borderFill)
+		const frameSideH = ph + 2 * bw
+		addBar(bw, frameSideH, frameCx - halfW - bw / 2, frameCy, 'frame-border', borderFill)
+		addBar(bw, frameSideH, frameCx + halfW + bw / 2, frameCy, 'frame-border', borderFill)
 	}
 
-	/** Отступ контейнера только при выбранной рамке (полоса + 10px). Без рамки — 0. */
-	const getCollageContainerInsetPx = () => {
-		const frame = selectedFrame.value
-		if (!frame || isNoFrame(frame)) return 0
-		return FRAME_BORDER_WIDTH + COLLAGE_FRAME_CONTENT_MARGIN_PX
-	}
+	/** Рамка снаружи области печати — слоты коллажа не сжимаем при выборе çerçeve. */
+	const getCollageContainerInsetPx = () => 0
 
 	const getCollageContentRect = (): {
 		left: number
@@ -1188,7 +1307,10 @@ export function useProductCanvasEditor(options: {
 	) => {
 		if (!fabricLib) return
 		const inner = group.getObjects()[0] as import('fabric').fabric.Image | undefined
-		if (inner) fitImageInSlot(inner, rect.width, rect.height, 0, 0)
+		if (inner) {
+			inner.set({ scaleX: 1, scaleY: 1 })
+			fitImageInSlot(inner, rect.width, rect.height, 0, 0)
+		}
 
 		const clipRect = new fabricLib.Rect({
 			width: rect.width,
@@ -1201,6 +1323,8 @@ export function useProductCanvasEditor(options: {
 		})
 
 		group.set({
+			scaleX: 1,
+			scaleY: 1,
 			left: rect.left,
 			top: rect.top,
 			width: rect.width,
@@ -1244,11 +1368,13 @@ export function useProductCanvasEditor(options: {
 
 		const frame = selectedFrame.value
 		if (!frame || isNoFrame(frame)) {
+			if (photoObject && !hasCollageLayout.value) fitPhotoInPrintArea()
 			fabricCanvas.requestRenderAll()
 			return
 		}
 
 		await drawSelectedFrame()
+		if (photoObject && !hasCollageLayout.value) fitPhotoInPrintArea()
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
 	}
@@ -1376,6 +1502,19 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const getCollageSourceStats = () => {
+		if (isCanvasPaintingGallery.value) {
+			const artwork = getGalleryArtworkUrl()
+			const layoutSlots = collageLayout.value?.layout_json.length ?? 0
+			const hasArt = Boolean(artwork)
+			return {
+				innerImagesTotal: 0,
+				innerImagesWithUrl: 0,
+				sessionUploads: hasArt ? 1 : 0,
+				layoutSlots,
+				expected: Math.max(hasArt ? 1 : 0, layoutSlots > 0 ? layoutSlots : 0)
+			}
+		}
+
 		const p = options.product?.value
 		const innerRaw = p?.inner_images ?? []
 		const innerWithUrl = innerRaw
@@ -1394,7 +1533,14 @@ export function useProductCanvasEditor(options: {
 
 	const expectedCollageUploadCount = () => getCollageSourceStats().expected
 
-	const getCollageUploads = () => uploadImages.value.filter((u) => u?.url?.trim())
+	const getCollageUploads = (): TempDesignImage[] => {
+		if (isCanvasPaintingGallery.value) {
+			const url = getGalleryArtworkUrl()
+			if (!url) return []
+			return [{ url, id: 1, session_id: 'canvas-artwork' }]
+		}
+		return uploadImages.value.filter((u) => u?.url?.trim())
+	}
 
 	const waitForCollageUploadsReady = async (minCount: number, maxWaitMs = 3000) => {
 		const deadline = Date.now() + maxWaitMs
@@ -1516,11 +1662,8 @@ export function useProductCanvasEditor(options: {
 
 		if (manageLoading) beginCanvasLoading()
 		try {
-			const useTemplateBg = Boolean(productBackgroundUrl.value)
 			if (printAreaRect) {
-				printAreaRect.set({
-					fill: useTemplateBg ? 'transparent' : '#ffffff'
-				})
+				printAreaRect.set({ fill: resolvePrintAreaFill() })
 			}
 
 			if (hasCollageLayout.value) {
@@ -1529,12 +1672,17 @@ export function useProductCanvasEditor(options: {
 			}
 
 			removeCollagePhotos()
-			const list = uploadImages.value
+			const artworkUrl = isCanvasPaintingGallery.value ? getGalleryArtworkUrl() : null
+			const list = artworkUrl
+				? [{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' as const }]
+				: uploadImages.value
 			if (list.length > 0) {
 				if (photoObject) {
 					await refitSinglePhoto()
 				} else {
-					const idx = Math.min(designStore.activeImageIndex, list.length - 1)
+					const idx = isCanvasPaintingGallery.value
+						? 0
+						: Math.min(designStore.activeImageIndex, list.length - 1)
 					await setPhotoFromUrl(list[idx]?.url ?? list[0].url, list[idx] ?? list[0], {
 						skipBackground: true
 					})
@@ -1565,8 +1713,6 @@ export function useProductCanvasEditor(options: {
 		try {
 		const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
 
-		const useTemplateBg = Boolean(productBackgroundUrl.value)
-
 		if (!printAreaRect) {
 			printAreaRect = new fabricLib.Rect({
 				width,
@@ -1575,7 +1721,7 @@ export function useProductCanvasEditor(options: {
 				top: cy(),
 				originX: 'center',
 				originY: 'center',
-				fill: useTemplateBg ? 'transparent' : '#ffffff',
+				fill: resolvePrintAreaFill(),
 				stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
 				strokeWidth: hasCollageLayout.value ? 0 : 1,
 				selectable: false,
@@ -1625,9 +1771,7 @@ export function useProductCanvasEditor(options: {
 		if (manageLoading) beginCanvasLoading()
 		try {
 			if (!opts?.skipBackground && printAreaRect) {
-				printAreaRect.set({
-					fill: productBackgroundUrl.value ? 'transparent' : '#ffffff'
-				})
+				printAreaRect.set({ fill: resolvePrintAreaFill() })
 			}
 
 			const el = await loadHtmlImage(url)
@@ -1635,18 +1779,19 @@ export function useProductCanvasEditor(options: {
 				fabricCanvas.remove(photoObject)
 				photoObject = null
 			}
+			const center = getPrintAreaCenter()
 			const img = new fabricLib.Image(el, {
 				originX: 'center',
 				originY: 'center',
-				left: cx(),
-				top: cy(),
+				left: center.left,
+				top: center.top,
 				objectCaching: false
 			})
 			lockPhotoInteractions(img)
 			fabricCanvas.add(img)
 			photoObject = img
 			fabricCanvas.discardActiveObject()
-			fitPhotoCover()
+			fitPhotoInPrintArea()
 			await updateFrame()
 			reorderLayers()
 			fabricCanvas.requestRenderAll()
@@ -1661,6 +1806,15 @@ export function useProductCanvasEditor(options: {
 		const count = productBackgroundThumbs.value.length
 		if (index < 0 || index >= count) return
 		if (activeProductImageIndex.value === index) return
+
+		if (isCanvasPaintingGallery.value) {
+			activeProductImageIndex.value = index
+			if (!fabricCanvas || !canvasReady) return
+			const item = productBackgroundThumbs.value[index]
+			if (!item?.url) return
+			await setPhotoFromUrl(item.url, item, { skipBackground: true })
+			return
+		}
 
 		await runWithCanvasLoading(async () => {
 			activeProductImageIndex.value = index
@@ -1769,28 +1923,21 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyFrame = async (frame: FrameOption) => {
-		await runWithCanvasLoading(async () => {
-			selectedFrame.value = frame
-			if (!fabricCanvas || !canvasReady) return
-
-			if (hasCollageLayout.value && !collagePhotoObjects.length) {
-				await syncCollageSlots({ manageLoading: false })
-			} else if (hasCollageLayout.value && collagePhotoObjects.length) {
-				refitCollageSlotRects()
-				await updateFrame()
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
-			} else {
-				await updateFrame()
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
-			}
+		selectedFrame.value = frame
+		if (!fabricCanvas || !canvasReady) {
 			emitDesign()
-			await refreshLayoutDerivedPreviews({
-				refreshAllFormatPreviews: true,
-				refreshLeftThumbs: true
-			})
-		})
+			return
+		}
+
+		if (hasCollageLayout.value && !collagePhotoObjects.length) {
+			await syncCollageSlots({ manageLoading: false })
+		} else {
+			await updateFrame()
+			reorderLayers()
+			fabricCanvas.requestRenderAll()
+		}
+		emitDesign()
+		scheduleCanvasPreview({ productThumbsActiveOnly: true })
 	}
 
 	const applyFrameByIndex = async (index: number) => {
@@ -1956,8 +2103,15 @@ export function useProductCanvasEditor(options: {
 			if (!isActiveCanvasInit(initId)) return
 
 			canvasReady = true
-			syncCanvasDerivedPreviews()
-			scheduleCanvasPreview()
+			if (formatPresets.value.length > 1) {
+				await refreshLayoutDerivedPreviews({
+					refreshAllFormatPreviews: true,
+					refreshLeftThumbs: false
+				})
+			} else {
+				syncCanvasDerivedPreviews()
+				scheduleCanvasPreview()
+			}
 			scheduleProductThumbPreviews()
 		} finally {
 			if (showCollageLoader) {
@@ -1967,10 +2121,14 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
+	const canInitEditor = () => {
+		if (!import.meta.client || !options.wrapRef.value) return false
+		if (isCanvasPaintingGallery.value) return Boolean(canvasPaintingArtworkUrl.value)
+		return formatPresets.value.length > 0 && designStore.hasSessionFor(options.productId.value)
+	}
+
 	const tryInitOrSyncFormats = async () => {
-		if (!import.meta.client || !formatPresets.value.length) return
-		if (!options.wrapRef.value) return
-		if (!designStore.hasSessionFor(options.productId.value)) return
+		if (!canInitEditor()) return
 
 		syncSelectionFromFormats()
 
@@ -1999,6 +2157,15 @@ export function useProductCanvasEditor(options: {
 
 	watch(formatPresets, () => void tryInitOrSyncFormats())
 	watch(frameOptions, syncFrameSelection)
+
+	watch(
+		() => [options.product?.value?.id, canvasPaintingArtworkUrl.value, options.wrapRef.value] as const,
+		() => {
+			if (!isCanvasPaintingGallery.value) return
+			void tryInitOrSyncFormats()
+		},
+		{ flush: 'post' }
+	)
 
 	watch(
 		() => uploadImages.value.length,
@@ -2090,6 +2257,10 @@ export function useProductCanvasEditor(options: {
 		}
 	)
 
+	onMounted(() => {
+		nextTick(() => void tryInitOrSyncFormats())
+	})
+
 	onUnmounted(() => {
 		disposeCanvas()
 	})
@@ -2138,6 +2309,8 @@ export function useProductCanvasEditor(options: {
 		isFrameActive: (id: string) => selectedFrame.value?.id === id,
 		isMockupSceneActive,
 		activeMockupSceneSettings,
-		setMockupSceneColor
+		setMockupSceneColor,
+		isCanvasPaintingGallery,
+		useStaticFormatPreviews
 	}
 }
