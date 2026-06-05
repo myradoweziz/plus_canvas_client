@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { FreeMode, Navigation, Thumbs } from 'swiper/modules'
 
+	import { CANVAS_PAINTING_STATIC_BG } from '~/utils/canvasPaintingDisplay'
 	import type { TempDesignImage } from '~/utils/types'
 	import Icon from '~/utils/ui/Icon.vue'
 
@@ -36,6 +37,12 @@
 	}
 	const prevEl = ref<HTMLElement | null>(null)
 	const nextEl = ref<HTMLElement | null>(null)
+
+	const getThumbOverlaySrc = (index: number) => {
+		const collage = props.getProductThumbCollageSrc?.(index)?.trim()
+		if (collage) return collage
+		return props.getThumbPreviewSrc(index)?.trim() ?? ''
+	}
 
 	const onThumbClick = (index: number) => {
 		emit('select', index)
@@ -88,7 +95,7 @@
 				</div>
 				<div v-else-if="useStaticThumbBg" class="thumb-slide__stack">
 					<img
-						src="/images/product-card-bg.svg"
+						:src="CANVAS_PAINTING_STATIC_BG"
 						alt=""
 						class="thumb-slide__bg"
 						aria-hidden="true"
@@ -101,14 +108,22 @@
 						@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
 					/>
 				</div>
-				<img
-					v-else
-					:src="getThumbPreviewSrc(index)"
-					:alt="img.session_id === 'product-image' ? `mockup-${img.id}` : `upload-${img.id}`"
-					class="thumb-slide__img"
-					loading="lazy"
-					@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
-				/>
+				<div v-else class="thumb-slide__stack">
+					<img
+						:src="CANVAS_PAINTING_STATIC_BG"
+						alt=""
+						class="thumb-slide__bg"
+						aria-hidden="true"
+					/>
+					<img
+						v-if="getThumbOverlaySrc(index)"
+						:src="getThumbOverlaySrc(index)"
+						:alt="img.session_id === 'product-image' ? `mockup-${img.id}` : `preview-${img.id}`"
+						class="thumb-slide__collage"
+						loading="lazy"
+						@error="($event.target as HTMLImageElement).style.opacity = '0.35'"
+					/>
+				</div>
 			</swiper-slide>
 			<swiper-slide v-if="!images.length">
 				<img src="/images/banner.png" alt="placeholder" />
@@ -177,7 +192,7 @@
 				object-fit: contain;
 				object-position: center;
 				box-sizing: border-box;
-				padding: 14px;
+				padding: 16px;
 				pointer-events: none;
 			}
 

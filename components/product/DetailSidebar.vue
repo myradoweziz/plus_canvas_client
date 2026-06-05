@@ -11,6 +11,7 @@
 		selectedFormatId: number | null
 		selectedSizeId: number | null
 		activeFrameId: string | null
+		isCanvasLoading?: boolean
 		product: Product
 	}>()
 
@@ -163,34 +164,36 @@
 			</Transition>
 		</button>
 
-		<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Boyut Seçin</div>
-		<div class="mt-2 relative w-full max-w-[220px]">
-			<select
-				name="size"
-				:value="selectedSizeId ?? ''"
-				class="pcSelect w-full appearance-none bg-[#B3B3B322] hover:bg-[#B3B3B333] rounded-full py-3.5 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all cursor-pointer"
-				:disabled="!sizeOptions.length"
-				@change="onSizeChange"
-			>
-				<option v-for="size in sizeOptions" :key="size.id" :value="size.id">
-					{{ size.display_name }}
-				</option>
-			</select>
-			<div class="pointer-events-none absolute inset-y-0 right-5 flex items-center text-gray-500">
-				<Icon name="arrowRight" class="w-4 h-4 rotate-90" />
+		<div class="relative mt-8" :class="{ 'pointer-events-none': isCanvasLoading }">
+			<div class="text-sm font-bold text-gray-950 uppercase tracking-wider">Boyut Seçin</div>
+			<div class="mt-2 relative w-full max-w-[220px]">
+				<select
+					name="size"
+					:value="selectedSizeId ?? ''"
+					class="pcSelect w-full appearance-none bg-[#B3B3B322] hover:bg-[#B3B3B333] rounded-full py-3.5 pl-6 pr-12 font-bold text-[#101828] outline-none transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+					:disabled="!sizeOptions.length || isCanvasLoading"
+					@change="onSizeChange"
+				>
+					<option v-for="size in sizeOptions" :key="size.id" :value="size.id">
+						{{ size.display_name }}
+					</option>
+				</select>
+				<div class="pointer-events-none absolute inset-y-0 right-5 flex items-center text-gray-500">
+					<Icon name="arrowRight" class="w-4 h-4 rotate-90" />
+				</div>
 			</div>
-		</div>
 
-		<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
-		<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
+			<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
+			<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
 			<button
 				v-for="(frame, index) in frames"
 				:key="frame.id"
 				type="button"
-				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-all hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF]"
+				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow] duration-200 hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF] disabled:cursor-not-allowed"
+				:disabled="isCanvasLoading"
 				:class="
 					isFrameActive(frame.id)
-						? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10 scale-[1.03]'
+						? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10'
 						: 'border-gray-200'
 				"
 				:aria-pressed="isFrameActive(frame.id)"
@@ -216,6 +219,28 @@
 					{{ frame.name }}
 				</span>
 			</button>
+			</div>
+			<div
+				v-if="isCanvasLoading"
+				class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/55 backdrop-blur-[1px]"
+				aria-live="polite"
+				aria-busy="true"
+			>
+				<svg
+					class="h-8 w-8 animate-spin text-[#2B7FFF]"
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+					<path
+						class="opacity-75"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+					/>
+				</svg>
+			</div>
 		</div>
 
 		<div class="mt-8 flex items-center gap-5">

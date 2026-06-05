@@ -32,9 +32,7 @@ export function extractProductImageUrls(product: unknown): string[] {
 	const row = product as Record<string, unknown>
 	const list = row.images ?? row.product_images
 	if (!Array.isArray(list)) return []
-	return list
-		.map((item) => getProductImageUrl(item as Image))
-		.filter((u) => u.length > 0)
+	return list.map((item) => getProductImageUrl(item as Image)).filter((u) => u.length > 0)
 }
 
 export function getPrimaryProductBackgroundUrl(product: unknown): string | null {
@@ -161,10 +159,7 @@ export function fittedImageRectInViewport(
 ): LayoutImageRect {
 	const iw = Math.max(imageW, 1)
 	const ih = Math.max(imageH, 1)
-	const scale =
-		fit === 'contain'
-			? Math.min(viewportW / iw, viewportH / ih)
-			: Math.max(viewportW / iw, viewportH / ih)
+	const scale = fit === 'contain' ? Math.min(viewportW / iw, viewportH / ih) : Math.max(viewportW / iw, viewportH / ih)
 	const width = iw * scale
 	const height = ih * scale
 	const originX = viewportCenterX - viewportW / 2
@@ -278,23 +273,8 @@ export function slotRectInPrintArea(
 		width: layoutRef?.width,
 		height: layoutRef?.height
 	})
-	const fitted = collageLayoutFittedInPrintArea(
-		slots,
-		printW,
-		printH,
-		printCenterX,
-		printCenterY,
-		layoutRef
-	)
-	return slotRectInContainer(
-		slot,
-		fitted.width,
-		fitted.height,
-		fitted.centerX,
-		fitted.centerY,
-		mode,
-		refBounds
-	)
+	const fitted = collageLayoutFittedInPrintArea(slots, printW, printH, printCenterX, printCenterY, layoutRef)
+	return slotRectInContainer(slot, fitted.width, fitted.height, fitted.centerX, fitted.centerY, mode, refBounds)
 }
 
 export function collageSlotsBoundsInPrintArea(
@@ -561,4 +541,3 @@ export function clampCenterRectToFrameInner(slot: CenterRect, frame: CenterRect)
 		height: Math.max(1, iB - iT)
 	}
 }
-

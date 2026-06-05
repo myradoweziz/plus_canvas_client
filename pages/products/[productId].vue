@@ -73,7 +73,10 @@
 	const {
 		thumbImages,
 		canvasPreviewSrc,
+		canvasDesignPreviewSrc,
 		formatPreviewById,
+		formatDesignPreviewById,
+		getFormatStripBackgroundSrc,
 		isThumbActive,
 		previewUrl,
 		selectThumb,
@@ -187,7 +190,10 @@
 						:get-product-thumb-collage-src="getProductThumbCollageSrc"
 						:format-presets="formatPresets"
 						:format-preview-by-id="formatPreviewById"
+						:format-design-preview-by-id="formatDesignPreviewById"
 						:canvas-preview-src="canvasPreviewSrc"
+						:canvas-design-preview-src="canvasDesignPreviewSrc"
+						:format-strip-background-src="getFormatStripBackgroundSrc()"
 						:active-format-id="activeFormatId"
 						:is-canvas-loading="isCanvasLoading"
 						:is-mockup-scene-active="isMockupSceneActive"
@@ -222,6 +228,7 @@
 						:selected-format-id="selectedFormat?.id ?? null"
 						:selected-size-id="selectedSize?.id ?? null"
 						:active-frame-id="activeFrameId"
+						:is-canvas-loading="isCanvasLoading"
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 	import { FreeMode, Navigation, Thumbs } from 'swiper/modules'
 
-	import Icon from '~/utils/ui/Icon.vue'
-	import { getFormatStaticPreviewSvg } from '~/utils/canvasPaintingDisplay'
+	import { CANVAS_PAINTING_STATIC_BG, getFormatStaticPreviewSvg } from '~/utils/canvasPaintingDisplay'
 	import { formatOrientationAspect, type CanvasFormat } from '~/utils/productDesignConfig'
+	import Icon from '~/utils/ui/Icon.vue'
 
 	import 'swiper/css'
 	import 'swiper/css/free-mode'
@@ -13,33 +13,45 @@
 		formats: CanvasFormat[]
 		/** Снимок Fabric на каждый формат (как на центральном холсте) */
 		formatPreviewById: Record<number, string>
+		/** Дизайн без mockup — слой поверх фона */
+		formatDesignPreviewById?: Record<number, string>
 		/** Актуальный снимок центрального холста */
 		canvasPreviewSrc?: string
+		/** Актуальный дизайн без mockup */
+		canvasDesignPreviewSrc?: string
+		/** Mockup-фон (как на холсте) */
+		formatStripBackgroundSrc?: string
 		activeFormatId: number | null
 		/** Галерея: статичные SVG вместо снимков Fabric */
 		useStaticFormatPreviews?: boolean
+		isLoading?: boolean
 	}>()
 
-	const previewSrcFor = (format: CanvasFormat) => {
+	const backgroundSrc = computed(() => props.formatStripBackgroundSrc?.trim() || CANVAS_PAINTING_STATIC_BG)
+
+	const designSrcFor = (format: CanvasFormat) => {
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
-		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
-		const fromFabric = props.formatPreviewById[id]
+		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
+		const fromFabric = props.formatDesignPreviewById?.[id]
 		if (fromFabric) return fromFabric
 		if (props.useStaticFormatPreviews) return getFormatStaticPreviewSvg(format)
+		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
+		const legacy = props.formatPreviewById[id]
+		if (legacy) return legacy
 		return props.canvasPreviewSrc ?? ''
 	}
 
 	const usesStaticSvg = (format: CanvasFormat) => {
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
-		if (isCurrent && props.canvasPreviewSrc) return false
-		if (props.formatPreviewById[id]) return false
+		if (isCurrent && (props.canvasDesignPreviewSrc || props.canvasPreviewSrc)) return false
+		if (props.formatDesignPreviewById?.[id] || props.formatPreviewById[id]) return false
 		return Boolean(props.useStaticFormatPreviews)
 	}
 
-	const previewZoneStyle = (format: CanvasFormat) => ({
-		aspectRatio: String(formatOrientationAspect(format))
+	const previewOverlayStyle = (format: CanvasFormat) => ({
+		'--format-aspect': String(formatOrientationAspect(format))
 	})
 
 	const emit = defineEmits<{
@@ -53,6 +65,7 @@
 	const isActive = (id: number) => Number(props.activeFormatId) === Number(id)
 
 	const onSelect = (formatId: number) => {
+		if (props.isLoading) return
 		emit('select-format', formatId)
 	}
 
@@ -79,6 +92,7 @@
 	<div
 		v-if="formats.length"
 		class="format-strip relative w-full max-w-[680px]"
+		:class="{ 'format-strip--loading': isLoading }"
 		:style="{ '--format-visible': String(Math.min(formats.length, MAX_VISIBLE_FORMATS)) }"
 	>
 		<swiper
@@ -105,20 +119,30 @@
 						@keydown.enter.prevent="onSelect(format.id)"
 						@keydown.space.prevent="onSelect(format.id)"
 					>
-						<div class="format-slide__preview-frame" :style="previewZoneStyle(format)">
-							<img
-								v-if="previewSrcFor(format)"
-								:src="previewSrcFor(format)"
-								:alt="format.name"
-								class="format-slide__preview-img"
-								:class="{ 'format-slide__preview-img--static': usesStaticSvg(format) }"
-							/>
-							<img
-								v-else
-								src="/images/banner.png"
-								:alt="format.name"
-								class="format-slide__preview-img format-slide__preview-img--placeholder"
-							/>
+						<div class="format-slide__preview-frame">
+							<div class="format-slide__preview-stack">
+								<img :src="backgroundSrc" alt="" class="format-slide__preview-bg" aria-hidden="true" />
+								<div class="format-slide__preview-overlay">
+									<div
+										class="format-slide__preview-img-box"
+										:class="{ 'format-slide__preview-img-box--static': usesStaticSvg(format) }"
+										:style="previewOverlayStyle(format)"
+									>
+										<img
+											v-if="designSrcFor(format)"
+											:src="designSrcFor(format)"
+											:alt="format.name"
+											class="format-slide__preview-img"
+										/>
+										<img
+											v-else
+											src="/images/banner.png"
+											:alt="format.name"
+											class="format-slide__preview-img format-slide__preview-img--placeholder"
+										/>
+									</div>
+								</div>
+							</div>
 						</div>
 					</div>
 					<p class="format-slide__label pointer-events-none">{{ format.name }}</p>
@@ -163,6 +187,11 @@
 	.format-strip {
 		--format-slide-gap: 20px;
 		--format-visible: 6;
+		--format-preview-h: 108px;
+
+		&--loading {
+			pointer-events: none;
+		}
 	}
 
 	.mySwiper3,
@@ -178,10 +207,7 @@
 			height: auto;
 			display: flex;
 			box-sizing: border-box;
-			/* Ровно N колонок в 680px при 6 слайдах */
-			max-width: calc(
-				(100% - (var(--format-visible) - 1) * var(--format-slide-gap)) / var(--format-visible)
-			);
+			max-width: calc((100% - (var(--format-visible) - 1) * var(--format-slide-gap)) / var(--format-visible));
 		}
 
 		:deep(.format-slide) {
@@ -189,14 +215,14 @@
 			flex-direction: column;
 			flex: 1;
 			width: 100%;
-			min-height: 132px;
+			min-height: 164px;
 			border: 1px solid transparent;
 			background-color: white;
 			border-radius: 8px;
 			cursor: pointer;
-			transition: all 0.3s ease;
-			padding: 8px 6px 6px;
+			transition: border-color 0.2s ease, box-shadow 0.2s ease;
 			box-sizing: border-box;
+			overflow: hidden;
 
 			&:hover {
 				border-color: #93c5fd;
@@ -214,49 +240,77 @@
 		width: 100%;
 		display: flex;
 		flex-direction: column;
-		align-items: stretch;
+		align-items: center;
 		justify-content: flex-start;
 		min-height: 0;
 	}
 
 	.format-slide__preview {
-		flex: 0 0 88px;
+		flex: 0 0 var(--format-preview-h);
 		width: 100%;
-		height: 88px;
+		height: var(--format-preview-h);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-radius: 8px;
-		overflow: hidden;
-		background-color: #e5e7eb;
-		border: 2px solid transparent;
-		transition: border-color 0.2s ease;
+		padding: 0;
 		box-sizing: border-box;
-
-		&:hover {
-			border-color: #2563eb;
-		}
-
-		&--active {
-			border-color: #2563eb;
-		}
 	}
 
 	.format-slide__preview-frame {
 		width: 100%;
-		max-width: 100%;
-		max-height: 100%;
+		height: 100%;
+	}
+
+	.format-slide__preview-stack {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		--format-overlay-max-h: calc(100% - 18px);
+	}
+
+	.format-slide__preview-bg {
+		position: absolute;
+		inset: 0;
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		object-position: center;
+		pointer-events: none;
+	}
+
+	.format-slide__preview-overlay {
+		position: absolute;
+		inset: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		overflow: hidden;
+		padding: 9px;
+		box-sizing: border-box;
+		pointer-events: none;
+	}
+
+	.format-slide__preview-img-box {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		max-width: 100%;
+		max-height: var(--format-overlay-max-h);
+		width: min(100%, calc(var(--format-overlay-max-h) * var(--format-aspect, 1)));
+		height: auto;
+		aspect-ratio: var(--format-aspect, 1);
+	}
+
+	.format-slide__preview-img-box--static {
+		--format-overlay-max-h: calc(100% - 24px);
 	}
 
 	.format-slide__preview-img {
 		display: block;
 		width: 100%;
 		height: 100%;
-		object-fit: cover;
+		object-fit: contain;
 		object-position: center;
 		pointer-events: none;
 	}
@@ -266,16 +320,11 @@
 		opacity: 0.6;
 	}
 
-	.format-slide__preview-img--static {
-		object-fit: contain;
-		padding: 4px;
-	}
-
 	.format-slide__label {
 		flex-shrink: 0;
 		width: 100%;
 		margin: auto 0 0;
-		padding-top: 8px;
+		padding: 8px 0;
 		text-align: center;
 		font-size: 0.875rem;
 		line-height: 1.25rem;

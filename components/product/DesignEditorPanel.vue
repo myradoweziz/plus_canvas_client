@@ -1,6 +1,5 @@
 <script setup lang="ts">
 	import type { CanvasFormat } from '~/utils/productDesignConfig'
-	import { getFormatStaticPreviewSvg } from '~/utils/canvasPaintingDisplay'
 	import type { ActiveMockupSceneSetting, Product, TempDesignImage } from '~/utils/types'
 
 	defineProps<{
@@ -11,7 +10,10 @@
 		getProductThumbCollageSrc?: (index: number) => string
 		formatPresets: CanvasFormat[]
 		formatPreviewById: Record<number, string>
+		formatDesignPreviewById?: Record<number, string>
 		canvasPreviewSrc?: string
+		canvasDesignPreviewSrc?: string
+		formatStripBackgroundSrc?: string
 		activeFormatId: number | null
 		isCanvasLoading?: boolean
 		isMockupSceneActive?: boolean
@@ -42,20 +44,37 @@
 		/>
 
 		<section class="product-editor-main w-full min-w-0 max-w-4xl">
-			<div class="product-editor-canvas relative w-full min-h-[620px]">
-				<slot name="canvas" />
-				<ProductMockupSceneHotspots
-					v-if="isMockupSceneActive && activeMockupSceneSettings?.length"
-					:settings="activeMockupSceneSettings"
-					:disabled="isCanvasLoading"
-					@color-change="(index, color) => $emit('mockup-scene-color-change', index, color)"
+			<div class="product-editor-workspace relative">
+				<div class="product-editor-canvas relative w-full min-h-[620px]">
+					<slot name="canvas" />
+					<ProductMockupSceneHotspots
+						v-if="isMockupSceneActive && activeMockupSceneSettings?.length"
+						:settings="activeMockupSceneSettings"
+						:disabled="isCanvasLoading"
+						@color-change="(index, color) => $emit('mockup-scene-color-change', index, color)"
+					/>
+				</div>
+
+				<ProductDesignFormatStrip
+					:formats="formatPresets"
+					:format-preview-by-id="formatPreviewById"
+					:format-design-preview-by-id="formatDesignPreviewById"
+					:canvas-preview-src="canvasPreviewSrc"
+					:canvas-design-preview-src="canvasDesignPreviewSrc"
+					:format-strip-background-src="formatStripBackgroundSrc"
+					:active-format-id="activeFormatId"
+					:use-static-format-previews="useStaticFormatPreviews"
+					:is-loading="isCanvasLoading"
+					@select-format="$emit('select-format', $event)"
 				/>
-				<div
-					v-if="isCanvasLoading"
-					class="canvas-loading-overlay absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-[20px] bg-[#F5F2ED]/85 backdrop-blur-[2px]"
-					aria-live="polite"
-					aria-busy="true"
-				>
+
+				<Transition name="canvas-loader">
+					<div
+						v-if="isCanvasLoading"
+						class="canvas-loading-overlay absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-[20px] bg-[#F5F2ED]/96 backdrop-blur-[3px]"
+						aria-live="polite"
+						aria-busy="true"
+					>
 					<svg
 						class="h-10 w-10 animate-spin text-[#2B7FFF]"
 						xmlns="http://www.w3.org/2000/svg"
@@ -71,17 +90,9 @@
 						/>
 					</svg>
 					<span class="text-sm font-medium text-[#364153]">Görseller yükleniyor…</span>
-				</div>
+					</div>
+				</Transition>
 			</div>
-
-			<ProductDesignFormatStrip
-				:formats="formatPresets"
-				:format-preview-by-id="formatPreviewById"
-				:canvas-preview-src="canvasPreviewSrc"
-				:active-format-id="activeFormatId"
-				:use-static-format-previews="useStaticFormatPreviews"
-				@select-format="$emit('select-format', $event)"
-			/>
 
 			<ProductDesignDeliveryBanner />
 		</section>
@@ -92,5 +103,19 @@
 	.product-editor-main {
 		display: flex;
 		flex-direction: column;
+	}
+
+	.product-editor-workspace {
+		min-height: 0;
+	}
+
+	.canvas-loader-enter-active,
+	.canvas-loader-leave-active {
+		transition: opacity 0.18s ease;
+	}
+
+	.canvas-loader-enter-from,
+	.canvas-loader-leave-to {
+		opacity: 0;
 	}
 </style>
