@@ -93,6 +93,30 @@ export const useHomeStore = defineStore('home', () => {
 		if (!error.value) subCategories.value = data.value?.data ?? []
 	}
 
+	let categoryMenuDataPromise: Promise<void> | null = null
+
+	/** Данные mega-menu категорий — один раз при старте, не при каждом hover. */
+	async function ensureCategoryMenuData() {
+		const hasAll =
+			mainCategories.value.length > 0 &&
+			featuredCategoriesAll.value.length > 0 &&
+			subCategories.value.length > 0
+		if (hasAll) return
+
+		if (!categoryMenuDataPromise) {
+			const tasks: Promise<void>[] = []
+			if (!mainCategories.value.length) tasks.push(fetchMainCategories())
+			if (!featuredCategoriesAll.value.length) tasks.push(fetchFeaturedCategories())
+			if (!subCategories.value.length) tasks.push(fetchSubCategories())
+			categoryMenuDataPromise = Promise.all(tasks)
+				.then(() => undefined)
+				.finally(() => {
+					categoryMenuDataPromise = null
+				})
+		}
+		await categoryMenuDataPromise
+	}
+
 	async function fetchStocks() {
 		const { data, error } = await useFetch<StocksApiResponse>('/api/stocks', homeFetchOptions('/api/stocks'))
 		if (!error.value) stocks.value = data.value?.data ?? []
@@ -146,6 +170,7 @@ export const useHomeStore = defineStore('home', () => {
 		fetchFaqs,
 		fetchHomePage,
 		fetchProducts,
-		fetchSubCategories
+		fetchSubCategories,
+		ensureCategoryMenuData
 	}
 })

@@ -48,14 +48,30 @@
 		emit('select', index)
 		thumbsSwiper.value?.slideTo?.(index)
 	}
+
+	const isCompact = ref(false)
+
+	onMounted(() => {
+		if (!import.meta.client) return
+		const mq = window.matchMedia('(max-width: 1023px)')
+		const sync = () => {
+			isCompact.value = mq.matches
+		}
+		sync()
+		mq.addEventListener('change', sync)
+		onUnmounted(() => mq.removeEventListener('change', sync))
+	})
 </script>
 
 <template>
-	<section class="product-design-thumbs relative h-[510px] w-[100px]">
+	<section
+		class="product-design-thumbs relative shrink-0"
+		:class="isCompact ? 'product-design-thumbs--horizontal w-full h-[108px]' : 'h-[510px] w-[100px]'"
+	>
 		<swiper
 			@swiper="setThumbsSwiper"
-			:slides-per-view="4"
-			:space-between="20"
+			:slides-per-view="isCompact ? Math.min(images.length || 1, 4) : 4"
+			:space-between="isCompact ? 12 : 20"
 			:free-mode="true"
 			:watch-slides-progress="true"
 			:modules="modules"
@@ -64,8 +80,8 @@
 				'--swiper-navigation-color': '#fff',
 				'--swiper-pagination-color': '#fff'
 			}"
-			direction="vertical"
-			:navigation="{ prevEl, nextEl }"
+			:direction="isCompact ? 'horizontal' : 'vertical'"
+			:navigation="images.length > 4 ? { prevEl, nextEl } : false"
 		>
 			<swiper-slide
 				v-for="(img, index) in images"
@@ -131,17 +147,48 @@
 		</swiper>
 
 		<div v-if="images.length > 4">
-			<button ref="prevEl" type="button" class="navBtn absolute left-1/4 top-0 z-10">
-				<Icon name="arrowRight" class="w-12 h-12 -rotate-90" />
+			<button
+				ref="prevEl"
+				type="button"
+				class="navBtn absolute z-10"
+				:class="
+					isCompact
+						? 'left-0 top-1/2 -translate-y-1/2 -translate-x-1'
+						: 'left-1/4 top-0 -translate-x-1/4'
+				"
+			>
+				<Icon
+					name="arrowRight"
+					class="w-10 h-10 sm:w-12 sm:h-12"
+					:class="isCompact ? '-rotate-180' : '-rotate-90'"
+				/>
 			</button>
-			<button ref="nextEl" type="button" class="navBtn absolute left-1/4 -bottom-15 z-10">
-				<Icon name="arrowRight" class="w-12 h-12 rotate-90" />
+			<button
+				ref="nextEl"
+				type="button"
+				class="navBtn absolute z-10"
+				:class="
+					isCompact
+						? 'right-0 top-1/2 -translate-y-1/2 translate-x-1'
+						: 'left-1/4 -bottom-15 -translate-x-1/4'
+				"
+			>
+				<Icon
+					name="arrowRight"
+					class="w-10 h-10 sm:w-12 sm:h-12"
+					:class="isCompact ? '' : 'rotate-90'"
+				/>
 			</button>
 		</div>
 	</section>
 </template>
 
 <style lang="scss" scoped>
+	.product-design-thumbs--horizontal .mySwiper {
+		margin-top: 0;
+		padding: 0 2rem;
+	}
+
 	.mySwiper {
 		margin: 0;
 		margin-top: 40px;
@@ -199,6 +246,20 @@
 			&.is-thumb-active {
 				opacity: 1;
 				box-shadow: 0 0 0 2px #2563eb;
+			}
+		}
+
+		.product-design-thumbs--horizontal :deep(.swiper-slide.thumb-slide) {
+			width: 80px;
+			height: 80px;
+
+			@media (min-width: 480px) {
+				width: 92px;
+				height: 92px;
+			}
+
+			.thumb-slide__collage {
+				padding: 12px;
 			}
 		}
 	}

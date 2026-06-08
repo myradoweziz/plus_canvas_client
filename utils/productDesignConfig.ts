@@ -18,18 +18,18 @@ export type PrintSizeOption = {
 }
 
 export type FrameOption = {
-	id: string
+	id: string | null
 	name: string
 	image_url: string
 	color_hex: string
 	price?: number
 }
 
-/** Без рамки — первый пункт в списке çerçeve. */
-export const FRAME_NONE_ID = 'none'
+/** Без рамки — первый пункт в списке çerçeve (API: canvas_frame_id = null). */
+export const FRAME_NONE_ID = null
 
 export const FRAME_NONE_OPTION: FrameOption = {
-	id: FRAME_NONE_ID,
+	id: null,
 	name: 'Çerçeve yok',
 	image_url: '',
 	color_hex: '#B0B8C4',
@@ -44,14 +44,14 @@ export function getFramePrice(frame: FrameOption | null | undefined): number {
 
 export function isNoFrame(frame: FrameOption | null | undefined): boolean {
 	if (!frame) return true
-	if (frame.id === FRAME_NONE_ID) return true
+	if (frame.id == null || frame.id === 'none') return true
 	const n = frame.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 	return n.includes('cerceve yok') || n.includes('çerçeve yok') || n.includes('no frame') || n.includes('frameless')
 }
 
 /** «Çerçeve yok» всегда первым; дубликаты с API убираем. */
 export function withNoFrameOption(frames: FrameOption[]): FrameOption[] {
-	const rest = frames.filter((f) => f.id !== FRAME_NONE_ID && !isNoFrame(f))
+	const rest = frames.filter((f) => !isNoFrame(f))
 	return [FRAME_NONE_OPTION, ...rest]
 }
 
@@ -62,8 +62,8 @@ export const withDefaultNoFrameOption = withNoFrameOption
 /** Толщина рамки на превью (~3 cm, как PlusCanvas). */
 export const CANVAS_FRAME_OUTER_PX = 22
 
-/** Зазор между лицом холста и рамкой (~2 cm) — «загиб» краёв canvas. */
-export const CANVAS_FRAME_GAP_PX = 12
+/** Зазор между фото и рамкой (0 — изображение вплотную к рамке). */
+export const CANVAS_FRAME_GAP_PX = 0
 
 /** Суммарный отступ коллажа/фото от края области печати при выбранной рамке. */
 export const CANVAS_FRAME_EDGE_INSET_PX = CANVAS_FRAME_OUTER_PX + CANVAS_FRAME_GAP_PX
@@ -127,22 +127,40 @@ const parseAspectFromRow = (row: Record<string, unknown>): number | undefined =>
 
 const normalizeLabel = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 
-/** По названию формата (Dikey, Kare, Yatay 2/1…). */
-export function inferFormatAspectFromName(name: string, slug?: string): number | null {
-	const n = normalizeLabel([name, slug].filter(Boolean).join(' '))
+const FORMAT_ASPECT_RULES: [RegExp, number][] = [
+	[/panorama|3\s*[:/]\s*1|3-1/, 3],
+	[/yatay\s*2\s*[:/]\s*1|2\s*[:/]\s*1/, 2],
+	[/dikey\s*1\s*[:/]\s*2|1\s*[:/]\s*2/, 0.5],
+	[/dikey\s*1\s*[:/]\s*3|1\s*[:/]\s*3/, 1 / 3],
+	[/yatay|horizontal|landscape/, 4 / 3],
+	[/dikey|vertical|portrait/, 3 / 4],
+	[/\bkare\b|square/, 1]
+]
 
-	const rules: [RegExp, number][] = [
-		[/panorama|3\s*[:/]\s*1|3-1/, 3],
-		[/yatay\s*2\s*[:/]\s*1|2\s*[:/]\s*1/, 2],
-		[/dikey\s*1\s*[:/]\s*2|1\s*[:/]\s*2/, 0.5],
-		[/dikey\s*1\s*[:/]\s*3|1\s*[:/]\s*3/, 1 / 3],
-		[/kare|square/, 1],
-		[/dikey|vertical|portrait/, 3 / 4],
-		[/yatay|horizontal|landscape/, 4 / 3]
-	]
+const parseAspectRatioFromLabel = (label: string): number | null => {
+	const m = normalizeLabel(label).match(/(\d+(?:\.\d+)?)\s*[:/x]\s*(\d+(?:\.\d+)?)/)
+	if (!m) return null
+	const a = Number(m[1])
+	const b = Number(m[2])
+	if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null
+	return a / b
+}
 
-	for (const [re, aspect] of rules) {
+const inferFormatAspectFromLabel = (label: string): number | null => {
+	const n = normalizeLabel(label)
+	if (!n) return null
+	for (const [re, aspect] of FORMAT_ASPECT_RULES) {
 		if (re.test(n)) return aspect
+	}
+	return parseAspectRatioFromLabel(label)
+}
+
+/** По названию формата (Dikey, Kare, Yatay 2/1…). name и slug проверяются отдельно. */
+export function inferFormatAspectFromName(name: string, slug?: string): number | null {
+	for (const label of [name, slug]) {
+		if (!label?.trim()) continue
+		const aspect = inferFormatAspectFromLabel(label)
+		if (aspect != null) return aspect
 	}
 	return null
 }
@@ -207,13 +225,14 @@ export function normalizeCanvasFrames(raw: unknown): FrameOption[] {
 			const priceRaw = Number(row.price ?? row.frame_price ?? row.additional_price)
 			const price = Number.isFinite(priceRaw) ? priceRaw : undefined
 			if (!id || !name) return null
-			return {
+			const frame: FrameOption = {
 				id,
 				name,
 				image_url,
 				color_hex,
 				...(price !== undefined ? { price } : {})
-			} satisfies FrameOption
+			}
+			return frame
 		})
 		.filter((f): f is FrameOption => f !== null)
 }
@@ -231,15 +250,16 @@ export function getDefaultSize(format: CanvasFormat): PrintSizeOption {
 
 /** Пропорции холста по формату (Dikey / Kare / Yatay) — для полосы форматов и canvas. */
 export function formatOrientationAspect(format: CanvasFormat): number {
-	// Имя формата — главный источник (полоса Dikey/Kare/Yatay)
 	const fromName = inferFormatAspectFromName(format.name, format.slug)
 	if (fromName) return fromName
 
-	if (format.aspect && format.aspect > 0) return format.aspect
-
-	// Размеры только у этого формата (не общий список с бэка)
 	const s = getDefaultSize(format)
-	if (s.height > 0) return s.width / s.height
+	if (s.height > 0 && s.width > 0) {
+		const fromDefaultSize = s.width / s.height
+		if (Number.isFinite(fromDefaultSize) && fromDefaultSize > 0) return fromDefaultSize
+	}
+
+	if (format.aspect && format.aspect > 0) return format.aspect
 	return 1
 }
 

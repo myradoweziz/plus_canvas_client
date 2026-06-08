@@ -6,12 +6,17 @@
 
 	const route = useRoute()
 	const isCategoriesOpen = ref(false)
-	let closeTimeout: any = null
+	let closeTimeout: ReturnType<typeof setTimeout> | null = null
 
 	const openCategories = () => {
 		if (closeTimeout) clearTimeout(closeTimeout)
 		isCategoriesOpen.value = true
+		void homeStore.ensureCategoryMenuData()
 	}
+
+	onMounted(() => {
+		void homeStore.ensureCategoryMenuData()
+	})
 
 	const closeCategories = () => {
 		closeTimeout = setTimeout(() => {
@@ -70,14 +75,14 @@
 					</nuxt-link>
 
 					<Transition
-						enter-active-class="transition duration-300 ease-out"
-						enter-from-class="opacity-0 translate-y-4"
+						enter-active-class="transition duration-150 ease-out"
+						enter-from-class="opacity-0 translate-y-2"
 						enter-to-class="opacity-100 translate-y-0"
-						leave-active-class="transition duration-200 ease-in"
+						leave-active-class="transition duration-100 ease-in"
 						leave-from-class="opacity-100 translate-y-0"
-						leave-to-class="opacity-0 translate-y-4"
+						leave-to-class="opacity-0 translate-y-2"
 					>
-						<CategoryMenu v-if="isCategoriesOpen" />
+						<CategoryMenu v-show="isCategoriesOpen" />
 					</Transition>
 				</div>
 

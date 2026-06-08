@@ -2,7 +2,7 @@
 	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { getFramePrice, isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
+	import { isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
 	import type { Product } from '~/utils/types'
 
 	const props = defineProps<{
@@ -10,7 +10,7 @@
 		frames: FrameOption[]
 		selectedFormatId: number | null
 		selectedSizeId: number | null
-		activeFrameId: string | null
+		activeFrameId: string | null | undefined
 		isCanvasLoading?: boolean
 		product: Product
 	}>()
@@ -29,7 +29,7 @@
 		return url ? mediaUrlForCanvas(url) : '/images/cerceve.png'
 	}
 
-	const isFrameActive = (id: string) => String(props.activeFrameId ?? '') === String(id)
+	const isFrameActive = (id: string | null) => props.activeFrameId === id
 
 	const framePreviewStyle = (frame: FrameOption) => {
 		const insetColor = frame.color_hex || '#6b4f2a'
@@ -42,12 +42,43 @@
 
 	const selectedFrame = computed(() => props.frames.find((f) => f.id === props.activeFrameId) ?? null)
 
-	const displayPrice = computed(() => {
+	const { quote: priceQuote, isPriceLoading } = useCanvasProductPrice({
+		productId: computed(() => props.product.id),
+		formatId: computed(() => props.selectedFormatId),
+		sizeId: computed(() => props.selectedSizeId),
+		frameId: computed(() => props.activeFrameId),
+		frames: computed(() => props.frames)
+	})
+
+	const fallbackDisplayPrice = computed(() => {
 		const size = props.sizeOptions.find((s) => s.id === props.selectedSizeId)
-		const base = size?.price
-			? size.price
-			: Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
-		return Math.round(base + getFramePrice(selectedFrame.value))
+		if (size?.price) return Math.round(size.price)
+		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
+	})
+
+	const displayPrice = computed(() => {
+		const total = priceQuote.value?.total_price
+		if (typeof total === 'number' && Number.isFinite(total)) return Math.round(total)
+		return fallbackDisplayPrice.value
+	})
+
+	const oldPrice = computed(() => {
+		const raw = priceQuote.value?.old_price
+		if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.round(raw)
+		if (props.product.discount > 0 && props.product.price > 0) return Math.round(props.product.price)
+		return null
+	})
+
+	const showOldPrice = computed(() => {
+		if (oldPrice.value == null) return false
+		return oldPrice.value > displayPrice.value
+	})
+
+	const currencySuffix = computed(() => {
+		const currency = priceQuote.value?.currency?.trim()
+		if (!currency) return '₺'
+		if (currency === 'TRY' || currency === 'TL') return '₺'
+		return ` ${currency}`
 	})
 
 	// New premium interactive features
@@ -99,7 +130,7 @@
 
 			triggerToast(
 				'Sepete Eklendi!',
-				`Ürün: ${props.product.name}\nBoyut: ${sizeLabel}\nÇerçeve: ${frameLabel}\nFiyat: ${displayPrice.value}₺`
+				`Ürün: ${props.product.name}\nBoyut: ${sizeLabel}\nÇerçeve: ${frameLabel}\nFiyat: ${displayPrice.value}${currencySuffix.value}`
 			)
 		}, 1000)
 	}
@@ -111,7 +142,7 @@
 		<Transition name="toast">
 			<div
 				v-if="showToast"
-				class="fixed top-6 right-6 z-[9999] flex items-start gap-4 max-w-sm w-full bg-white/90 backdrop-blur-xl rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-white/20"
+				class="fixed top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-[9999] flex items-start gap-4 max-w-sm sm:w-full bg-white/90 backdrop-blur-xl rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-white/20"
 			>
 				<div
 					class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-[#2B7FFF]/10 text-[#2B7FFF]"
@@ -132,7 +163,7 @@
 			</div>
 		</Transition>
 
-		<h1 class="font-semibold text-4xl text-gray-950">{{ product.name }}</h1>
+		<h1 class="font-semibold text-2xl sm:text-3xl lg:text-4xl text-gray-950">{{ product.name }}</h1>
 
 		<div class="flex items-center gap-2 mt-3">
 			<Icon name="star" class="w-6 h-6 text-yellow-400" />
@@ -151,7 +182,7 @@
 			<span
 				>Ürün Kodu:
 				<span class="font-bold text-gray-700 group-hover:text-[#2B7FFF] transition-colors">{{
-					product.product_qode
+					product.sku
 				}}</span></span
 			>
 			<Icon name="copyIcon" class="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -166,7 +197,7 @@
 
 		<div class="relative mt-8" :class="{ 'pointer-events-none': isCanvasLoading }">
 			<div class="text-sm font-bold text-gray-950 uppercase tracking-wider">Boyut Seçin</div>
-			<div class="mt-2 relative w-full max-w-[220px]">
+			<div class="mt-2 relative w-full max-w-full sm:max-w-[220px]">
 				<select
 					name="size"
 					:value="selectedSizeId ?? ''"
@@ -185,40 +216,38 @@
 
 			<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
 			<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
-			<button
-				v-for="(frame, index) in frames"
-				:key="frame.id"
-				type="button"
-				class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow] duration-200 hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF] disabled:cursor-not-allowed"
-				:disabled="isCanvasLoading"
-				:class="
-					isFrameActive(frame.id)
-						? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10'
-						: 'border-gray-200'
-				"
-				:aria-pressed="isFrameActive(frame.id)"
-				:title="frame.name"
-				@click="emit('frame-select', index)"
-			>
-				<div
-					v-if="isNoFrame(frame)"
-					class="frame-tile__empty pointer-events-none absolute inset-0 flex items-center justify-center bg-white"
+				<button
+					v-for="(frame, index) in frames"
+					:key="frame.id ?? 'frame-none'"
+					type="button"
+					class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow] duration-200 hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF] disabled:cursor-not-allowed"
+					:disabled="isCanvasLoading"
+					:class="
+						isFrameActive(frame.id) ? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10' : 'border-gray-200'
+					"
+					:aria-pressed="isFrameActive(frame.id)"
+					:title="frame.name"
+					@click="emit('frame-select', index)"
 				>
-					<span class="frame-tile__x" :style="{ color: frame.color_hex }" aria-hidden="true">×</span>
-				</div>
-				<img
-					v-else
-					:src="frameImageSrc(frame)"
-					:alt="frame.name"
-					class="h-full w-full object-cover pointer-events-none"
-					:style="framePreviewStyle(frame)"
-				/>
-				<span
-					class="frame-tile__label pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-				>
-					{{ frame.name }}
-				</span>
-			</button>
+					<div
+						v-if="isNoFrame(frame)"
+						class="frame-tile__empty pointer-events-none absolute inset-0 flex items-center justify-center bg-white"
+					>
+						<span class="frame-tile__x" :style="{ color: frame.color_hex }" aria-hidden="true">×</span>
+					</div>
+					<img
+						v-else
+						:src="frameImageSrc(frame)"
+						:alt="frame.name"
+						class="h-full w-full object-cover pointer-events-none"
+						:style="framePreviewStyle(frame)"
+					/>
+					<span
+						class="frame-tile__label pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+					>
+						{{ frame.name }}
+					</span>
+				</button>
 			</div>
 			<div
 				v-if="isCanvasLoading"
@@ -243,9 +272,13 @@
 			</div>
 		</div>
 
-		<div class="mt-8 flex items-center gap-5">
-			<span class="text-4xl font-extrabold text-[#101828]">{{ displayPrice }}₺</span>
-			<span v-if="product.discount > 0" class="text-2xl line-through text-[#B3B3B3]">{{ product.price }}₺</span>
+		<div class="mt-6 sm:mt-8 flex flex-wrap items-center gap-3 sm:gap-5 min-h-[3rem]">
+			<span class="text-3xl sm:text-4xl font-extrabold text-[#101828]" :class="{ 'opacity-60': isPriceLoading }">
+				{{ displayPrice }}{{ currencySuffix }}
+			</span>
+			<span v-if="showOldPrice" class="text-xl sm:text-2xl line-through text-[#B3B3B3]">
+				{{ oldPrice }}{{ currencySuffix }}
+			</span>
 		</div>
 
 		<!-- Interactive Add To Cart and Favorites Controls -->
@@ -253,7 +286,7 @@
 			<button
 				type="button"
 				@click="addToCart"
-				class="bg-[#2B7FFF] hover:bg-[#2B7FFF]/90 active:scale-[0.98] rounded-full p-4 py-3.5 transition-all text-white font-bold text-lg w-full max-w-[300px] shadow-lg shadow-[#2B7FFF]/20 flex items-center justify-center gap-2 cursor-pointer"
+				class="bg-[#2B7FFF] hover:bg-[#2B7FFF]/90 active:scale-[0.98] rounded-full p-4 py-3.5 transition-all text-white font-bold text-base sm:text-lg w-full sm:max-w-[300px] shadow-lg shadow-[#2B7FFF]/20 flex items-center justify-center gap-2 cursor-pointer"
 				:disabled="isAddingToCart"
 			>
 				<template v-if="isAddingToCart">

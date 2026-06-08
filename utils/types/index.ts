@@ -5,6 +5,7 @@ export * from './login'
 export * from './product'
 export * from './mockupScene'
 export * from './productDesign'
+export * from './canvasProductPrice'
 
 export interface BreadcrumbItem {
 	label: string

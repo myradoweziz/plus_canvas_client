@@ -97,14 +97,8 @@
 		return subCategories.value.filter((s) => s.category_id != null && Number(s.category_id) === fn)
 	}
 
-	onMounted(async () => {
-		const need = !mainCategories.value.length || !featuredCategoriesAll.value.length || !subCategories.value.length
-		if (!need) return
-		await Promise.all([
-			homeStore.fetchMainCategories(),
-			homeStore.fetchFeaturedCategories(),
-			homeStore.fetchSubCategories()
-		])
+	onMounted(() => {
+		void homeStore.ensureCategoryMenuData()
 	})
 </script>
 
@@ -159,7 +153,6 @@
 												: '#'
 										"
 										class="subcategory-link"
-										:style="{ animationDelay: `${idx * 50}ms` }"
 									>
 										{{ sub.name }}
 									</nuxt-link>
@@ -231,18 +224,20 @@
 	}
 
 	.subcategory-link {
-		@apply text-gray-500 hover:text-[#215EA5] text-[14px] font-semibold transition-all duration-300;
-		@apply flex items-center gap-2 hover:translate-x-2;
-		animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-		opacity: 0;
+		@apply text-gray-500 hover:text-[#215EA5] text-[14px] font-semibold transition-colors duration-200;
+		@apply flex items-center gap-2;
 
 		&::before {
 			content: '';
-			@apply w-1.5 h-1.5 rounded-full bg-gray-200 transition-all duration-300;
+			@apply w-1.5 h-1.5 rounded-full bg-gray-200 transition-all duration-200;
 		}
 
 		&:hover::before {
 			@apply bg-[#215EA5] scale-125;
+		}
+
+		&:hover {
+			@apply translate-x-1;
 		}
 	}
 
@@ -258,14 +253,4 @@
 		}
 	}
 
-	@keyframes slideIn {
-		from {
-			opacity: 0;
-			transform: translateX(-15px);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(0);
-		}
-	}
 </style>

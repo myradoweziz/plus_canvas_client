@@ -36,22 +36,30 @@
 	const designSrcFor = (format: CanvasFormat) => {
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
-		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
+
+		// Снимок дизайна с холста для каждого формата (одинаковая логика для active и остальных).
 		const fromFabric = props.formatDesignPreviewById?.[id]
 		if (fromFabric) return fromFabric
-		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
+
+		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
+
 		const legacy = props.formatPreviewById[id]
 		if (legacy) return legacy
+
+		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
+
+		// Пока Fabric ещё не снял превью — SVG формата с API.
 		const fromApi = formatImageSrc(format)
 		if (fromApi) return fromApi
+
 		return props.canvasPreviewSrc ?? ''
 	}
 
 	const usesFormatSvgImage = (format: CanvasFormat) => {
 		const id = Number(format.id)
+		if (props.formatDesignPreviewById?.[id] || props.formatPreviewById[id]) return false
 		const isCurrent = Number(props.activeFormatId) === id
 		if (isCurrent && (props.canvasDesignPreviewSrc || props.canvasPreviewSrc)) return false
-		if (props.formatDesignPreviewById?.[id] || props.formatPreviewById[id]) return false
 		return Boolean(format.image_url?.trim())
 	}
 
@@ -96,7 +104,7 @@
 <template>
 	<div
 		v-if="formats.length"
-		class="format-strip relative w-full max-w-[680px]"
+		class="format-strip relative w-full max-w-full lg:max-w-[680px]"
 		:class="{ 'format-strip--loading': isLoading }"
 		:style="{ '--format-visible': String(Math.min(formats.length, MAX_VISIBLE_FORMATS)) }"
 	>
@@ -156,11 +164,11 @@
 		</swiper>
 
 		<div v-if="showFormatNav">
-			<button ref="prevEl" type="button" class="navBtn absolute -left-12 bottom-10 z-10">
-				<Icon name="arrowRight" class="w-12 h-12 -rotate-180" />
+			<button ref="prevEl" type="button" class="navBtn absolute left-0 sm:-left-10 lg:-left-12 bottom-8 sm:bottom-10 z-10">
+				<Icon name="arrowRight" class="w-10 h-10 sm:w-12 sm:h-12 -rotate-180" />
 			</button>
-			<button ref="nextEl" type="button" class="navBtn absolute right-0 bottom-10 z-10">
-				<Icon name="arrowRight" class="w-12 h-12 -rotate-360" />
+			<button ref="nextEl" type="button" class="navBtn absolute right-0 bottom-8 sm:bottom-10 z-10">
+				<Icon name="arrowRight" class="w-10 h-10 sm:w-12 sm:h-12 -rotate-360" />
 			</button>
 		</div>
 	</div>
@@ -190,9 +198,24 @@
 	}
 
 	.format-strip {
-		--format-slide-gap: 20px;
+		--format-slide-gap: 12px;
 		--format-visible: 6;
-		--format-preview-h: 108px;
+		--format-preview-h: 88px;
+
+		@media (min-width: 480px) {
+			--format-slide-gap: 14px;
+			--format-preview-h: 96px;
+		}
+
+		@media (min-width: 640px) {
+			--format-slide-gap: 16px;
+			--format-preview-h: 100px;
+		}
+
+		@media (min-width: 1024px) {
+			--format-slide-gap: 20px;
+			--format-preview-h: 108px;
+		}
 
 		&--loading {
 			pointer-events: none;

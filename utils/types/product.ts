@@ -1,7 +1,12 @@
-import type { MainCategory } from './category'
-import type { Image } from './home'
-import type { CanvasFormat, FrameOption } from '~/utils/productDesignConfig'
 import type { CollageLayout } from '~/utils/collageLayout'
+import type { CanvasFormat, FrameOption } from '~/utils/productDesignConfig'
+import type { MainCategory } from './category'
+import type { Faq, Image } from './home'
+
+export type ProductFeature = {
+	question: string
+	answer: string
+}
 
 export interface Product {
 	id: number
@@ -10,6 +15,7 @@ export interface Product {
 	description: string
 	price: number
 	discount: number
+	sku: string
 	images: Image[]
 	inner_images?: Image[]
 	upload_image_count: number
@@ -28,4 +34,8 @@ export interface Product {
 	canvas_formats?: CanvasFormat[]
 	frames?: FrameOption[]
 	collage_layout?: CollageLayout | null
+	faqs?: Faq[]
+	features?: ProductFeature[]
+	product_features?: ProductFeature[]
+	specifications?: ProductFeature[]
 }

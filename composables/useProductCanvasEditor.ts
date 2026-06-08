@@ -311,6 +311,8 @@ export function useProductCanvasEditor(options: {
 	let productThumbPreviewTimer: ReturnType<typeof setTimeout> | null = null
 	let framePreviewSyncId = 0
 	let suppressFormatPreviewWatch = false
+	/** Boyut выбран вручную в сайдбаре — иначе ориентация формата (Dikey/Kare/Yatay). */
+	const sizeChosenByUser = ref(false)
 
 	const isCanvasAlive = () => Boolean(fabricCanvas && fabricLib && canvasReady)
 
@@ -498,10 +500,14 @@ export function useProductCanvasEditor(options: {
 		return url ? previewUrl(url) : ''
 	}
 
+	let canvasPreviewSyncId = 0
+
 	const scheduleCanvasPreview = (opts?: { productThumbsActiveOnly?: boolean }) => {
 		if (!import.meta.client || !isCanvasAlive()) return
+		const syncId = ++canvasPreviewSyncId
 		nextTick(() => {
 			requestAnimationFrame(() => {
+				if (syncId !== canvasPreviewSyncId) return
 				syncCanvasDerivedPreviews()
 				if (opts?.productThumbsActiveOnly) refreshActiveProductThumbCollageSoon()
 				else scheduleProductThumbPreviews()
@@ -1094,7 +1100,7 @@ export function useProductCanvasEditor(options: {
 		if (!fabricCanvas || !canvasReady) return
 		const format = selectedFormat.value
 		if (!format) return
-		const { width, height } = getPrintDimensions({ preferSize: Boolean(selectedSize.value) })
+		const { width, height } = getPrintDimensions({ preferSize: sizeChosenByUser.value })
 		if (printAreaRect) {
 			printAreaRect.set({
 				width,
@@ -1192,6 +1198,7 @@ export function useProductCanvasEditor(options: {
 		refreshLeftThumbs?: boolean
 	}) => {
 		if (!fabricCanvas || !canvasReady) return
+		canvasPreviewSyncId++
 		await waitNextPaint()
 
 		if (opts?.refreshAllFormatPreviews && formatPresets.value.length) {
@@ -1285,7 +1292,7 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	/** Рамка снаружи холста + зазор (PlusCanvas: ~3 cm рамка, ~2 cm «загиб»). */
+	/** Рамка снаружи области печати; фото вплотную к рамке (без белой полосы). */
 	const drawSelectedFrame = async () => {
 		const canvas = fabricCanvas
 		const lib = fabricLib
@@ -1333,14 +1340,15 @@ export function useProductCanvasEditor(options: {
 		const halfW = pw / 2
 		const halfH = ph / 2
 
-		// Зазор внутри print area — между фото и рамкой (видимый «загиб»).
-		addBar(pw, gap, frameCx, frameCy - halfH + gap / 2, 'frame-gap', FRAME_GAP_FILL)
-		addBar(pw, gap, frameCx, frameCy + halfH - gap / 2, 'frame-gap', FRAME_GAP_FILL)
-		const gapSideH = Math.max(1, ph - 2 * gap)
-		addBar(gap, gapSideH, frameCx - halfW + gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
-		addBar(gap, gapSideH, frameCx + halfW - gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+		if (gap > 0) {
+			addBar(pw, gap, frameCx, frameCy - halfH + gap / 2, 'frame-gap', FRAME_GAP_FILL)
+			addBar(pw, gap, frameCx, frameCy + halfH - gap / 2, 'frame-gap', FRAME_GAP_FILL)
+			const gapSideH = Math.max(1, ph - 2 * gap)
+			addBar(gap, gapSideH, frameCx - halfW + gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+			addBar(gap, gapSideH, frameCx + halfW - gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+		}
 
-		// Рамка сразу снаружи print area (после зазора).
+		// Рамка сразу снаружи print area.
 		addBar(pw + 2 * bw, bw, frameCx, frameCy - halfH - bw / 2, 'frame-border', borderFill)
 		addBar(pw + 2 * bw, bw, frameCx, frameCy + halfH + bw / 2, 'frame-border', borderFill)
 		const frameSideH = ph + 2 * bw
@@ -1959,11 +1967,22 @@ export function useProductCanvasEditor(options: {
 			try {
 				selectedFormat.value = format
 				selectedSize.value = getDefaultSize(format)
+				sizeChosenByUser.value = false
 				if (!fabricCanvas || !canvasReady) {
 					await tryInitOrSyncFormats()
 					return
 				}
 				await syncPrintArea({ manageLoading: false })
+				if (fabricCanvas && printAreaRect) {
+					if (hasCollageLayout.value && collagePhotoObjects.length) {
+						refitCollageSlotRects()
+					} else if (photoObject) {
+						fitPhotoInPrintArea()
+					}
+					await updateFrame()
+					reorderLayers()
+					fabricCanvas.requestRenderAll()
+				}
 				await refreshLayoutDerivedPreviews({
 					refreshAllFormatPreviews: formatPresets.value.length > 1,
 					refreshLeftThumbs: true
@@ -1990,6 +2009,7 @@ export function useProductCanvasEditor(options: {
 			suppressFormatPreviewWatch = true
 			try {
 				selectedSize.value = s
+				sizeChosenByUser.value = true
 				await syncPrintArea({ preferSize: true, manageLoading: false })
 				emitDesign()
 				await refreshLayoutDerivedPreviews({
@@ -2313,6 +2333,7 @@ export function useProductCanvasEditor(options: {
 	watch(
 		() => [selectedFormat.value?.id, selectedSize.value?.id, selectedFrame.value?.id] as const,
 		async () => {
+			if (suppressFormatPreviewWatch) return
 			if (!isMockupSceneActive.value || !fabricCanvas || !canvasReady) return
 			await runWithCanvasLoading(async () => {
 				await applyViewportBackground()
@@ -2401,7 +2422,7 @@ export function useProductCanvasEditor(options: {
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
 		activeFrameId: computed(() => selectedFrame.value?.id ?? null),
-		isFrameActive: (id: string) => selectedFrame.value?.id === id,
+		isFrameActive: (id: string | null) => selectedFrame.value?.id === id,
 		isMockupSceneActive,
 		activeMockupSceneSettings,
 		setMockupSceneColor,

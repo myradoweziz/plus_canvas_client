@@ -90,6 +90,28 @@
 		onDesignUpdate
 	})
 
+	const { quote: priceQuote } = useCanvasProductPrice({
+		productId,
+		formatId: computed(() => selectedFormat.value?.id ?? null),
+		sizeId: computed(() => selectedSize.value?.id ?? null),
+		frameId: activeFrameId,
+		frames: frameOptions
+	})
+
+	const discountPercent = computed(() => {
+		const fromApi = priceQuote.value?.discount
+		if (typeof fromApi === 'number' && Number.isFinite(fromApi) && fromApi > 0) {
+			return Math.round(fromApi)
+		}
+		const old = priceQuote.value?.old_price
+		const total = priceQuote.value?.total_price
+		if (typeof old === 'number' && typeof total === 'number' && old > total) {
+			return Math.round((1 - total / old) * 100)
+		}
+		const p = product.value?.discount ?? 0
+		return p > 0 ? Math.round(p) : 0
+	})
+
 	const onThumbSelect = (index: number) => {
 		void selectThumb(index)
 	}
@@ -163,12 +185,15 @@
 
 <template>
 	<div class="bg-[#F5F2ED]">
-		<section class="max-w-[1400px] mx-auto px-4 md:px-0 py-10 md:py-9">
+		<section class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-0 py-6 sm:py-8 md:py-9">
 			<Breadcrumbs :items="breadcrumbs" />
 
-			<div v-if="productStatus === 'pending'" class="mt-20 text-center text-[#364153]">Yükleniyor…</div>
+			<div v-if="productStatus === 'pending'" class="mt-10 md:mt-20 text-center text-[#364153]">Yükleniyor…</div>
 
-			<div v-else-if="product" class="product-detail-layout mt-20 flex gap-10 items-start">
+			<div
+				v-else-if="product"
+				class="product-detail-layout mt-8 sm:mt-12 md:mt-20 flex flex-col lg:flex-row gap-6 md:gap-8 lg:gap-10 items-stretch lg:items-start"
+			>
 				<div class="product-detail-editor min-w-0">
 					<ProductDesignEditorPanel
 						:product="product"
@@ -187,12 +212,13 @@
 						:is-canvas-loading="isCanvasLoading"
 						:is-mockup-scene-active="isMockupSceneActive"
 						:active-mockup-scene-settings="activeMockupSceneSettings"
+						:discount-percent="discountPercent"
 						@thumb-select="onThumbSelect"
 						@select-format="(id) => void applyFormatById(id)"
 						@mockup-scene-color-change="onMockupSceneColorChange"
 					>
 						<template #canvas>
-							<div ref="canvasWrapRef" class="mySwiper2 relative w-full h-[620px] overflow-hidden" />
+							<div ref="canvasWrapRef" class="mySwiper2 relative w-full overflow-hidden" />
 						</template>
 					</ProductDesignEditorPanel>
 
@@ -200,7 +226,7 @@
 						Bu ürün için format bulunamadı (API: canvas_formats).
 					</p>
 
-					<ProductDetailTabs />
+					<ProductDetailTabs :product="product" />
 				</div>
 
 				<div class="product-detail-sidebar w-full shrink-0">
@@ -286,40 +312,43 @@
 </template>
 
 <style lang="scss" scoped>
-	.product-detail-layout {
-		align-items: flex-start;
-	}
-
 	.product-detail-editor {
 		flex: 1 1 auto;
 		min-width: 0;
+		width: 100%;
 	}
 
 	.product-detail-sidebar {
-		flex: 0 0 380px;
-		max-width: 420px;
+		flex: 0 0 auto;
+		width: 100%;
+		max-width: none;
 	}
 
-	@media (max-width: 1024px) {
-		.product-detail-layout {
-			flex-direction: column;
-		}
-
+	@media (min-width: 1024px) {
 		.product-detail-sidebar {
-			flex: 1 1 auto;
-			max-width: none;
-			width: 100%;
+			flex: 0 0 380px;
+			max-width: 420px;
 		}
 	}
 
 	:deep(.mySwiper2) {
 		width: 100%;
-		min-height: 620px;
-		height: 620px;
+		height: clamp(280px, 72vw, 420px);
+		min-height: clamp(280px, 72vw, 420px);
 		margin: auto 0;
 		background-color: #f5f2ed;
 		position: relative;
 		display: block;
+
+		@media (min-width: 640px) {
+			height: clamp(360px, 58vw, 520px);
+			min-height: clamp(360px, 58vw, 520px);
+		}
+
+		@media (min-width: 1024px) {
+			height: 620px;
+			min-height: 620px;
+		}
 
 		.canvas-container {
 			position: absolute;
@@ -339,8 +368,13 @@
 	}
 
 	.related-swiper-wrap {
-		padding-left: 3rem;
-		padding-right: 3rem;
+		padding-left: 0;
+		padding-right: 0;
+
+		@media (min-width: 640px) {
+			padding-left: 2.5rem;
+			padding-right: 2.5rem;
+		}
 
 		@media (min-width: 768px) {
 			padding-left: 3.5rem;

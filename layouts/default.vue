@@ -10,6 +10,12 @@
 	})
 
 	const contactInfo = computed<ContactInfo>(() => contactInfoData.value?.data ?? ({} as ContactInfo))
+
+	const homeStore = useHomeStore()
+
+	onMounted(() => {
+		void homeStore.ensureCategoryMenuData()
+	})
 </script>
 
 <template>
