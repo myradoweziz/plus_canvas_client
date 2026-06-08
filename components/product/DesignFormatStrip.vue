@@ -1,7 +1,8 @@
 <script setup lang="ts">
 	import { FreeMode, Navigation, Thumbs } from 'swiper/modules'
 
-	import { CANVAS_PAINTING_STATIC_BG, getFormatStaticPreviewSvg } from '~/utils/canvasPaintingDisplay'
+	import { CANVAS_PAINTING_STATIC_BG } from '~/utils/canvasPaintingDisplay'
+	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import { formatOrientationAspect, type CanvasFormat } from '~/utils/productDesignConfig'
 	import Icon from '~/utils/ui/Icon.vue'
 
@@ -22,12 +23,15 @@
 		/** Mockup-фон (как на холсте) */
 		formatStripBackgroundSrc?: string
 		activeFormatId: number | null
-		/** Галерея: статичные SVG вместо снимков Fabric */
-		useStaticFormatPreviews?: boolean
 		isLoading?: boolean
 	}>()
 
 	const backgroundSrc = computed(() => props.formatStripBackgroundSrc?.trim() || CANVAS_PAINTING_STATIC_BG)
+
+	const formatImageSrc = (format: CanvasFormat) => {
+		const url = format.image_url?.trim()
+		return url ? mediaUrlForCanvas(url) : ''
+	}
 
 	const designSrcFor = (format: CanvasFormat) => {
 		const id = Number(format.id)
@@ -35,19 +39,20 @@
 		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
 		const fromFabric = props.formatDesignPreviewById?.[id]
 		if (fromFabric) return fromFabric
-		if (props.useStaticFormatPreviews) return getFormatStaticPreviewSvg(format)
 		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
 		const legacy = props.formatPreviewById[id]
 		if (legacy) return legacy
+		const fromApi = formatImageSrc(format)
+		if (fromApi) return fromApi
 		return props.canvasPreviewSrc ?? ''
 	}
 
-	const usesStaticSvg = (format: CanvasFormat) => {
+	const usesFormatSvgImage = (format: CanvasFormat) => {
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
 		if (isCurrent && (props.canvasDesignPreviewSrc || props.canvasPreviewSrc)) return false
 		if (props.formatDesignPreviewById?.[id] || props.formatPreviewById[id]) return false
-		return Boolean(props.useStaticFormatPreviews)
+		return Boolean(format.image_url?.trim())
 	}
 
 	const previewOverlayStyle = (format: CanvasFormat) => ({
@@ -125,7 +130,7 @@
 								<div class="format-slide__preview-overlay">
 									<div
 										class="format-slide__preview-img-box"
-										:class="{ 'format-slide__preview-img-box--static': usesStaticSvg(format) }"
+										:class="{ 'format-slide__preview-img-box--format-svg': usesFormatSvgImage(format) }"
 										:style="previewOverlayStyle(format)"
 									>
 										<img
@@ -220,7 +225,9 @@
 			background-color: white;
 			border-radius: 8px;
 			cursor: pointer;
-			transition: border-color 0.2s ease, box-shadow 0.2s ease;
+			transition:
+				border-color 0.2s ease,
+				box-shadow 0.2s ease;
 			box-sizing: border-box;
 			overflow: hidden;
 
@@ -302,7 +309,7 @@
 		aspect-ratio: var(--format-aspect, 1);
 	}
 
-	.format-slide__preview-img-box--static {
+	.format-slide__preview-img-box--format-svg {
 		--format-overlay-max-h: calc(100% - 24px);
 	}
 

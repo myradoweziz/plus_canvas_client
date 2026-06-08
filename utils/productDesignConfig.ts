@@ -3,6 +3,8 @@ export type CanvasFormat = {
 	name: string
 	sizes: PrintSizeOption[]
 	slug?: string
+	/** SVG/превью формата с API (canvas_formats.image_url). */
+	image_url?: string
 	/** Ориентация холста (width / height): Dikey, Kare, Yatay… */
 	aspect?: number
 }
@@ -161,7 +163,14 @@ export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 				row.sizes ?? row.canvas_format_sizes ?? row.format_sizes ?? row.print_sizes ?? row.canvas_sizes
 			)
 			if (!Number.isFinite(id) || !name || !sizes.length) return null
-			const format: CanvasFormat = { id, name, sizes, ...(slug ? { slug } : {}) }
+			const image_url = pickString(row.image_url, row.image, row.src, row.url, row.thumbnail, row.preview_image)
+			const format: CanvasFormat = {
+				id,
+				name,
+				sizes,
+				...(slug ? { slug } : {}),
+				...(image_url ? { image_url } : {})
+			}
 			const fromApi = parseAspectFromRow(row)
 			const fromName = inferFormatAspectFromName(name, slug)
 			const aspect = fromName ?? fromApi
