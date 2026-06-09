@@ -117,7 +117,8 @@
 						aria-hidden="true"
 					/>
 					<img
-						:src="getThumbPreviewSrc(index)"
+						v-if="getThumbOverlaySrc(index)"
+						:src="getThumbOverlaySrc(index)"
 						:alt="`preview-${img.id}`"
 						class="thumb-slide__collage"
 						loading="lazy"

@@ -45,7 +45,7 @@ import {
 	type FrameOption,
 	type PrintSizeOption
 } from '~/utils/productDesignConfig'
-import type { Product, ProductDesignPayload, TempDesignImage } from '~/utils/types'
+import type { EffectOption, Product, ProductDesignPayload, TempDesignImage } from '~/utils/types'
 
 const DEFAULT_VIEWPORT_W = 560
 const DEFAULT_VIEWPORT_H = 520
@@ -61,6 +61,8 @@ export function useProductCanvasEditor(options: {
 	canvasFrames?: Ref<FrameOption[]>
 	product?: Ref<Product | null | undefined>
 	onDesignUpdate?: (payload: ProductDesignPayload) => void
+	/** Редактор загрузки: один mockup из product.images[0] */
+	useFirstProductImageOnly?: boolean
 }) {
 	const designStore = useProductDesignStore()
 	const { loadHtmlImage } = useFabricImageLoader()
@@ -154,6 +156,32 @@ export function useProductCanvasEditor(options: {
 	let mockupNaturalH = 0
 	let printAreaRect: import('fabric').fabric.Rect | null = null
 	let frameObject: import('fabric').fabric.Object | null = null
+	const activeEffectId = ref<number | null>(null)
+	const activeEffectOpacity = ref(100)
+
+	type CropTransform = {
+		left: number
+		top: number
+		scaleX: number
+		scaleY: number
+		angle: number
+	}
+
+	type CropTarget = {
+		kind: 'single' | 'collage'
+		image: import('fabric').fabric.Image
+		group?: import('fabric').fabric.Group
+	}
+
+	const isCropModeActive = ref(false)
+	const cropSizeLabel = ref('—')
+	const cropPositionLabel = ref('X:0 Y:0')
+	const cropStateByUploadIndex = new Map<number, CropTransform>()
+	let cropHistory: CropTransform[] = []
+	let cropHistoryIndex = -1
+	let cropModifiedHandler: ((e: import('fabric').fabric.IEvent) => void) | null = null
+	let cropSelectionHandler: ((e: import('fabric').fabric.IEvent) => void) | null = null
+	const CROP_ZOOM_FACTOR = 1.12
 
 	const uploadImages = computed(() => designStore.getSessionImages(options.productId.value))
 
@@ -161,13 +189,18 @@ export function useProductCanvasEditor(options: {
 		uploadImages.value.filter((u) => String(u?.url ?? '').trim().length > 0)
 	)
 
+	const limitProductBackgroundThumbs = (items: TempDesignImage[]) => {
+		if (!options.useFirstProductImageOnly || items.length <= 1) return items
+		return items.slice(0, 1)
+	}
+
 	/** Слева — product.images (mockup / background). */
 	const productBackgroundThumbs = computed((): TempDesignImage[] => {
 		const p = options.product?.value
 		if (!p) return []
 
 		if (isCanvasPaintingGallery.value) {
-			return getCanvasPaintingThumbImages(p)
+			return limitProductBackgroundThumbs(getCanvasPaintingThumbImages(p))
 		}
 
 		const fromImages = Array.isArray(p.images)
@@ -181,13 +214,15 @@ export function useProductCanvasEditor(options: {
 					.filter((item) => item.url.length > 0)
 			: []
 
-		if (fromImages.length) return fromImages
+		if (fromImages.length) return limitProductBackgroundThumbs(fromImages)
 
-		return extractProductImageUrls(p).map((url, idx) => ({
-			url,
-			id: idx + 1,
-			session_id: 'product-image'
-		}))
+		return limitProductBackgroundThumbs(
+			extractProductImageUrls(p).map((url, idx) => ({
+				url,
+				id: idx + 1,
+				session_id: 'product-image'
+			}))
+		)
 	})
 
 	/** Миниатюры слева: images товара; personalized — uploads из сессии (не inner_images на UI). */
@@ -198,6 +233,15 @@ export function useProductCanvasEditor(options: {
 	})
 
 	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
+
+	/** Коллаж на product.images mockup — слоты по layout на стене, не в центре print area. */
+	const shouldPlaceCollageOnMockup = computed(
+		() =>
+			!isCanvasPaintingGallery.value &&
+			thumbsAreProductImages.value &&
+			Boolean(productBackgroundUrl.value) &&
+			hasCollageLayout.value
+	)
 
 	const mockupSceneUrlOptions = () => ({
 		formatId: selectedFormat.value?.id ?? null,
@@ -742,7 +786,7 @@ export function useProductCanvasEditor(options: {
 		})
 	}
 
-	/** Позиция слота: в области печати (формат), иначе на mockup. */
+	/** Позиция слота: на mockup (product.images) или в области печати (загрузка без фона). */
 	const rawSlotRectForCollage = (
 		slotDef: CollageLayoutSlot,
 		allSlots: CollageLayoutSlot[],
@@ -750,15 +794,31 @@ export function useProductCanvasEditor(options: {
 		mockupW?: number,
 		mockupH?: number
 	) => {
+		const layout = collageLayout.value
+		const mW = mockupW ?? (mockupNaturalW > 0 ? mockupNaturalW : layout?.reference_width || viewportW.value)
+		const mH = mockupH ?? (mockupNaturalH > 0 ? mockupNaturalH : layout?.reference_height || viewportH.value)
+
+		if (shouldPlaceCollageOnMockup.value) {
+			return slotRectOnMockup(
+				slotDef,
+				allSlots,
+				viewportW.value,
+				viewportH.value,
+				cx(),
+				cy(),
+				mW,
+				mH,
+				layoutRef,
+				mockupViewportFit()
+			)
+		}
+
 		if (printAreaRect) {
 			const pw = printAreaRect.width ?? 1
 			const ph = printAreaRect.height ?? 1
 			return slotRectInPrintArea(slotDef, allSlots, pw, ph, cx(), cy(), layoutRef)
 		}
 
-		const layout = collageLayout.value
-		const mW = mockupW ?? (mockupNaturalW > 0 ? mockupNaturalW : layout?.reference_width || viewportW.value)
-		const mH = mockupH ?? (mockupNaturalH > 0 ? mockupNaturalH : layout?.reference_height || viewportH.value)
 		return slotRectOnMockup(
 			slotDef,
 			allSlots,
@@ -773,9 +833,49 @@ export function useProductCanvasEditor(options: {
 		)
 	}
 
+	const readCropTransform = (img: import('fabric').fabric.Image): CropTransform => ({
+		left: img.left ?? 0,
+		top: img.top ?? 0,
+		scaleX: img.scaleX ?? 1,
+		scaleY: img.scaleY ?? 1,
+		angle: img.angle ?? 0
+	})
+
+	const applyCropTransform = (img: import('fabric').fabric.Image, transform: CropTransform) => {
+		img.set({
+			left: transform.left,
+			top: transform.top,
+			scaleX: transform.scaleX,
+			scaleY: transform.scaleY,
+			angle: transform.angle
+		})
+		img.setCoords()
+	}
+
+	const readInnerCrop = (inner: import('fabric').fabric.Image | undefined): CropTransform | null => {
+		if (!inner) return null
+		const saved = (inner as { data?: { crop?: CropTransform } }).data?.crop
+		return saved ?? null
+	}
+
+	const persistCropTransform = (target: CropTarget, uploadIndex = activeImageIndex.value) => {
+		const transform = readCropTransform(target.image)
+		cropStateByUploadIndex.set(uploadIndex, transform)
+		target.image.set({
+			data: { ...((target.image as { data?: Record<string, unknown> }).data ?? {}), crop: transform }
+		})
+	}
+
 	/** Фото по центру области печати, cover (заполняет «лицо» холста). */
 	const fitPhotoInPrintArea = () => {
 		if (!photoObject || !printAreaRect) return
+		const saved = cropStateByUploadIndex.get(activeImageIndex.value)
+		if (saved) {
+			applyCropTransform(photoObject, saved)
+			updatePhotoClipPath()
+			fabricCanvas?.requestRenderAll()
+			return
+		}
 		const { width: pw, height: ph } = getPhotoFaceSize()
 		const iw = photoObject.width || 1
 		const ih = photoObject.height || 1
@@ -787,7 +887,8 @@ export function useProductCanvasEditor(options: {
 			left: center.left,
 			top: center.top,
 			originX: 'center',
-			originY: 'center'
+			originY: 'center',
+			angle: 0
 		})
 		photoObject.setCoords()
 		updatePhotoClipPath()
@@ -1221,7 +1322,7 @@ export function useProductCanvasEditor(options: {
 		const allSlots = layout.layout_json
 		const layoutRef = layoutRefForCollage(allSlots)
 
-		if (printAreaRect) {
+		if (printAreaRect && !shouldPlaceCollageOnMockup.value) {
 			const pw = printAreaRect.width ?? 1
 			const ph = printAreaRect.height ?? 1
 			return collageSlotsBoundsInPrintArea(allSlots, pw, ph, cx(), cy(), layoutRef)
@@ -1252,7 +1353,7 @@ export function useProductCanvasEditor(options: {
 		height: number
 	} | null => {
 		if (hasCollageLayout.value) {
-			if (printAreaRect) {
+			if (printAreaRect && !shouldPlaceCollageOnMockup.value) {
 				return {
 					left: cx(),
 					top: cy(),
@@ -1389,8 +1490,9 @@ export function useProductCanvasEditor(options: {
 	) => {
 		if (!fabricLib) return
 		const inner = group.getObjects()[0] as import('fabric').fabric.Image | undefined
-		if (inner) {
-			inner.set({ scaleX: 1, scaleY: 1 })
+		const savedCrop = readInnerCrop(inner)
+		if (inner && !savedCrop) {
+			inner.set({ scaleX: 1, scaleY: 1, left: 0, top: 0, angle: 0 })
 			fitImageInSlot(inner, rect.width, rect.height, 0, 0)
 		}
 
@@ -1416,6 +1518,9 @@ export function useProductCanvasEditor(options: {
 		})
 		group.clipPath = clipRect
 		group.setCoords()
+		if (inner && savedCrop) {
+			applyCropTransform(inner, savedCrop)
+		}
 		inner?.setCoords()
 	}
 
@@ -1461,6 +1566,161 @@ export function useProductCanvasEditor(options: {
 		if (opts?.render !== false) fabricCanvas.requestRenderAll()
 	}
 
+	const getPhotoImagesForEffect = (): import('fabric').fabric.Image[] => {
+		const images: import('fabric').fabric.Image[] = []
+		if (photoObject) images.push(photoObject)
+		for (const obj of collagePhotoObjects) {
+			const group = obj as import('fabric').fabric.Group
+			const inner = group.getObjects?.()?.[0]
+			if (inner?.type === 'image') images.push(inner as import('fabric').fabric.Image)
+		}
+		return images
+	}
+
+	/** Fabric-фильтры по названию эффекта (image_url — только превью в сайдбаре). */
+	const buildEffectFilters = (
+		effect: EffectOption,
+		opacityPercent: number
+	): import('fabric').fabric.IBaseFilter[] => {
+		const filtersLib = fabricLib?.Image?.filters as Record<string, new (opts?: object) => import('fabric').fabric.IBaseFilter> | undefined
+		if (!filtersLib) return []
+
+		const name = effect.name.toLowerCase()
+		const strength = Math.min(1, Math.max(0, opacityPercent / 100))
+		const filters: import('fabric').fabric.IBaseFilter[] = []
+
+		if (/siyah|beyaz|grayscale|grey|gray|monokrom|monochrome/.test(name)) {
+			if (filtersLib.Grayscale) filters.push(new filtersLib.Grayscale())
+			return filters
+		}
+
+		if (/sepia|vintage|esk[iı]/.test(name)) {
+			if (filtersLib.Sepia) filters.push(new filtersLib.Sepia())
+			return filters
+		}
+
+		if (/invert|negatif|negative/.test(name)) {
+			if (filtersLib.Invert) filters.push(new filtersLib.Invert())
+			return filters
+		}
+
+		if (/kontrast|contrast|keskin|sharp/.test(name)) {
+			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: strength * 0.65 }))
+		}
+
+		if (/parlak|bright|neon|canl[ıi]|vivid/.test(name)) {
+			if (filtersLib.Brightness) filters.push(new filtersLib.Brightness({ brightness: strength * 0.35 }))
+			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: strength * 0.45 }))
+			if (filtersLib.Saturate) filters.push(new filtersLib.Saturate({ saturation: strength * 0.55 }))
+		}
+
+		if (/soluk|fade|soft|yumu[sş]ak/.test(name)) {
+			if (filtersLib.Brightness) filters.push(new filtersLib.Brightness({ brightness: strength * 0.12 }))
+			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: -(strength * 0.25) }))
+		}
+
+		if (/so[gğ]uk|cool|mavi|blue|cold/.test(name)) {
+			if (filtersLib.BlendColor) {
+				filters.push(new filtersLib.BlendColor({ color: '#60a5fa', mode: 'multiply', alpha: strength * 0.45 }))
+			}
+		}
+
+		if (/s[ıi]cak|warm|sicak|turuncu|orange/.test(name)) {
+			if (filtersLib.BlendColor) {
+				filters.push(new filtersLib.BlendColor({ color: '#f97316', mode: 'multiply', alpha: strength * 0.4 }))
+			}
+		}
+
+		if (/pembe|pink|rose/.test(name)) {
+			if (filtersLib.BlendColor) {
+				filters.push(new filtersLib.BlendColor({ color: '#f472b6', mode: 'multiply', alpha: strength * 0.4 }))
+			}
+		}
+
+		if (filters.length) return filters
+
+		if (filtersLib.Contrast) return [new filtersLib.Contrast({ contrast: strength * 0.3 })]
+		return []
+	}
+
+	const clearEffectFiltersFromPhotos = () => {
+		for (const img of getPhotoImagesForEffect()) {
+			img.filters = []
+			img.applyFilters()
+			img.dirty = true
+		}
+		for (const group of collagePhotoObjects) {
+			group.dirty = true
+			group.setCoords()
+		}
+	}
+
+	const applyEffectFiltersToPhotos = (effect: EffectOption) => {
+		if (!fabricCanvas) return
+		const filters = buildEffectFilters(effect, activeEffectOpacity.value)
+		for (const img of getPhotoImagesForEffect()) {
+			img.filters = filters
+			img.applyFilters()
+			img.dirty = true
+		}
+		for (const group of collagePhotoObjects) {
+			group.dirty = true
+			group.setCoords()
+		}
+		fabricCanvas.requestRenderAll()
+	}
+
+	const removeEffectFromPhotos = () => {
+		clearEffectFiltersFromPhotos()
+		fabricCanvas?.requestRenderAll()
+		scheduleCanvasPreview()
+		emitDesign()
+	}
+
+	const findActiveEffect = () =>
+		(options.product?.value?.effects ?? []).find((item) => Number(item.id) === Number(activeEffectId.value))
+
+	const applyEffectById = async (effectId: number | null, opacityPercent?: number) => {
+		if (opacityPercent != null && Number.isFinite(opacityPercent)) {
+			activeEffectOpacity.value = Math.min(100, Math.max(0, Math.round(opacityPercent)))
+		}
+		activeEffectId.value = effectId
+
+		if (!fabricCanvas || !fabricLib || !canvasReady) return
+
+		if (effectId == null) {
+			removeEffectFromPhotos()
+			return
+		}
+
+		const effect = (options.product?.value?.effects ?? []).find(
+			(item) => Number(item.id) === Number(effectId)
+		)
+		if (!effect) return
+		if (!getPhotoImagesForEffect().length) return
+
+		clearEffectFiltersFromPhotos()
+		applyEffectFiltersToPhotos(effect)
+		emitDesign()
+		scheduleCanvasPreview()
+	}
+
+	const setEffectOpacity = (opacityPercent: number) => {
+		if (!Number.isFinite(opacityPercent)) return
+		activeEffectOpacity.value = Math.min(100, Math.max(0, Math.round(opacityPercent)))
+		if (activeEffectId.value == null) return
+
+		const effect = findActiveEffect()
+		if (!effect || !getPhotoImagesForEffect().length) {
+			void applyEffectById(activeEffectId.value, activeEffectOpacity.value)
+			return
+		}
+
+		applyEffectFiltersToPhotos(effect)
+		emitDesign()
+		scheduleCanvasPreview()
+	}
+
 	const getCollageMetrics = () => {
 		const layout = collageLayout.value
 		if (!layout) return null
@@ -1487,7 +1747,8 @@ export function useProductCanvasEditor(options: {
 		allSlots: CollageLayoutSlot[],
 		mockupW: number,
 		mockupH: number,
-		layoutRef?: { width?: number; height?: number }
+		layoutRef?: { width?: number; height?: number },
+		uploadIndex?: number
 	) => {
 		if (!fabricCanvas || !fabricLib) return
 
@@ -1501,6 +1762,11 @@ export function useProductCanvasEditor(options: {
 			objectCaching: false
 		})
 		fitImageInSlot(img, rect.width, rect.height, 0, 0)
+		const savedCrop = uploadIndex != null ? cropStateByUploadIndex.get(uploadIndex) : null
+		if (savedCrop) {
+			applyCropTransform(img, savedCrop)
+			img.set({ data: { crop: savedCrop } })
+		}
 
 		const clipRect = new fabricLib.Rect({
 			width: rect.width,
@@ -1563,6 +1829,336 @@ export function useProductCanvasEditor(options: {
 		markCollageGroupsDirty()
 		reorderLayers()
 		fabricCanvas.requestRenderAll()
+		if (activeEffectId.value != null) {
+			await applyEffectById(activeEffectId.value, activeEffectOpacity.value)
+		}
+	}
+
+	const getUploadIndexForCollageGroup = (group: import('fabric').fabric.Object): number => {
+		const metrics = getCollageMetrics()
+		if (!metrics) return 0
+		const uploads = getCollageUploads()
+		const pairs = collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploads.length)
+		const layoutSlot = (group as { data?: { layoutSlot?: number } }).data?.layoutSlot
+		const pair =
+			layoutSlot != null
+				? pairs.find((p) => p.slotDef.slot === layoutSlot)
+				: pairs[collagePhotoObjects.indexOf(group)]
+		return pair?.uploadIndex ?? 0
+	}
+
+	const findCollageGroupForUploadIndex = (uploadIndex: number) => {
+		if (!collagePhotoObjects.length) return null
+		const metrics = getCollageMetrics()
+		if (!metrics) return collagePhotoObjects[uploadIndex] ?? collagePhotoObjects[0] ?? null
+
+		const uploads = getCollageUploads()
+		const pairs = collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploads.length)
+		const pair = pairs.find((p) => p.uploadIndex === uploadIndex) ?? pairs[uploadIndex] ?? pairs[0]
+		if (!pair) return collagePhotoObjects[0] ?? null
+
+		const slot = pair.slotDef.slot
+		return (
+			collagePhotoObjects.find(
+				(g) => (g as { data?: { layoutSlot?: number } }).data?.layoutSlot === slot
+			) ??
+			collagePhotoObjects[uploadIndex] ??
+			collagePhotoObjects[0] ??
+			null
+		)
+	}
+
+	const getActiveCropTarget = (): CropTarget | null => {
+		if (!fabricCanvas) return null
+
+		if (hasCollageLayout.value && collagePhotoObjects.length) {
+			const group = findCollageGroupForUploadIndex(activeImageIndex.value)
+			if (!group || group.type !== 'group') return null
+			const collageGroup = group as import('fabric').fabric.Group
+			const inner = collageGroup.getObjects()[0] as import('fabric').fabric.Image | undefined
+			if (!inner) return null
+			return { kind: 'collage', group: collageGroup, image: inner }
+		}
+
+		if (photoObject) {
+			return { kind: 'single', image: photoObject }
+		}
+
+		return null
+	}
+
+	const updateCropPanelInfo = () => {
+		const target = getActiveCropTarget()
+		if (!target) {
+			cropSizeLabel.value = '—'
+			cropPositionLabel.value = 'X:0 Y:0'
+			return
+		}
+
+		if (target.kind === 'collage' && target.group) {
+			const w = Math.round(target.group.width ?? 0)
+			const h = Math.round(target.group.height ?? 0)
+			cropSizeLabel.value = `${w} x ${h} px`
+		} else {
+			const { width, height } = getPhotoFaceSize()
+			cropSizeLabel.value = `${Math.round(width)} x ${Math.round(height)} px`
+		}
+
+		const img = target.image
+		cropPositionLabel.value = `X:${Math.round(img.left ?? 0)} Y:${Math.round(img.top ?? 0)}`
+	}
+
+	const enableCropOnImage = (img: import('fabric').fabric.Image) => {
+		img.set({
+			selectable: true,
+			evented: true,
+			lockMovementX: false,
+			lockMovementY: false,
+			lockScalingX: true,
+			lockScalingY: true,
+			lockRotation: true,
+			hasControls: false,
+			hoverCursor: 'move',
+			moveCursor: 'move'
+		})
+	}
+
+	const lockCollageGroup = (group: import('fabric').fabric.Group) => {
+		group.set({ subTargetCheck: false, evented: false })
+		lockFabricObject(group)
+		const inner = group.getObjects()[0] as import('fabric').fabric.Image | undefined
+		if (inner) lockFabricObject(inner)
+	}
+
+	const lockAllCropTargets = () => {
+		if (photoObject) lockPhotoInteractions(photoObject)
+		for (const obj of collagePhotoObjects) {
+			if (obj.type === 'group') lockCollageGroup(obj as import('fabric').fabric.Group)
+		}
+	}
+
+	const resetCropHistoryForActive = () => {
+		const target = getActiveCropTarget()
+		if (!target) {
+			cropHistory = []
+			cropHistoryIndex = -1
+			return
+		}
+		const current = readCropTransform(target.image)
+		cropHistory = [current]
+		cropHistoryIndex = 0
+	}
+
+	const restoreCropHistoryState = () => {
+		const target = getActiveCropTarget()
+		if (!target || cropHistoryIndex < 0 || cropHistoryIndex >= cropHistory.length) return
+		applyCropTransform(target.image, cropHistory[cropHistoryIndex])
+		persistCropTransform(target)
+		target.image.dirty = true
+		if (target.group) {
+			target.group.dirty = true
+			target.group.setCoords()
+		}
+		fabricCanvas?.requestRenderAll()
+		updateCropPanelInfo()
+	}
+
+	const pushCropHistory = () => {
+		const target = getActiveCropTarget()
+		if (!target) return
+		const current = readCropTransform(target.image)
+		const last = cropHistory[cropHistoryIndex]
+		if (
+			last &&
+			last.left === current.left &&
+			last.top === current.top &&
+			last.scaleX === current.scaleX &&
+			last.scaleY === current.scaleY &&
+			last.angle === current.angle
+		) {
+			return
+		}
+		cropHistory = cropHistory.slice(0, cropHistoryIndex + 1)
+		cropHistory.push(current)
+		cropHistoryIndex = cropHistory.length - 1
+	}
+
+	const detachCropModifiedListener = () => {
+		if (!fabricCanvas || !cropModifiedHandler) return
+		fabricCanvas.off('object:modified', cropModifiedHandler)
+		cropModifiedHandler = null
+	}
+
+	const detachCropSelectionListener = () => {
+		if (!fabricCanvas || !cropSelectionHandler) return
+		fabricCanvas.off('mouse:down', cropSelectionHandler)
+		cropSelectionHandler = null
+	}
+
+	const attachCropSelectionListener = () => {
+		if (!fabricCanvas || !hasCollageLayout.value) return
+		detachCropSelectionListener()
+		cropSelectionHandler = (opt) => {
+			if (!isCropModeActive.value || !collagePhotoObjects.length) return
+			const subTargets = (opt as { subTargets?: import('fabric').fabric.Object[] }).subTargets
+			const hit = subTargets?.[0] ?? opt.target
+			if (!hit) return
+
+			for (const obj of collagePhotoObjects) {
+				const group = obj as import('fabric').fabric.Group
+				const inner = group.getObjects()[0]
+				if (hit !== inner && hit !== group) continue
+
+				const uploadIdx = getUploadIndexForCollageGroup(group)
+				if (
+					designStore.productId === options.productId.value &&
+					designStore.activeImageIndex !== uploadIdx
+				) {
+					designStore.setActiveImageIndex(uploadIdx)
+				} else if (isCropModeActive.value) {
+					refreshCropModeTargets()
+				}
+				return
+			}
+		}
+		fabricCanvas.on('mouse:down', cropSelectionHandler)
+	}
+
+	const attachCropModifiedListener = () => {
+		if (!fabricCanvas) return
+		detachCropModifiedListener()
+		cropModifiedHandler = (e) => {
+			if (!isCropModeActive.value) return
+			const target = getActiveCropTarget()
+			if (!target || e.target !== target.image) return
+			pushCropHistory()
+			persistCropTransform(target)
+			updateCropPanelInfo()
+			scheduleCanvasPreview()
+		}
+		fabricCanvas.on('object:modified', cropModifiedHandler)
+	}
+
+	const refreshCropModeTargets = () => {
+		if (!fabricCanvas) return
+		lockAllCropTargets()
+
+		const target = getActiveCropTarget()
+		if (!target) {
+			updateCropPanelInfo()
+			return
+		}
+
+		if (target.kind === 'collage' && target.group) {
+			for (const obj of collagePhotoObjects) {
+				const group = obj as import('fabric').fabric.Group
+				const isActive = group === target.group
+				const inner = group.getObjects()[0] as import('fabric').fabric.Image | undefined
+				group.set({
+					subTargetCheck: true,
+					evented: true,
+					selectable: false,
+					hoverCursor: isActive ? 'move' : 'pointer'
+				})
+				if (inner) {
+					if (isActive) enableCropOnImage(inner)
+					else lockFabricObject(inner)
+				}
+			}
+		} else {
+			enableCropOnImage(target.image)
+		}
+		fabricCanvas.setActiveObject(target.image)
+		target.image.setCoords()
+		if (target.group) {
+			target.group.dirty = true
+			target.group.setCoords()
+		}
+		resetCropHistoryForActive()
+		updateCropPanelInfo()
+		fabricCanvas.requestRenderAll()
+	}
+
+	const setCropModeActive = (active: boolean) => {
+		isCropModeActive.value = active
+		if (!fabricCanvas || !canvasReady) return
+
+		if (active) {
+			attachCropModifiedListener()
+			attachCropSelectionListener()
+			refreshCropModeTargets()
+			return
+		}
+
+		detachCropModifiedListener()
+		detachCropSelectionListener()
+		const target = getActiveCropTarget()
+		if (target) persistCropTransform(target)
+		lockAllCropTargets()
+		fabricCanvas.discardActiveObject()
+		fabricCanvas.requestRenderAll()
+	}
+
+	const applyCropZoom = (direction: 'in' | 'out') => {
+		const target = getActiveCropTarget()
+		if (!target) return
+		const factor = direction === 'in' ? CROP_ZOOM_FACTOR : 1 / CROP_ZOOM_FACTOR
+		const img = target.image
+		img.set({
+			scaleX: (img.scaleX ?? 1) * factor,
+			scaleY: (img.scaleY ?? 1) * factor
+		})
+		img.setCoords()
+		if (target.group) {
+			target.group.dirty = true
+			target.group.setCoords()
+		}
+		pushCropHistory()
+		persistCropTransform(target)
+		fabricCanvas?.requestRenderAll()
+		updateCropPanelInfo()
+		scheduleCanvasPreview()
+	}
+
+	const cropZoomIn = () => applyCropZoom('in')
+	const cropZoomOut = () => applyCropZoom('out')
+
+	const cropRotate = () => {
+		const target = getActiveCropTarget()
+		if (!target) return
+		const img = target.image
+		img.set({ angle: ((img.angle ?? 0) + 90) % 360 })
+		img.setCoords()
+		if (target.group) {
+			target.group.dirty = true
+			target.group.setCoords()
+		}
+		pushCropHistory()
+		persistCropTransform(target)
+		fabricCanvas?.requestRenderAll()
+		updateCropPanelInfo()
+		scheduleCanvasPreview()
+	}
+
+	const cropUndo = () => {
+		if (cropHistoryIndex <= 0) return
+		cropHistoryIndex -= 1
+		restoreCropHistoryState()
+		scheduleCanvasPreview()
+	}
+
+	const cropRedo = () => {
+		if (cropHistoryIndex >= cropHistory.length - 1) return
+		cropHistoryIndex += 1
+		restoreCropHistoryState()
+		scheduleCanvasPreview()
+	}
+
+	const applyCrop = () => {
+		const target = getActiveCropTarget()
+		if (target) persistCropTransform(target)
+		emitDesign()
+		scheduleCanvasPreview()
 	}
 
 	const isMockupDimensionsReady = () => mockupNaturalW > 0 && mockupNaturalH > 0
@@ -1640,12 +2236,13 @@ export function useProductCanvasEditor(options: {
 		allSlots: CollageLayoutSlot[],
 		mockupW: number,
 		mockupH: number,
-		layoutRef?: { width?: number; height?: number }
+		layoutRef?: { width?: number; height?: number },
+		uploadIndex?: number
 	) => {
 		const maxAttempts = 3
 		for (let attempt = 0; attempt < maxAttempts; attempt++) {
 			try {
-				await addUploadToCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+				await addUploadToCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef, uploadIndex)
 				return true
 			} catch {
 				if (attempt < maxAttempts - 1) {
@@ -1671,7 +2268,15 @@ export function useProductCanvasEditor(options: {
 			const upload = uploads[uploadIndex]
 			if (!upload?.url || !slotDef) continue
 
-			const ok = await loadOneCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef)
+			const ok = await loadOneCollageSlot(
+				upload,
+				slotDef,
+				allSlots,
+				mockupW,
+				mockupH,
+				layoutRef,
+				uploadIndex
+			)
 			if (ok) loaded++
 			else failed++
 		}
@@ -2103,6 +2708,9 @@ export function useProductCanvasEditor(options: {
 		canvasReady = false
 		resizeObserver?.disconnect()
 		resizeObserver = null
+		detachCropModifiedListener()
+		detachCropSelectionListener()
+		isCropModeActive.value = false
 		if (fabricCanvas) {
 			try {
 				fabricCanvas.dispose()
@@ -2115,6 +2723,8 @@ export function useProductCanvasEditor(options: {
 		collagePhotoObjects = []
 		collageSyncInFlight = null
 		viewportBgImage = null
+		activeEffectId.value = null
+		activeEffectOpacity.value = 100
 		mockupNaturalW = 0
 		mockupNaturalH = 0
 		printAreaRect = null
@@ -2364,11 +2974,17 @@ export function useProductCanvasEditor(options: {
 		() => options.productId.value,
 		async () => {
 			activeProductImageIndex.value = 0
+			cropStateByUploadIndex.clear()
 			if (fabricCanvas && uploadImages.value.length) {
 				await selectUploadImage(0)
 			}
 		}
 	)
+
+	watch(activeImageIndex, () => {
+		if (!isCropModeActive.value) return
+		refreshCropModeTargets()
+	})
 
 	onMounted(() => {
 		nextTick(() => void tryInitOrSyncFormats())
@@ -2419,6 +3035,20 @@ export function useProductCanvasEditor(options: {
 		applySizeById,
 		applyFrame,
 		applyFrameByIndex,
+		applyEffectById,
+		setEffectOpacity,
+		activeEffectId,
+		activeEffectOpacity,
+		setCropModeActive,
+		cropUndo,
+		cropRedo,
+		cropZoomIn,
+		cropZoomOut,
+		cropRotate,
+		applyCrop,
+		cropSizeLabel,
+		cropPositionLabel,
+		isCropModeActive,
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
 		activeFrameId: computed(() => selectedFrame.value?.id ?? null),

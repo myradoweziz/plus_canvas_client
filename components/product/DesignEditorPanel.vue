@@ -19,6 +19,8 @@
 		isMockupSceneActive?: boolean
 		activeMockupSceneSettings?: ActiveMockupSceneSetting[]
 		useStaticFormatPreviews?: boolean
+		/** Серый фон миниатюр + дизайн по центру (mockup только на canvas) */
+		useStaticThumbBackground?: boolean
 		/** Галерея: без overlay inner_images на миниатюрах */
 		hideThumbCollageOverlay?: boolean
 		/** Скидка в % (API calculate-price или product.discount) */
@@ -48,9 +50,11 @@
 			:images="images"
 			:is-thumb-active="isThumbActive"
 			:get-thumb-preview-src="getThumbPreviewSrc"
-			:get-product-thumb-background-src="hideThumbCollageOverlay ? undefined : getProductThumbBackgroundSrc"
+			:get-product-thumb-background-src="
+				hideThumbCollageOverlay || useStaticThumbBackground ? undefined : getProductThumbBackgroundSrc
+			"
 			:get-product-thumb-collage-src="hideThumbCollageOverlay ? undefined : getProductThumbCollageSrc"
-			:use-static-thumb-bg="hideThumbCollageOverlay"
+			:use-static-thumb-bg="hideThumbCollageOverlay || useStaticThumbBackground"
 			@select="$emit('thumb-select', $event)"
 		/>
 

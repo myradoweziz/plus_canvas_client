@@ -82,21 +82,36 @@
 		emit('select-format', formatId)
 	}
 
-	/** В ряд — до 6 форматов; если меньше, каждый слайд шире (не 1/6 пустого ряда). */
+	/** В ряд — до 6 форматов; если меньше — растягиваем на всю ширину полосы. */
 	const MAX_VISIBLE_FORMATS = 6
 
-	const slidesPerView = computed(() => Math.min(props.formats.length, MAX_VISIBLE_FORMATS))
+	const fillsStripWidth = computed(() => props.formats.length <= MAX_VISIBLE_FORMATS)
+
+	const formatVisibleCount = computed(() =>
+		fillsStripWidth.value ? props.formats.length : MAX_VISIBLE_FORMATS
+	)
+
+	const slidesPerView = computed(() => formatVisibleCount.value)
 
 	const showFormatNav = computed(() => props.formats.length > MAX_VISIBLE_FORMATS)
 
 	const swiperBreakpoints = computed(() => {
 		const n = props.formats.length
+		if (n <= MAX_VISIBLE_FORMATS) {
+			return {
+				0: { slidesPerView: n, spaceBetween: 12 },
+				480: { slidesPerView: n, spaceBetween: 14 },
+				640: { slidesPerView: n, spaceBetween: 16 },
+				900: { slidesPerView: n, spaceBetween: 18 },
+				1024: { slidesPerView: n, spaceBetween: 20 }
+			}
+		}
 		return {
-			0: { slidesPerView: Math.min(n, 2), spaceBetween: 12 },
-			480: { slidesPerView: Math.min(n, 3), spaceBetween: 14 },
-			640: { slidesPerView: Math.min(n, 4), spaceBetween: 16 },
-			900: { slidesPerView: Math.min(n, 5), spaceBetween: 18 },
-			1024: { slidesPerView: Math.min(n, MAX_VISIBLE_FORMATS), spaceBetween: 20 }
+			0: { slidesPerView: 2, spaceBetween: 12 },
+			480: { slidesPerView: 3, spaceBetween: 14 },
+			640: { slidesPerView: 4, spaceBetween: 16 },
+			900: { slidesPerView: 5, spaceBetween: 18 },
+			1024: { slidesPerView: MAX_VISIBLE_FORMATS, spaceBetween: 20 }
 		}
 	})
 </script>
@@ -105,8 +120,8 @@
 	<div
 		v-if="formats.length"
 		class="format-strip relative w-full max-w-full lg:max-w-[680px]"
-		:class="{ 'format-strip--loading': isLoading }"
-		:style="{ '--format-visible': String(Math.min(formats.length, MAX_VISIBLE_FORMATS)) }"
+		:class="{ 'format-strip--loading': isLoading, 'format-strip--fill': fillsStripWidth }"
+		:style="{ '--format-visible': String(formatVisibleCount) }"
 	>
 		<swiper
 			:slides-per-view="slidesPerView"
@@ -164,7 +179,11 @@
 		</swiper>
 
 		<div v-if="showFormatNav">
-			<button ref="prevEl" type="button" class="navBtn absolute left-0 sm:-left-10 lg:-left-12 bottom-8 sm:bottom-10 z-10">
+			<button
+				ref="prevEl"
+				type="button"
+				class="navBtn absolute left-0 sm:-left-10 lg:-left-12 bottom-8 sm:bottom-10 z-10"
+			>
 				<Icon name="arrowRight" class="w-10 h-10 sm:w-12 sm:h-12 -rotate-180" />
 			</button>
 			<button ref="nextEl" type="button" class="navBtn absolute right-0 bottom-8 sm:bottom-10 z-10">
@@ -219,6 +238,21 @@
 
 		&--loading {
 			pointer-events: none;
+		}
+
+		&--fill {
+			:deep(.swiper-wrapper) {
+				justify-content: stretch;
+			}
+
+			:deep(.swiper-slide.format-slide) {
+				flex: 1 1 0;
+				min-width: 0;
+				max-width: none;
+				width: calc(
+					(100% - (var(--format-visible) - 1) * var(--format-slide-gap)) / var(--format-visible)
+				) !important;
+			}
 		}
 	}
 

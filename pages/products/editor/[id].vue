@@ -3,7 +3,9 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import { CANVAS_PAINTING_STATIC_BG } from '~/utils/canvasPaintingDisplay'
 	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
+	import type { EditorToolId } from '~/utils/productEditorTypes'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
@@ -60,7 +62,6 @@
 		canvasDesignPreviewSrc,
 		formatPreviewById,
 		formatDesignPreviewById,
-		getFormatStripBackgroundSrc,
 		isThumbActive,
 		previewUrl,
 		selectThumb,
@@ -80,14 +81,26 @@
 		selectedSize,
 		isMockupSceneActive,
 		activeMockupSceneSettings,
-		setMockupSceneColor
+		setMockupSceneColor,
+		applyEffectById,
+		setEffectOpacity,
+		setCropModeActive,
+		cropUndo,
+		cropRedo,
+		cropZoomIn,
+		cropZoomOut,
+		cropRotate,
+		applyCrop,
+		cropSizeLabel,
+		cropPositionLabel
 	} = useProductCanvasEditor({
 		productId,
 		wrapRef: canvasWrapRef,
 		canvasFormats,
 		canvasFrames: frames,
 		product,
-		onDesignUpdate
+		onDesignUpdate,
+		useFirstProductImageOnly: true
 	})
 
 	const { quote: priceQuote } = useCanvasProductPrice({
@@ -114,6 +127,10 @@
 
 	const onThumbSelect = (index: number) => {
 		void selectThumb(index)
+	}
+
+	const onEditorToolChange = (tool: EditorToolId | null) => {
+		setCropModeActive(tool === 'frame')
 	}
 
 	const onMockupSceneColorChange = (settingIndex: number, color: string) => {
@@ -207,7 +224,8 @@
 						:format-design-preview-by-id="formatDesignPreviewById"
 						:canvas-preview-src="canvasPreviewSrc"
 						:canvas-design-preview-src="canvasDesignPreviewSrc"
-						:format-strip-background-src="getFormatStripBackgroundSrc()"
+						:format-strip-background-src="CANVAS_PAINTING_STATIC_BG"
+						:use-static-thumb-background="true"
 						:active-format-id="activeFormatId"
 						:is-canvas-loading="isCanvasLoading"
 						:is-mockup-scene-active="isMockupSceneActive"
@@ -239,9 +257,21 @@
 						:selected-size-id="selectedSize?.id ?? null"
 						:active-frame-id="activeFrameId"
 						:is-canvas-loading="isCanvasLoading"
+						:crop-size-label="cropSizeLabel"
+						:crop-position-label="cropPositionLabel"
+						show-editor-tools
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"
+						@editor-tool-change="onEditorToolChange"
+						@effect-select="(id) => void applyEffectById(id)"
+						@effect-opacity-change="setEffectOpacity"
+						@crop-undo="cropUndo"
+						@crop-redo="cropRedo"
+						@crop-zoom-in="cropZoomIn"
+						@crop-zoom-out="cropZoomOut"
+						@crop-rotate="cropRotate"
+						@crop-apply="applyCrop"
 					/>
 				</div>
 			</div>

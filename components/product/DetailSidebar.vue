@@ -1,8 +1,9 @@
 <script setup lang="ts">
-	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import { isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
+	import type { EditorToolId } from '~/utils/productEditorTypes'
 	import type { Product } from '~/utils/types'
 
 	const props = defineProps<{
@@ -12,12 +13,26 @@
 		selectedSizeId: number | null
 		activeFrameId: string | null | undefined
 		isCanvasLoading?: boolean
+		showEditorTools?: boolean
+		cropSizeLabel?: string
+		cropPositionLabel?: string
 		product: Product
 	}>()
 
 	const emit = defineEmits<{
 		(e: 'size-change', sizeId: number): void
 		(e: 'frame-select', index: number): void
+		(e: 'editor-tool-change', tool: EditorToolId | null): void
+		(e: 'effect-select', effectId: number | null): void
+		(e: 'effect-opacity-change', opacity: number): void
+		(e: 'text-change', value: string): void
+		(e: 'text-apply', payload: { text: string; fontFamily: string; color: string }): void
+		(e: 'crop-undo'): void
+		(e: 'crop-redo'): void
+		(e: 'crop-zoom-in'): void
+		(e: 'crop-zoom-out'): void
+		(e: 'crop-rotate'): void
+		(e: 'crop-apply'): void
 	}>()
 
 	const onSizeChange = (e: Event) => {
@@ -80,6 +95,8 @@
 		if (currency === 'TRY' || currency === 'TL') return '₺'
 		return ` ${currency}`
 	})
+
+	const isPriceBlockLoading = computed(() => Boolean(props.isCanvasLoading || isPriceLoading.value))
 
 	// New premium interactive features
 	const copied = ref(false)
@@ -214,44 +231,66 @@
 				</div>
 			</div>
 
-			<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
-			<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
-				<button
-					v-for="(frame, index) in frames"
-					:key="frame.id ?? 'frame-none'"
-					type="button"
-					class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow] duration-200 hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF] disabled:cursor-not-allowed"
-					:disabled="isCanvasLoading"
-					:class="
-						isFrameActive(frame.id) ? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10' : 'border-gray-200'
-					"
-					:aria-pressed="isFrameActive(frame.id)"
-					:title="frame.name"
-					@click="emit('frame-select', index)"
-				>
-					<div
-						v-if="isNoFrame(frame)"
-						class="frame-tile__empty pointer-events-none absolute inset-0 flex items-center justify-center bg-white"
+			<template v-if="frames?.length">
+				<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
+				<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
+					<button
+						v-for="(frame, index) in frames"
+						:key="frame.id ?? 'frame-none'"
+						type="button"
+						class="frame-tile group relative aspect-square w-full overflow-hidden rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow] duration-200 hover:border-[#2B7FFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B7FFF] disabled:cursor-not-allowed"
+						:disabled="isCanvasLoading"
+						:class="
+							isFrameActive(frame.id)
+								? 'frame-tile--active border-[#2B7FFF] ring-4 ring-[#2B7FFF]/10'
+								: 'border-gray-200'
+						"
+						:aria-pressed="isFrameActive(frame.id)"
+						:title="frame.name"
+						@click="emit('frame-select', index)"
 					>
-						<span class="frame-tile__x" :style="{ color: frame.color_hex }" aria-hidden="true">×</span>
-					</div>
-					<img
-						v-else
-						:src="frameImageSrc(frame)"
-						:alt="frame.name"
-						class="h-full w-full object-cover pointer-events-none"
-						:style="framePreviewStyle(frame)"
-					/>
-					<span
-						class="frame-tile__label pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-					>
-						{{ frame.name }}
-					</span>
-				</button>
-			</div>
+						<div
+							v-if="isNoFrame(frame)"
+							class="frame-tile__empty pointer-events-none absolute inset-0 flex items-center justify-center bg-white"
+						>
+							<span class="frame-tile__x" :style="{ color: frame.color_hex }" aria-hidden="true">×</span>
+						</div>
+						<img
+							v-else
+							:src="frameImageSrc(frame)"
+							:alt="frame.name"
+							class="h-full w-full object-cover pointer-events-none"
+							:style="framePreviewStyle(frame)"
+						/>
+						<span
+							class="frame-tile__label pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+						>
+							{{ frame.name }}
+						</span>
+					</button>
+				</div>
+			</template>
+			<ProductDesignEditorTools
+				v-if="showEditorTools"
+				:effects="product.effects"
+				:disabled="isCanvasLoading"
+				:crop-size-label="cropSizeLabel"
+				:crop-position-label="cropPositionLabel"
+				@tool-change="emit('editor-tool-change', $event)"
+				@effect-select="emit('effect-select', $event)"
+				@effect-opacity-change="emit('effect-opacity-change', $event)"
+				@text-change="emit('text-change', $event)"
+				@text-apply="emit('text-apply', $event)"
+				@crop-undo="emit('crop-undo')"
+				@crop-redo="emit('crop-redo')"
+				@crop-zoom-in="emit('crop-zoom-in')"
+				@crop-zoom-out="emit('crop-zoom-out')"
+				@crop-rotate="emit('crop-rotate')"
+				@crop-apply="emit('crop-apply')"
+			/>
 			<div
 				v-if="isCanvasLoading"
-				class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/55 backdrop-blur-[1px]"
+				class="absolute inset-0 z-10 flex items-center justify-center rounded-xl backdrop-blur-[1px]"
 				aria-live="polite"
 				aria-busy="true"
 			>
@@ -272,13 +311,44 @@
 			</div>
 		</div>
 
-		<div class="mt-6 sm:mt-8 flex flex-wrap items-center gap-3 sm:gap-5 min-h-[3rem]">
-			<span class="text-3xl sm:text-4xl font-extrabold text-[#101828]" :class="{ 'opacity-60': isPriceLoading }">
+		<div
+			class="relative mt-6 sm:mt-8 flex flex-wrap items-center gap-3 sm:gap-5 min-h-[3rem]"
+			:class="{ 'pointer-events-none': isPriceBlockLoading }"
+			:aria-busy="isPriceBlockLoading"
+		>
+			<span
+				class="text-3xl sm:text-4xl font-extrabold text-[#101828] transition-opacity"
+				:class="{ 'opacity-40': isPriceBlockLoading }"
+			>
 				{{ displayPrice }}{{ currencySuffix }}
 			</span>
-			<span v-if="showOldPrice" class="text-xl sm:text-2xl line-through text-[#B3B3B3]">
+			<span
+				v-if="showOldPrice"
+				class="text-xl sm:text-2xl line-through text-[#B3B3B3] transition-opacity"
+				:class="{ 'opacity-40': isPriceBlockLoading }"
+			>
 				{{ oldPrice }}{{ currencySuffix }}
 			</span>
+			<div
+				v-if="isPriceBlockLoading"
+				class="absolute inset-0 z-10 flex items-center justify-start pl-1"
+				aria-live="polite"
+			>
+				<svg
+					class="h-8 w-8 animate-spin text-[#2B7FFF]"
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+					<path
+						class="opacity-75"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+					/>
+				</svg>
+			</div>
 		</div>
 
 		<!-- Interactive Add To Cart and Favorites Controls -->

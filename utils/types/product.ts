@@ -8,6 +8,12 @@ export type ProductFeature = {
 	answer: string
 }
 
+export type EffectOption = {
+	id: number
+	name: string
+	image_url: string
+}
+
 export interface Product {
 	id: number
 	name: string
@@ -38,4 +44,5 @@ export interface Product {
 	features?: ProductFeature[]
 	product_features?: ProductFeature[]
 	specifications?: ProductFeature[]
+	effects?: EffectOption[]
 }
