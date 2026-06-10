@@ -4,9 +4,9 @@
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import { getCanvasPaintingArtworkUrl, isCanvasPaintingGalleryProduct } from '~/utils/canvasPaintingDisplay'
-import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
-import { editorPagePath, normalizeRouteParam, productApiPath, productPagePath } from '~/utils/productRoute'
-import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
+	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
+	import { editorPagePath, normalizeRouteParam, productApiPath, productPagePath } from '~/utils/productRoute'
+	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 
 	const route = useRoute()
 	const router = useRouter()
@@ -198,7 +198,10 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 
 			<div v-if="productStatus === 'pending'" class="mt-10 md:mt-20 text-center text-[#364153]">Yükleniyor…</div>
 
-			<div v-else-if="product" class="product-detail-layout mt-8 sm:mt-12 md:mt-20 flex flex-col lg:flex-row gap-6 md:gap-8 lg:gap-10 items-stretch lg:items-start">
+			<div
+				v-else-if="product"
+				class="product-detail-layout mt-8 sm:mt-12 md:mt-20 flex flex-col lg:flex-row gap-6 md:gap-8 lg:gap-10 items-stretch lg:items-start"
+			>
 				<div class="product-detail-editor min-w-0">
 					<ProductDesignEditorPanel
 						:product="product"
@@ -235,7 +238,7 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 						"
 						class="mt-4 text-sm text-amber-700"
 					>
-						 Bu ürün için format bulunamadı (API: canvas_formats).
+						Bu ürün için format bulunamadı (API: canvas_formats).
 					</p>
 
 					<ProductDetailTabs :product="product" />
@@ -262,7 +265,7 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 				:delivery-direction-colors="deliveryDirectionColors"
 			/>
 
-			<ProductRatingReviews />
+			<ProductRatingReviews :comments="product?.comments ?? []" />
 		</section>
 		<section class="mt-10 sm:mt-16 md:mt-20 bg-white">
 			<div class="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-10 py-8 sm:py-10 md:py-16">

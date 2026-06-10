@@ -7,6 +7,8 @@ export type CanvasFormat = {
 	image_url?: string
 	/** Ориентация холста (width / height): Dikey, Kare, Yatay… */
 	aspect?: number
+	/** «N Parçalı» — холст из N вертикальных панелей (3 Parçalı Simetrik и т.п.). */
+	panels?: number
 }
 
 export type PrintSizeOption = {
@@ -165,6 +167,28 @@ export function inferFormatAspectFromName(name: string, slug?: string): number |
 	return null
 }
 
+/** «3 Parçalı Simetrik» / «5-parcali» → число панелей; 1 — обычный холст. */
+export function parseFormatPanelCount(name: string, slug?: string): number {
+	for (const label of [name, slug]) {
+		if (!label?.trim()) continue
+		const m = normalizeLabel(label).match(/(\d+)\s*-?\s*parcal/)
+		if (m) {
+			const n = Number(m[1])
+			if (Number.isFinite(n) && n > 1 && n <= 10) return Math.round(n)
+		}
+	}
+	return 1
+}
+
+export function formatPanelCount(format: CanvasFormat | null | undefined): number {
+	const n = Number(format?.panels ?? 1)
+	return Number.isFinite(n) && n > 1 ? Math.round(n) : 1
+}
+
+/** Размер у «parçalı»-форматов часто задан на одну панель — итоговый холст шире. */
+const totalAspectForPanels = (aspect: number, panels: number): number =>
+	panels > 1 && aspect <= 1.05 ? aspect * panels : aspect
+
 export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 	const list = Array.isArray(raw)
 		? raw
@@ -182,12 +206,16 @@ export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 			)
 			if (!Number.isFinite(id) || !name || !sizes.length) return null
 			const image_url = pickString(row.image_url, row.image, row.src, row.url, row.thumbnail, row.preview_image)
+			const panelsRaw = Number(row.panels ?? row.panel_count ?? row.piece_count ?? row.pieces)
+			const panels =
+				Number.isFinite(panelsRaw) && panelsRaw > 1 ? Math.round(panelsRaw) : parseFormatPanelCount(name, slug)
 			const format: CanvasFormat = {
 				id,
 				name,
 				sizes,
 				...(slug ? { slug } : {}),
-				...(image_url ? { image_url } : {})
+				...(image_url ? { image_url } : {}),
+				...(panels > 1 ? { panels } : {})
 			}
 			const fromApi = parseAspectFromRow(row)
 			const fromName = inferFormatAspectFromName(name, slug)
@@ -250,17 +278,20 @@ export function getDefaultSize(format: CanvasFormat): PrintSizeOption {
 
 /** Пропорции холста по формату (Dikey / Kare / Yatay) — для полосы форматов и canvas. */
 export function formatOrientationAspect(format: CanvasFormat): number {
+	const panels = formatPanelCount(format)
 	const fromName = inferFormatAspectFromName(format.name, format.slug)
-	if (fromName) return fromName
+	if (fromName) return totalAspectForPanels(fromName, panels)
 
 	const s = getDefaultSize(format)
 	if (s.height > 0 && s.width > 0) {
 		const fromDefaultSize = s.width / s.height
-		if (Number.isFinite(fromDefaultSize) && fromDefaultSize > 0) return fromDefaultSize
+		if (Number.isFinite(fromDefaultSize) && fromDefaultSize > 0) {
+			return totalAspectForPanels(fromDefaultSize, panels)
+		}
 	}
 
-	if (format.aspect && format.aspect > 0) return format.aspect
-	return 1
+	if (format.aspect && format.aspect > 0) return totalAspectForPanels(format.aspect, panels)
+	return panels > 1 ? totalAspectForPanels(3 / 4, panels) : 1
 }
 
 /** Пропорции по выбранному размеру (Boyut), если задан. */
@@ -269,7 +300,7 @@ export function sizeAspect(size: PrintSizeOption): number {
 }
 
 export function formatAspect(format: CanvasFormat, size?: PrintSizeOption | null): number {
-	if (size) return sizeAspect(size)
+	if (size) return totalAspectForPanels(sizeAspect(size), formatPanelCount(format))
 	return formatOrientationAspect(format)
 }
 

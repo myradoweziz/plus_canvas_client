@@ -31,12 +31,14 @@ import {
 	getSettingPoint,
 	parseMockupSceneFromImage
 } from '~/utils/mockupScene'
+import { loadFormatPanelLayout, type FormatPanelLayout } from '~/utils/formatSvgLayout'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	CANVAS_FRAME_GAP_PX,
 	CANVAS_FRAME_OUTER_PX,
 	formatAspect,
 	formatOrientationAspect,
+	formatPanelCount,
 	FRAME_NONE_OPTION,
 	getDefaultSize,
 	isNoFrame,
@@ -663,6 +665,121 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
+	/** Зазор между панелями для fallback-сплита (когда SVG формата не распарсился). */
+	const PANEL_GAP_PX = 14
+
+	const getPanelGapPx = () => (hasActiveFrame() ? 2 * CANVAS_FRAME_OUTER_PX + 10 : PANEL_GAP_PX)
+
+	/** Раскладка панелей из SVG формата (image_url) — источник правды для «parçalı». */
+	const panelLayoutByFormatId = new Map<number, FormatPanelLayout | null>()
+
+	const ensureFormatPanelLayout = async (
+		format: CanvasFormat | null | undefined
+	): Promise<FormatPanelLayout | null> => {
+		if (!format || !import.meta.client) return null
+		const id = Number(format.id)
+		if (panelLayoutByFormatId.has(id)) return panelLayoutByFormatId.get(id) ?? null
+		const url = format.image_url?.trim()
+		const layout = url ? await loadFormatPanelLayout(mediaUrlForCanvas(url)) : null
+		panelLayoutByFormatId.set(id, layout)
+		return layout
+	}
+
+	/** Во время прохода превью форматов — панели снимаемого формата, не выбранного. */
+	let panelFormatOverride: CanvasFormat | null = null
+
+	const getActivePanelFormat = () => panelFormatOverride ?? selectedFormat.value
+
+	const getActivePanelLayout = (): FormatPanelLayout | null => {
+		const format = getActivePanelFormat()
+		if (!format) return null
+		const layout = panelLayoutByFormatId.get(Number(format.id)) ?? null
+		return layout && layout.panels.length > 1 ? layout : null
+	}
+
+	const getActivePanelCount = () =>
+		getActivePanelLayout()?.panels.length ?? formatPanelCount(getActivePanelFormat())
+
+	const getPanelRects = (
+		faceW: number,
+		faceH: number,
+		centerLeft: number,
+		centerTop: number
+	): { left: number; top: number; width: number; height: number }[] => {
+		const layout = getActivePanelLayout()
+		if (layout) {
+			const originLeft = centerLeft - faceW / 2
+			const originTop = centerTop - faceH / 2
+			return layout.panels.map((p) => ({
+				left: originLeft + p.left * faceW,
+				top: originTop + p.top * faceH,
+				width: Math.max(1, p.width * faceW),
+				height: Math.max(1, p.height * faceH)
+			}))
+		}
+
+		// SVG не распарсился — равномерный вертикальный сплит по числу панелей из имени.
+		const panels = getActivePanelCount()
+		const gap = getPanelGapPx()
+		const panelW = Math.max(1, (faceW - gap * (panels - 1)) / panels)
+		const rects: { left: number; top: number; width: number; height: number }[] = []
+		for (let i = 0; i < panels; i++) {
+			rects.push({
+				left: centerLeft - faceW / 2 + i * (panelW + gap) + panelW / 2,
+				top: centerTop,
+				width: panelW,
+				height: faceH
+			})
+		}
+		return rects
+	}
+
+	/** Clip «лица» холста: один Rect или группа панелей для «N parçalı». */
+	const buildPanelClipPath = (
+		faceW: number,
+		faceH: number,
+		center: { left: number; top: number }
+	): import('fabric').fabric.Object | undefined => {
+		if (!fabricLib) return undefined
+		const panels = getActivePanelCount()
+		if (panels <= 1) {
+			return new fabricLib.Rect({
+				width: faceW,
+				height: faceH,
+				left: center.left,
+				top: center.top,
+				originX: 'center',
+				originY: 'center',
+				absolutePositioned: true
+			})
+		}
+		const rects = getPanelRects(faceW, faceH, center.left, center.top).map(
+			(r) =>
+				new fabricLib!.Rect({
+					width: r.width,
+					height: r.height,
+					left: r.left,
+					top: r.top,
+					originX: 'center',
+					originY: 'center'
+				})
+		)
+		return new fabricLib.Group(rects, { absolutePositioned: true })
+	}
+
+	/** Белая подложка области печати тоже режется на панели. */
+	const updatePrintAreaPanelClip = () => {
+		if (!printAreaRect || !fabricLib) return
+		if (getActivePanelCount() <= 1) {
+			printAreaRect.clipPath = undefined
+		} else {
+			const pw = printAreaRect.width ?? 1
+			const ph = printAreaRect.height ?? 1
+			printAreaRect.clipPath = buildPanelClipPath(pw, ph, getPrintAreaCenter())
+		}
+		printAreaRect.dirty = true
+	}
+
 	const emitDesign = () => {
 		if (!fabricCanvas || !options.onDesignUpdate) return
 		const payload: ProductDesignPayload = {
@@ -683,16 +800,7 @@ export function useProductCanvasEditor(options: {
 	const updatePhotoClipPath = () => {
 		if (!photoObject || !printAreaRect || !fabricLib) return
 		const { width, height } = getPhotoFaceSize()
-		const center = getPrintAreaCenter()
-		photoObject.clipPath = new fabricLib.Rect({
-			width: width,
-			height: height,
-			left: center.left,
-			top: center.top,
-			originX: 'center',
-			originY: 'center',
-			absolutePositioned: true
-		})
+		photoObject.clipPath = buildPanelClipPath(width, height, getPrintAreaCenter())
 		photoObject.dirty = true
 		photoObject.setCoords()
 	}
@@ -742,10 +850,16 @@ export function useProductCanvasEditor(options: {
 	) => {
 		const maxW = viewportW.value * PRINT_AREA_VIEWPORT_RATIO
 		const maxH = viewportH.value * PRINT_AREA_VIEWPORT_RATIO
+
+		// Многопанельный формат: пропорция холста — из SVG с API, не из имени/размера.
+		const svgLayout = panelLayoutByFormatId.get(Number(format.id))
+		const svgAspect = svgLayout && svgLayout.panels.length > 1 ? svgLayout.aspect : null
+
 		const aspect =
-			opts?.preferSize && size && size.height > 0
+			svgAspect ??
+			(opts?.preferSize && size && size.height > 0
 				? formatAspect(format, size)
-				: formatOrientationAspect(format)
+				: formatOrientationAspect(format))
 
 		return printBoxInViewport(aspect, maxW, maxH)
 	}
@@ -766,25 +880,32 @@ export function useProductCanvasEditor(options: {
 	/** Refit под формат для снимка превью — без смены selectedFormat (нет мигания UI). */
 	const applyFormatPreviewLayout = async (format: CanvasFormat, size: PrintSizeOption | null) => {
 		if (!fabricCanvas) return
-		const { width, height } = getPrintDimensionsForFormat(format, size)
-		if (printAreaRect) {
-			printAreaRect.set({
-				width,
-				height,
-				scaleX: 1,
-				scaleY: 1,
-				left: cx(),
-				top: cy()
-			})
-			printAreaRect.setCoords()
+		await ensureFormatPanelLayout(format)
+		panelFormatOverride = format
+		try {
+			const { width, height } = getPrintDimensionsForFormat(format, size)
+			if (printAreaRect) {
+				printAreaRect.set({
+					width,
+					height,
+					scaleX: 1,
+					scaleY: 1,
+					left: cx(),
+					top: cy()
+				})
+				printAreaRect.setCoords()
+			}
+			updatePrintAreaPanelClip()
+			if (hasCollageLayout.value && collagePhotoObjects.length) {
+				refitCollageSlotRects()
+			} else if (photoObject) {
+				fitPhotoInPrintArea()
+			}
+			await updateFrame({ render: false })
+			reorderLayers()
+		} finally {
+			panelFormatOverride = null
 		}
-		if (hasCollageLayout.value && collagePhotoObjects.length) {
-			refitCollageSlotRects()
-		} else if (photoObject) {
-			fitPhotoInPrintArea()
-		}
-		await updateFrame({ render: false })
-		reorderLayers()
 	}
 
 	const layoutRefForCollage = (allSlots: CollageLayoutSlot[]) => {
@@ -1222,6 +1343,7 @@ export function useProductCanvasEditor(options: {
 			})
 			printAreaRect.setCoords()
 		}
+		updatePrintAreaPanelClip()
 		if (hasCollageLayout.value && collagePhotoObjects.length) {
 			refitCollageSlotRects()
 		} else if (photoObject) {
@@ -1447,23 +1569,35 @@ export function useProductCanvasEditor(options: {
 			canvas.add(rect)
 		}
 
-		const halfW = pw / 2
-		const halfH = ph / 2
+		const drawFrameBars = (b: { left: number; top: number; width: number; height: number }) => {
+			const w = b.width
+			const h = b.height
+			const cxB = b.left
+			const cyB = b.top
+			const halfW = w / 2
+			const halfH = h / 2
 
-		if (gap > 0) {
-			addBar(pw, gap, frameCx, frameCy - halfH + gap / 2, 'frame-gap', FRAME_GAP_FILL)
-			addBar(pw, gap, frameCx, frameCy + halfH - gap / 2, 'frame-gap', FRAME_GAP_FILL)
-			const gapSideH = Math.max(1, ph - 2 * gap)
-			addBar(gap, gapSideH, frameCx - halfW + gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
-			addBar(gap, gapSideH, frameCx + halfW - gap / 2, frameCy, 'frame-gap', FRAME_GAP_FILL)
+			if (gap > 0) {
+				addBar(w, gap, cxB, cyB - halfH + gap / 2, 'frame-gap', FRAME_GAP_FILL)
+				addBar(w, gap, cxB, cyB + halfH - gap / 2, 'frame-gap', FRAME_GAP_FILL)
+				const gapSideH = Math.max(1, h - 2 * gap)
+				addBar(gap, gapSideH, cxB - halfW + gap / 2, cyB, 'frame-gap', FRAME_GAP_FILL)
+				addBar(gap, gapSideH, cxB + halfW - gap / 2, cyB, 'frame-gap', FRAME_GAP_FILL)
+			}
+
+			// Рамка сразу снаружи print area / панели.
+			addBar(w + 2 * bw, bw, cxB, cyB - halfH - bw / 2, 'frame-border', borderFill)
+			addBar(w + 2 * bw, bw, cxB, cyB + halfH + bw / 2, 'frame-border', borderFill)
+			const frameSideH = h + 2 * bw
+			addBar(bw, frameSideH, cxB - halfW - bw / 2, cyB, 'frame-border', borderFill)
+			addBar(bw, frameSideH, cxB + halfW + bw / 2, cyB, 'frame-border', borderFill)
 		}
 
-		// Рамка сразу снаружи print area.
-		addBar(pw + 2 * bw, bw, frameCx, frameCy - halfH - bw / 2, 'frame-border', borderFill)
-		addBar(pw + 2 * bw, bw, frameCx, frameCy + halfH + bw / 2, 'frame-border', borderFill)
-		const frameSideH = ph + 2 * bw
-		addBar(bw, frameSideH, frameCx - halfW - bw / 2, frameCy, 'frame-border', borderFill)
-		addBar(bw, frameSideH, frameCx + halfW + bw / 2, frameCy, 'frame-border', borderFill)
+		// «N parçalı» — отдельная рамка вокруг каждой панели.
+		const panels = hasCollageLayout.value ? 1 : getActivePanelCount()
+		const boundsList =
+			panels > 1 ? getPanelRects(pw, ph, frameCx, frameCy) : [{ left: frameCx, top: frameCy, width: pw, height: ph }]
+		for (const b of boundsList) drawFrameBars(b)
 	}
 
 	/** Рамка снаружи области печати — слоты коллажа не сжимаем при выборе çerçeve. */
@@ -2428,6 +2562,7 @@ export function useProductCanvasEditor(options: {
 		const manageLoading = opts?.manageLoading !== false
 		if (manageLoading) beginCanvasLoading()
 		try {
+		await ensureFormatPanelLayout(selectedFormat.value)
 		const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
 
 		if (!printAreaRect) {
@@ -2458,6 +2593,7 @@ export function useProductCanvasEditor(options: {
 			})
 			printAreaRect.setCoords()
 		}
+		updatePrintAreaPanelClip()
 
 		await syncPhotos({
 			syncCollage: opts?.syncCollage ?? !hasCollageLayout.value,
@@ -2600,6 +2736,7 @@ export function useProductCanvasEditor(options: {
 		await runWithCanvasLoading(async () => {
 			suppressFormatPreviewWatch = true
 			try {
+				await ensureFormatPanelLayout(format)
 				selectedFormat.value = format
 				selectedSize.value = getDefaultSize(format)
 				sizeChosenByUser.value = false

@@ -14,6 +14,14 @@ export type EffectOption = {
 	image_url: string
 }
 
+export type Comment = {
+	author_name: string
+	comment: string
+	is_active: boolean
+	rating: number
+	updated_at: string
+}
+
 export interface Product {
 	id: number
 	name: string
@@ -44,4 +52,5 @@ export interface Product {
 	product_features?: ProductFeature[]
 	specifications?: ProductFeature[]
 	effects?: EffectOption[]
+	comments?: Comment[]
 }
