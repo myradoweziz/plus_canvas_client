@@ -21,7 +21,7 @@
 		useStaticFormatPreviews?: boolean
 		/** Серый фон миниатюр + дизайн по центру (mockup только на canvas) */
 		useStaticThumbBackground?: boolean
-		/** Галерея: без overlay inner_images на миниатюрах */
+		/** Галерея: без overlay коллажа на миниатюрах */
 		hideThumbCollageOverlay?: boolean
 		/** Скидка в % (API calculate-price или product.discount) */
 		discountPercent?: number | null

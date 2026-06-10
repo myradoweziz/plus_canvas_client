@@ -1,3 +1,4 @@
+import { parseMockupSceneFromImage } from '~/utils/mockupScene'
 import type { Image } from '~/utils/types'
 
 export type CollageLayoutSlot = {
@@ -15,24 +16,95 @@ export type CollageLayout = {
 	id?: number
 	name?: string
 	layout_json: CollageLayoutSlot[]
+	/** Макс. число загрузок в UploaderModal (API: collage_layout.max_images). */
+	max_images?: number
 	/** Размер макета с бэкенда (если слоты в пикселях). */
 	reference_width?: number
 	reference_height?: number
 }
 
-export function getProductImageUrl(img: Image | Record<string, unknown>): string {
-	const row = img as Record<string, unknown>
-	const url = String(row.url ?? row.image_url ?? '').trim()
-	if (url) return url
-	return String(row.path ?? row.image ?? '').trim()
+const nestedImagePayload = (row: Record<string, unknown>): Record<string, unknown> | null => {
+	const nested = row.image
+	if (!nested || typeof nested !== 'object' || Array.isArray(nested)) return null
+	return nested as Record<string, unknown>
 }
 
-export function extractProductImageUrls(product: unknown): string[] {
+export function getProductImageUrl(img: Image | Record<string, unknown>): string {
+	const row = img as Record<string, unknown>
+	const nested = nestedImagePayload(row)
+
+	const url = String(
+		nested?.url ?? nested?.image_url ?? row.url ?? row.image_url ?? ''
+	).trim()
+	if (url) return url
+
+	const path = String(nested?.path ?? row.path ?? '').trim()
+	if (path) return path
+
+	if (typeof row.image === 'string') {
+		return row.image.trim()
+	}
+
+	return ''
+}
+
+export function getProductImageEntry(product: unknown): Image | null {
+	if (!product || typeof product !== 'object') return null
+	const row = product as Record<string, unknown>
+	const single = row.image
+	if (single && typeof single === 'object' && !Array.isArray(single)) {
+		return single as Image
+	}
+	return null
+}
+
+/** Product: одно поле `image`; категории: массив `images`. */
+export function getProductImagesList(product: unknown): Image[] {
+	const single = getProductImageEntry(product)
+	if (single) return [single]
+
 	if (!product || typeof product !== 'object') return []
 	const row = product as Record<string, unknown>
 	const list = row.images ?? row.product_images
 	if (!Array.isArray(list)) return []
-	return list.map((item) => getProductImageUrl(item as Image)).filter((u) => u.length > 0)
+	return list as Image[]
+}
+
+export function isProductMockupImage(img: Image | Record<string, unknown>): boolean {
+	const row = img as Record<string, unknown>
+	if (row.dynamic === true) return true
+	return Boolean(parseMockupSceneFromImage(img))
+}
+
+/** Фото для слотов коллажа (сессия; у Product одно `image` — mockup). */
+export function getProductCollageImages(product: unknown): Image[] {
+	const list = getProductImagesList(product)
+	if (!list.length) return []
+
+	const collageOnly = list.filter((img) => !isProductMockupImage(img))
+	if (collageOnly.length) return collageOnly
+
+	if (list.length > 1) return list.slice(1)
+	if (list.length === 1 && !isProductMockupImage(list[0])) return list
+
+	return []
+}
+
+/** Mockup / фон комнаты — product.image или images[] категории. */
+export function getProductMockupImages(product: unknown): Image[] {
+	const list = getProductImagesList(product)
+	if (!list.length) return []
+
+	const mockups = list.filter((img) => isProductMockupImage(img))
+	if (mockups.length) return mockups
+
+	return [list[0]]
+}
+
+export function extractProductImageUrls(product: unknown): string[] {
+	return getProductImagesList(product)
+		.map((item) => getProductImageUrl(item))
+		.filter((u) => u.length > 0)
 }
 
 export function getPrimaryProductBackgroundUrl(product: unknown): string | null {
@@ -88,14 +160,30 @@ export function extractCollageLayoutFromProduct(product: unknown): CollageLayout
 
 	const refW = Number(layoutRow.canvas_width ?? layoutRow.reference_width ?? layoutRow.width)
 	const refH = Number(layoutRow.canvas_height ?? layoutRow.reference_height ?? layoutRow.height)
+	const maxImages = Number(layoutRow.max_images ?? layoutRow.maxImages)
 
 	return {
 		id: Number(layoutRow.id) || undefined,
 		name: typeof layoutRow.name === 'string' ? layoutRow.name : undefined,
 		layout_json: slots,
+		max_images: Number.isFinite(maxImages) && maxImages > 0 ? maxImages : undefined,
 		reference_width: Number.isFinite(refW) && refW > 0 ? refW : undefined,
 		reference_height: Number.isFinite(refH) && refH > 0 ? refH : undefined
 	}
+}
+
+/** Лимит загрузки для UploaderModal: collage_layout.max_images → upload_image_count. */
+export function getProductUploadMaxImages(product: unknown): number | undefined {
+	if (!product || typeof product !== 'object') return undefined
+
+	const layout = extractCollageLayoutFromProduct(product)
+	if (layout?.max_images && layout.max_images > 0) return layout.max_images
+
+	const row = product as Record<string, unknown>
+	const fromProduct = Number(row.upload_image_count)
+	if (Number.isFinite(fromProduct) && fromProduct > 0) return fromProduct
+
+	return undefined
 }
 
 /**
@@ -314,7 +402,7 @@ export function collageSlotsBoundsInPrintArea(
 	}
 }
 
-/** Слот на mockup: те же границы, что и у product.images на canvas. */
+/** Слот на mockup: те же границы, что и у product.image на canvas. */
 export function slotRectOnMockup(
 	slot: CollageLayoutSlot,
 	slots: CollageLayoutSlot[],
@@ -352,7 +440,7 @@ export function slotRectOnMockup(
 	)
 }
 
-/** Общая рамка коллажа: bounding box всех слотов inner_images на mockup. */
+/** Общая рамка коллажа: bounding box всех слотов на mockup. */
 export function collageSlotsBoundsOnMockup(
 	slots: CollageLayoutSlot[],
 	viewportW: number,
@@ -468,7 +556,7 @@ export function collageSlotsToLoad(
 	return pairs
 }
 
-/** Отступ inner_images только от внутренней границы рамки (не между слотами). */
+/** Отступ слотов коллажа только от внутренней границы рамки (не между слотами). */
 export const COLLAGE_FRAME_INNER_PAD_RATIO = 0.03
 
 /** Отступ контента коллажа от внутреннего края полосы рамки (px). */
@@ -508,7 +596,7 @@ export function centerRectsIntersect(a: CenterRect, b: CenterRect): boolean {
 	return aL < bR && aR > bL && aT < bB && aB > bT
 }
 
-/** Обрезка слота, чтобы inner_images не вылезали за внутреннюю границу рамки. */
+/** Обрезка слота, чтобы фото не вылезали за внутреннюю границу рамки. */
 export function clampCenterRectToFrameInner(slot: CenterRect, frame: CenterRect): CenterRect {
 	const slotL = slot.left - slot.width / 2
 	const slotR = slot.left + slot.width / 2

@@ -15,26 +15,19 @@ export function isCanvasPaintingGalleryProduct(product: Product | null | undefin
 	return product?.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG
 }
 
-/** Одно изображение для Fabric — первый элемент product.images (inner_images не используем). */
+/** Одно изображение для Fabric — product.image. */
 export function getCanvasPaintingArtworkUrl(product: Product | null | undefined): string | null {
-	if (!product) return null
-	const list = Array.isArray(product.images) ? product.images : []
-	if (!list.length) return null
-	const url = getProductImageUrl(list[0] as Image)
+	if (!product?.image) return null
+	const url = getProductImageUrl(product.image)
 	return url.length > 0 ? url : null
 }
 
-/** Миниатюры слева: только product.images. */
+/** Миниатюры слева: product.image. */
 export function getCanvasPaintingThumbImages(product: Product | null | undefined) {
-	if (!product) return []
-	const list = Array.isArray(product.images) ? product.images : []
-	return list
-		.map((img, idx) => ({
-			url: getProductImageUrl(img as Image),
-			id: idx + 1,
-			session_id: 'product-image' as const
-		}))
-		.filter((item) => item.url.length > 0)
+	if (!product?.image) return []
+	const url = getProductImageUrl(product.image)
+	if (!url) return []
+	return [{ url, id: 1, session_id: 'product-image' as const }]
 }
 
 /** SVG-превью формата по ориентации (полоса форматов без снимков Fabric). */

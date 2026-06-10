@@ -1,8 +1,13 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { extractCollageLayoutFromProduct, getProductImageUrl } from '~/utils/collageLayout'
-	import type { Image, Product, TempDesignImage } from '~/utils/types'
+	import {
+		extractCollageLayoutFromProduct,
+		getProductImageUrl,
+		getProductUploadMaxImages
+	} from '~/utils/collageLayout'
+	import { editorPagePath, productPagePath } from '~/utils/productRoute'
+	import type { Product, TempDesignImage } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
 	const props = withDefaults(
@@ -28,7 +33,7 @@
 			return
 		}
 		if (props.product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-			router.push(`/products/${props.product.id}`)
+			router.push(productPagePath(props.product.slug))
 			return
 		}
 		isUploaderOpen.value = true
@@ -42,24 +47,21 @@
 
 	const goNext = async (payload: { images: TempDesignImage[] }) => {
 		if (!payload.images.length) return
-		designStore.setSession(props.product.id, payload.images)
+		designStore.setSession(props.product.slug, payload.images)
 		closeUploader()
-		await router.push(`/products/editor/${props.product.id}`)
+		await router.push(editorPagePath(props.product.slug))
 	}
 
 	const discountedPrice = computed(() => {
 		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
 	})
 
-	/** Лимит загрузки из API; 0 или меньше — без ограничения в модалке */
-	const uploadMaxImages = computed(() => {
-		const n = props.product.upload_image_count
-		return typeof n === 'number' && n > 0 ? n : undefined
-	})
+	const uploadMaxImages = computed(() => getProductUploadMaxImages(props.product))
 
 	const cardImages = computed(() => {
-		const list = Array.isArray(props.product.images) ? props.product.images : []
-		return list.map((img) => getProductImageUrl(img as Image)).filter((url) => url.length > 0)
+		if (!props.product.image) return []
+		const url = getProductImageUrl(props.product.image)
+		return url ? [url] : []
 	})
 
 	const hasCollageLayout = computed(() => {

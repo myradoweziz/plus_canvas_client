@@ -22,8 +22,7 @@ export interface Product {
 	price: number
 	discount: number
 	sku: string
-	images: Image[]
-	inner_images?: Image[]
+	image: Image
 	upload_image_count: number
 	main_category_id: number
 	main_category?: MainCategory

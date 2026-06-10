@@ -1,4 +1,4 @@
-export type EditorToolId = 'effect' | 'text' | 'frame'
+import type { EditorToolId } from '~/utils/productEditorTypes'
 
 export type EditorStickyTool = {
 	id: EditorToolId

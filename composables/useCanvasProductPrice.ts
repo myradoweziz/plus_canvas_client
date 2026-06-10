@@ -1,4 +1,5 @@
 import { isNoFrame, type FrameOption } from '~/utils/productDesignConfig'
+import { productApiPath } from '~/utils/productRoute'
 import type { CanvasProductCalculatePriceBody, CanvasProductPriceQuote } from '~/utils/types/canvasProductPrice'
 
 const unwrapPriceQuote = (raw: unknown): CanvasProductPriceQuote | null => {
@@ -51,7 +52,7 @@ export function useCanvasProductPrice(opts: {
 
 		try {
 			const $customFetch = useNuxtApp().$customFetch
-			const raw = await $customFetch<unknown>(`/api/canvas-products/${productId}/calculate-price`, {
+			const raw = await $customFetch<unknown>(`${productApiPath(String(productId))}/calculate-price`, {
 				method: 'POST',
 				body
 			})

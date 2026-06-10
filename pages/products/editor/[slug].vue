@@ -6,6 +6,7 @@
 	import { CANVAS_PAINTING_STATIC_BG } from '~/utils/canvasPaintingDisplay'
 	import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
 	import type { EditorToolId } from '~/utils/productEditorTypes'
+	import { normalizeRouteParam, productApiPath, productPagePath } from '~/utils/productRoute'
 	import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
 
@@ -13,17 +14,18 @@
 	const router = useRouter()
 	const designStore = useProductDesignStore()
 
-	const productId = computed(() => {
-		const id = route.params.id
-		if (Array.isArray(id)) return id[0] ?? ''
-		return String(id ?? '')
-	})
+	const productSlug = computed(() => normalizeRouteParam(route.params.slug ?? route.params.id))
 
-	const breadcrumbs = [
-		{ label: 'Kategoriler', link: '/products' },
-		{ label: 'Ürünler', link: `/products` },
-		{ label: 'Ürün Detayı', link: `/products/${productId.value}` }
-	] as BreadcrumbItem[]
+	const breadcrumbs = computed(
+		() =>
+			[
+				{ label: 'Kategoriler', link: '/products' },
+				{ label: 'Ürünler', link: `/products` },
+				{ label: 'Ürün Detayı', link: productPagePath(productSlug.value) }
+			] as BreadcrumbItem[]
+	)
+
+	const productSessionKey = productSlug
 
 	const lastDesign = ref<ProductDesignPayload | null>(null)
 	const onDesignUpdate = (payload: ProductDesignPayload) => {
@@ -33,7 +35,7 @@
 	const canvasWrapRef = ref<HTMLElement | null>(null)
 
 	const { data: productData, status: productStatus } = await useFetch<{ data: Product }>(
-		() => `/api/canvas-products/${productId.value}`,
+		() => productApiPath(productSlug.value),
 		{
 			method: 'GET',
 			baseURL: useRuntimeConfig().public.baseUrl
@@ -47,7 +49,7 @@
 		product,
 		(newProduct) => {
 			if (newProduct?.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-				router.replace(`/products/${newProduct.id}`)
+				router.replace(productPagePath(newProduct.slug))
 			}
 		},
 		{ immediate: true }
@@ -94,17 +96,17 @@
 		cropSizeLabel,
 		cropPositionLabel
 	} = useProductCanvasEditor({
-		productId,
+		productId: productSessionKey,
 		wrapRef: canvasWrapRef,
 		canvasFormats,
 		canvasFrames: frames,
 		product,
 		onDesignUpdate,
-		useFirstProductImageOnly: true
+		useStaticMockupBackground: true
 	})
 
 	const { quote: priceQuote } = useCanvasProductPrice({
-		productId,
+		productId: productSlug,
 		formatId: computed(() => selectedFormat.value?.id ?? null),
 		sizeId: computed(() => selectedSize.value?.id ?? null),
 		frameId: activeFrameId,
@@ -138,22 +140,22 @@
 	}
 
 	onMounted(async () => {
-		if (!designStore.hasSessionFor(productId.value)) {
+		if (!designStore.hasSessionFor(productSlug.value)) {
 			await router.replace('/products')
 		}
 	})
 
 	onBeforeRouteLeave((to) => {
-		const nextId = to.params.id || to.params.productId
-		const nextProductId = Array.isArray(nextId) ? nextId[0] : nextId
-		const stayingOnSameProduct = to.path.startsWith('/products/') && String(nextProductId ?? '') === productId.value
+		const nextSlug = normalizeRouteParam(to.params.slug ?? to.params.id ?? to.params.productId)
+		const stayingOnSameProduct =
+			to.path.startsWith('/products/') && nextSlug.length > 0 && nextSlug === productSlug.value
 		if (!stayingOnSameProduct) {
 			designStore.clearSession()
 		}
 	})
 
-	watch(productId, async (newId, oldId) => {
-		if (!oldId || newId === oldId) return
+	watch(productSlug, async (newSlug, oldSlug) => {
+		if (!oldSlug || newSlug === oldSlug) return
 		designStore.clearSession()
 		await router.replace('/products')
 	})

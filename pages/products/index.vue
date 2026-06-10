@@ -5,6 +5,8 @@
 	import Icon from '~/utils/ui/Icon.vue'
 	import Pagination from '~/utils/ui/Pagination.vue'
 
+	import { getProductImageUrl, getProductUploadMaxImages } from '~/utils/collageLayout'
+	import { editorPagePath, productPagePath } from '~/utils/productRoute'
 	import type {
 		Banner,
 		FeaturedCategory,
@@ -249,13 +251,13 @@
 		const listUrl = `/products?main_category_id=${id}`
 		return m.images
 			.map((img, idx) => {
-				const imageUrl = img?.url?.trim()
+				const imageUrl = getProductImageUrl(img).trim()
 				if (!imageUrl) return null
 				return {
 					id: -(idx + 1),
 					title: m.name,
 					description: desc,
-					image: img.path ?? '',
+					image: imageUrl,
 					image_url: imageUrl,
 					url: listUrl
 				} satisfies Banner
@@ -612,42 +614,41 @@
 	}
 
 	const isUploaderOpen = ref(false)
-	const uploaderProductId = ref<number | null>(null)
+	const uploaderProductSlug = ref<string | null>(null)
 
 	const openUploader = (product: Product) => {
 		if (product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-			navigateTo(`/products/${product.id}`)
+			navigateTo(productPagePath(product.slug))
 			return
 		}
 
-		uploaderProductId.value = product.id
+		uploaderProductSlug.value = product.slug
 		isUploaderOpen.value = true
 	}
 
 	const closeUploader = () => {
 		isUploaderOpen.value = false
-		uploaderProductId.value = null
+		uploaderProductSlug.value = null
 	}
 
 	const designStore = useProductDesignStore()
 
 	const uploaderProduct = computed(() => {
-		const id = uploaderProductId.value
-		if (id == null) return null
-		return filteredProducts.value.find((p) => p.id === id) ?? null
+		const slug = uploaderProductSlug.value
+		if (!slug) return null
+		return filteredProducts.value.find((p) => p.slug === slug) ?? null
 	})
 
-	const uploaderMaxImages = computed(() => {
-		const n = uploaderProduct.value?.upload_image_count
-		return typeof n === 'number' && n > 0 ? n : undefined
-	})
+	const uploaderMaxImages = computed(() =>
+		uploaderProduct.value ? getProductUploadMaxImages(uploaderProduct.value) : undefined
+	)
 
 	const goNext = async (payload: { images: TempDesignImage[] }) => {
-		const id = uploaderProductId.value ?? filteredProducts.value[0]?.id
-		if (id == null || !payload.images.length) return
-		designStore.setSession(id, payload.images)
+		const slug = uploaderProductSlug.value ?? filteredProducts.value[0]?.slug
+		if (!slug || !payload.images.length) return
+		designStore.setSession(slug, payload.images)
 		closeUploader()
-		await router.push(`/products/editor/${id}`)
+		await router.push(editorPagePath(slug))
 	}
 </script>
 

@@ -96,9 +96,7 @@
 
 	const readyImages = computed(() => uploadedImages.value.filter((i) => !i.isUploading && i.url.trim()))
 
-	const hasUploadInProgress = computed(() =>
-		uploadedImages.value.some((i) => i.isUploading || !i.url.trim())
-	)
+	const hasUploadInProgress = computed(() => uploadedImages.value.some((i) => i.isUploading || !i.url.trim()))
 
 	const requiredImageCount = computed(() => (hasUploadLimit.value ? props.maxImages! : 1))
 
@@ -447,7 +445,9 @@
 
 							<div class="mt-10 flex flex-wrap justify-center gap-4 opacity-40">
 								<span class="text-xs font-bold uppercase tracking-widest text-gray-600">
-									PNG, JPG, JPEG veya GIF (Maks. 10MB<span v-if="hasUploadLimit">, tam {{ maxImages }} görsel yükleyin</span>)
+									PNG, JPG, JPEG veya GIF (Maks. 10MB<span v-if="hasUploadLimit"
+										>, tam {{ maxImages }} görsel yükleyin</span
+									>)
 								</span>
 							</div>
 						</div>

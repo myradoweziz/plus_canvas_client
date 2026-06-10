@@ -13,8 +13,13 @@
 			slug: 'düğün-anısı-kanvas-baskı',
 			description: 'Düğün Anısı Kanvas Baskı',
 			discount: 10,
-			images: [],
-			inner_images: [],
+			image: {
+				image: {
+					path: 'uploads/mock.png',
+					url: 'https://example.com/uploads/mock.png'
+				}
+			},
+			sku: 'MOCK-001',
 			upload_image_count: 0,
 			main_category_id: 1,
 			category_id: 1,

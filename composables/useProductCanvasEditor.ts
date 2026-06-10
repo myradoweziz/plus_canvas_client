@@ -7,7 +7,9 @@ import {
 	collageSlotsToLoad,
 	extractCollageLayoutFromProduct,
 	extractProductImageUrls,
+	getProductCollageImages,
 	getProductImageUrl,
+	getProductMockupImages,
 	insetCenterRectByPx,
 	resolveLayoutRefBounds,
 	slotRectInPrintArea,
@@ -61,11 +63,14 @@ export function useProductCanvasEditor(options: {
 	canvasFrames?: Ref<FrameOption[]>
 	product?: Ref<Product | null | undefined>
 	onDesignUpdate?: (payload: ProductDesignPayload) => void
-	/** Редактор загрузки: один mockup из product.images[0] */
+	/** Редактор загрузки: один mockup из product.image[0] */
 	useFirstProductImageOnly?: boolean
+	/** Серый mockup (CANVAS_PAINTING_STATIC_BG), без product.image на фоне и в миниатюрах */
+	useStaticMockupBackground?: boolean
 }) {
 	const designStore = useProductDesignStore()
 	const { loadHtmlImage } = useFabricImageLoader()
+	const useStaticMockupBackground = computed(() => options.useStaticMockupBackground === true)
 
 	const formatPresets = computed(() => {
 		const fromApi = options.canvasFormats.value
@@ -79,7 +84,7 @@ export function useProductCanvasEditor(options: {
 	const useStaticFormatPreviews = computed(() => isCanvasPaintingGallery.value)
 	const canvasPaintingArtworkUrl = computed(() => getCanvasPaintingArtworkUrl(options.product?.value))
 	const activeProductImageIndex = ref(0)
-	/** Цвета sceneSettings по индексу mockup в product.images */
+	/** Цвета sceneSettings по индексу mockup в product.image */
 	const mockupSceneColors = ref<Record<number, string[]>>({})
 
 	const hasCollageLayout = computed(() => (collageLayout.value?.layout_json.length ?? 0) > 0)
@@ -194,8 +199,10 @@ export function useProductCanvasEditor(options: {
 		return items.slice(0, 1)
 	}
 
-	/** Слева — product.images (mockup / background). */
+	/** Слева — product.image (mockup / background). */
 	const productBackgroundThumbs = computed((): TempDesignImage[] => {
+		if (useStaticMockupBackground.value) return []
+
 		const p = options.product?.value
 		if (!p) return []
 
@@ -203,16 +210,14 @@ export function useProductCanvasEditor(options: {
 			return limitProductBackgroundThumbs(getCanvasPaintingThumbImages(p))
 		}
 
-		const fromImages = Array.isArray(p.images)
-			? p.images
-					.map((img, idx) => ({
-						url: getProductImageUrl(img),
-						id: idx + 1,
-						session_id: 'product-image',
-						mockupScene: parseMockupSceneFromImage(img)
-					}))
-					.filter((item) => item.url.length > 0)
-			: []
+		const fromImages = getProductMockupImages(p)
+			.map((img, idx) => ({
+				url: getProductImageUrl(img),
+				id: idx + 1,
+				session_id: 'product-image',
+				mockupScene: parseMockupSceneFromImage(img)
+			}))
+			.filter((item) => item.url.length > 0)
 
 		if (fromImages.length) return limitProductBackgroundThumbs(fromImages)
 
@@ -225,7 +230,7 @@ export function useProductCanvasEditor(options: {
 		)
 	})
 
-	/** Миниатюры слева: images товара; personalized — uploads из сессии (не inner_images на UI). */
+	/** Миниатюры слева: mockup из product.image; personalized — uploads из сессии. */
 	const thumbImages = computed((): TempDesignImage[] => {
 		const bg = productBackgroundThumbs.value
 		if (bg.length || isCanvasPaintingGallery.value) return bg
@@ -234,9 +239,10 @@ export function useProductCanvasEditor(options: {
 
 	const thumbsAreProductImages = computed(() => productBackgroundThumbs.value.length > 0)
 
-	/** Коллаж на product.images mockup — слоты по layout на стене, не в центре print area. */
+	/** Коллаж на product.image mockup — слоты по layout на стене, не в центре print area. */
 	const shouldPlaceCollageOnMockup = computed(
 		() =>
+			!useStaticMockupBackground.value &&
 			!isCanvasPaintingGallery.value &&
 			thumbsAreProductImages.value &&
 			Boolean(productBackgroundUrl.value) &&
@@ -295,6 +301,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const isMockupSceneActive = computed(() => {
+		if (useStaticMockupBackground.value) return false
 		const idx = activeProductImageIndex.value
 		return (productBackgroundThumbs.value[idx]?.mockupScene?.settings.length ?? 0) > 0
 	})
@@ -317,9 +324,11 @@ export function useProductCanvasEditor(options: {
 		}))
 	})
 
-	/** Тот же URL mockup, что и в левом слайдере (product.images). */
+	/** Тот же URL mockup, что и в левом слайдере (product.image). */
 	const productBackgroundUrl = computed(() => {
-		if (isCanvasPaintingGallery.value) return CANVAS_PAINTING_STATIC_BG
+		if (isCanvasPaintingGallery.value || useStaticMockupBackground.value) {
+			return CANVAS_PAINTING_STATIC_BG
+		}
 		return resolveMockupBackgroundUrl(activeProductImageIndex.value)
 	})
 
@@ -349,7 +358,7 @@ export function useProductCanvasEditor(options: {
 	const formatPreviewById = ref<Record<number, string>>({})
 	const formatDesignPreviewById = ref<Record<number, string>>({})
 	const thumbPreviewByIndex = ref<Record<number, string>>({})
-	/** Слева: только коллаж inner_images (прозрачный PNG поверх mockup в слайде). */
+	/** Слева: коллаж-слой (прозрачный PNG поверх mockup в слайде). */
 	const productThumbCollageByIndex = ref<Record<number, string>>({})
 	let productThumbPreviewSyncId = 0
 	let productThumbPreviewTimer: ReturnType<typeof setTimeout> | null = null
@@ -621,7 +630,7 @@ export function useProductCanvasEditor(options: {
 		return { left: cx(), top: cy() }
 	}
 
-	/** Галерея: активная миниатюра product.images, не только [0]. */
+	/** Галерея: активная миниатюра product.image, не только [0]. */
 	const getGalleryArtworkUrl = () => {
 		const thumbs = productBackgroundThumbs.value
 		const idx = activeProductImageIndex.value
@@ -786,7 +795,7 @@ export function useProductCanvasEditor(options: {
 		})
 	}
 
-	/** Позиция слота: на mockup (product.images) или в области печати (загрузка без фона). */
+	/** Позиция слота: на mockup (product.image) или в области печати (загрузка без фона). */
 	const rawSlotRectForCollage = (
 		slotDef: CollageLayoutSlot,
 		allSlots: CollageLayoutSlot[],
@@ -998,7 +1007,7 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	/** Фон canvas — изображение товара (product.images), без паттерна PlusCanvas. */
+	/** Фон canvas — изображение товара (product.image), без паттерна PlusCanvas. */
 	const applyViewportBackground = async (initId?: number) => {
 		if (initId !== undefined && !isActiveCanvasInit(initId)) return
 		if (!fabricCanvas || !fabricLib) return
@@ -2185,8 +2194,8 @@ export function useProductCanvasEditor(options: {
 			const layoutSlots = collageLayout.value?.layout_json.length ?? 0
 			const hasArt = Boolean(artwork)
 			return {
-				innerImagesTotal: 0,
-				innerImagesWithUrl: 0,
+				productCollageTotal: 0,
+				productCollageWithUrl: 0,
 				sessionUploads: hasArt ? 1 : 0,
 				layoutSlots,
 				expected: Math.max(hasArt ? 1 : 0, layoutSlots > 0 ? layoutSlots : 0)
@@ -2194,22 +2203,41 @@ export function useProductCanvasEditor(options: {
 		}
 
 		const p = options.product?.value
-		const innerRaw = p?.inner_images ?? []
-		const innerWithUrl = innerRaw
+		const productCollageRaw = getProductCollageImages(p)
+		const productCollageWithUrl = productCollageRaw
 			.map((img) => getProductImageUrl(img))
 			.filter((u) => u.length > 0)
-		const sessionUploads = getCollageUploads()
+		const sessionUploads = getSessionUploads()
 		const layoutSlots = collageLayout.value?.layout_json.length ?? 0
 		return {
-			innerImagesTotal: innerRaw.length,
-			innerImagesWithUrl: innerWithUrl.length,
+			productCollageTotal: productCollageRaw.length,
+			productCollageWithUrl: productCollageWithUrl.length,
 			sessionUploads: sessionUploads.length,
 			layoutSlots,
-			expected: Math.max(innerWithUrl.length, sessionUploads.length, layoutSlots > 0 ? layoutSlots : 0)
+			expected: Math.max(
+				productCollageWithUrl.length,
+				sessionUploads.length,
+				layoutSlots > 0 ? layoutSlots : 0
+			)
 		}
 	}
 
 	const expectedCollageUploadCount = () => getCollageSourceStats().expected
+
+	const getSessionUploads = (): TempDesignImage[] =>
+		uploadImages.value.filter((u) => String(u?.url ?? '').trim().length > 0)
+
+	const getProductCollageUploads = (): TempDesignImage[] => {
+		const p = options.product?.value
+		if (!p) return []
+		return getProductCollageImages(p)
+			.map((img, idx) => ({
+				url: getProductImageUrl(img),
+				id: idx + 1,
+				session_id: 'product-image'
+			}))
+			.filter((item) => item.url.length > 0)
+	}
 
 	const getCollageUploads = (): TempDesignImage[] => {
 		if (isCanvasPaintingGallery.value) {
@@ -2217,7 +2245,9 @@ export function useProductCanvasEditor(options: {
 			if (!url) return []
 			return [{ url, id: 1, session_id: 'canvas-artwork' }]
 		}
-		return uploadImages.value.filter((u) => u?.url?.trim())
+		const session = getSessionUploads()
+		if (session.length) return session
+		return getProductCollageUploads()
 	}
 
 	const waitForCollageUploadsReady = async (minCount: number, maxWaitMs = 3000) => {

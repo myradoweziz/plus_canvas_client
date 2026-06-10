@@ -3,6 +3,9 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import { getProductImageUrl } from '~/utils/collageLayout'
+	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
+	import { productPagePath } from '~/utils/productRoute'
 	import type { Banner, BreadcrumbItem, MainCategory } from '~/utils/types'
 
 	const props = withDefaults(
@@ -107,12 +110,12 @@
 					<!-- Маленький элемент снизу справа -->
 					<nuxt-link
 						v-if="banner.product"
-						:to="`/products/${banner.product.id}`"
+						:to="productPagePath(banner.product.slug)"
 						class="hidden md:flex absolute right-4 md:right-[-200px] bottom-8 lg:bottom-12 bg-white rounded-2xl p-3 shadow-2xl gap-4 w-[360px] lg:w-[440px] max-h-[170px] cursor-pointer hover:-translate-y-1 transition-all pointer-events-auto"
 					>
 						<img
-							v-if="banner.product?.images?.length > 0"
-							:src="banner.product.images[0].url"
+							v-if="banner.product?.image"
+							:src="mediaUrlForCanvas(getProductImageUrl(banner.product.image))"
 							alt="Almond blossom"
 							class="w-full h-full max-w-[190px] max-h-[150px] rounded-xl object-cover shrink-0"
 						/>

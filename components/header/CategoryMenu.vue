@@ -3,6 +3,8 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
+	import { getProductImageUrl } from '~/utils/collageLayout'
+	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import {
 		CANVAS_PAINTING_CATEGORY_SLUG,
 		PERSONALIZED_CANVAS_SLUG,
@@ -68,8 +70,7 @@
 		return groups
 	})
 
-	const mainCategoryIcon = (main: MainCategory) =>
-		main.slug === PERSONALIZED_CANVAS_SLUG ? 'palette' : 'landscape'
+	const mainCategoryIcon = (main: MainCategory) => (main.slug === PERSONALIZED_CANVAS_SLUG ? 'palette' : 'landscape')
 
 	const setActiveMain = (id: number | null) => {
 		activeMainId.value = id
@@ -168,7 +169,7 @@
 						class="mt-8 rounded-3xl overflow-hidden relative group cursor-pointer h-44 shadow-lg block"
 					>
 						<img
-							:src="activeMain.images[0]?.url"
+							:src="mediaUrlForCanvas(getProductImageUrl(activeMain.images[0]))"
 							:alt="activeMain.name"
 							class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
 						/>
@@ -252,5 +253,4 @@
 			@apply bg-gray-100 rounded-full hover:bg-gray-200 transition-colors;
 		}
 	}
-
 </style>

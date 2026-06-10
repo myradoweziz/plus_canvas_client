@@ -58,7 +58,7 @@
 	const selectedFrame = computed(() => props.frames.find((f) => f.id === props.activeFrameId) ?? null)
 
 	const { quote: priceQuote, isPriceLoading } = useCanvasProductPrice({
-		productId: computed(() => props.product.id),
+		productId: computed(() => props.product.slug),
 		formatId: computed(() => props.selectedFormatId),
 		sizeId: computed(() => props.selectedSizeId),
 		frameId: computed(() => props.activeFrameId),

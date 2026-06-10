@@ -1,7 +1,15 @@
+export type ProductImagePayload = {
+	url?: string
+	path?: string
+	image_url?: string
+}
+
 export interface Image {
-	url: string
-	path: string
-	/** Динамический room-mockup (перекраска стены, дивана и т.д.) */
+	/** API: `{ path, url }` — основной источник URL */
+	image?: ProductImagePayload
+	url?: string
+	path?: string
+	image_url?: string
 	dynamic?: boolean
 	scene?: import('./mockupScene').MockupScene
 	mockup_scene?: import('./mockupScene').MockupScene
@@ -16,9 +24,10 @@ export interface Banner {
 	url: string
 	product?: {
 		id: number
+		slug: string
 		name: string
 		description: string
-		images: Image[]
+		image: Image
 	}
 }
 

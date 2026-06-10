@@ -84,7 +84,7 @@ const normalizeScene = (raw: unknown): MockupScene | null => {
 	}
 }
 
-/** Читает scene из product.images[i] (PlusCanvas / свой API). */
+/** Читает scene из product.image / images[i] (PlusCanvas / свой API). */
 export function parseMockupSceneFromImage(img: Image | Record<string, unknown> | null | undefined): MockupScene | null {
 	if (!img || typeof img !== 'object') return null
 	const row = img as Record<string, unknown>

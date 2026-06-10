@@ -5,23 +5,25 @@
 
 	import { getCanvasPaintingArtworkUrl, isCanvasPaintingGalleryProduct } from '~/utils/canvasPaintingDisplay'
 import { extractCanvasFormatsFromProduct, extractCanvasFramesFromProduct } from '~/utils/productDesignConfig'
+import { editorPagePath, normalizeRouteParam, productApiPath, productPagePath } from '~/utils/productRoute'
 import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/types'
 
 	const route = useRoute()
 	const router = useRouter()
 	const designStore = useProductDesignStore()
 
-	const productId = computed(() => {
-		const id = route.params.productId
-		if (Array.isArray(id)) return id[0] ?? ''
-		return String(id ?? '')
-	})
+	const productSlug = computed(() => normalizeRouteParam(route.params.slug ?? route.params.productId))
 
-	const breadcrumbs = [
-		{ label: 'Kategoriler', link: '/products' },
-		{ label: 'Ürünler', link: `/products` },
-		{ label: 'Ürün Detayı', link: `/products/${productId.value}` }
-	] as BreadcrumbItem[]
+	const productSessionKey = productSlug
+
+	const breadcrumbs = computed(
+		() =>
+			[
+				{ label: 'Kategoriler', link: '/products' },
+				{ label: 'Ürünler', link: `/products` },
+				{ label: 'Ürün Detayı', link: productPagePath(productSlug.value) }
+			] as BreadcrumbItem[]
+	)
 
 	const lastDesign = ref<ProductDesignPayload | null>(null)
 	const onDesignUpdate = (payload: ProductDesignPayload) => {
@@ -31,7 +33,7 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 	const canvasWrapRef = ref<HTMLElement | null>(null)
 
 	const { data: productData, status: productStatus } = await useFetch<{ data: Product }>(
-		() => `/api/canvas-products/${productId.value}`,
+		() => productApiPath(productSlug.value),
 		{
 			method: 'GET',
 			baseURL: useRuntimeConfig().public.baseUrl
@@ -48,12 +50,12 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 			if (isCanvasPaintingGalleryProduct(newProduct)) {
 				const artworkUrl = getCanvasPaintingArtworkUrl(newProduct)
 				if (artworkUrl) {
-					designStore.setSession(productId.value, [{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' }])
+					designStore.setSession(productSlug.value, [{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' }])
 				}
 			} else {
 				// Standard product: if session exists, go to editor, else catalog
-				if (designStore.hasSessionFor(String(newProduct.id))) {
-					router.replace(`/products/editor/${newProduct.id}`)
+				if (designStore.hasSessionFor(newProduct.slug)) {
+					router.replace(editorPagePath(newProduct.slug))
 				} else {
 					router.replace('/products')
 				}
@@ -94,7 +96,7 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 		setMockupSceneColor,
 		useStaticFormatPreviews
 	} = useProductCanvasEditor({
-		productId,
+		productId: productSessionKey,
 		wrapRef: canvasWrapRef,
 		canvasFormats,
 		canvasFrames: frames,
@@ -103,7 +105,7 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 	})
 
 	const { quote: priceQuote } = useCanvasProductPrice({
-		productId,
+		productId: productSlug,
 		formatId: computed(() => selectedFormat.value?.id ?? null),
 		sizeId: computed(() => selectedSize.value?.id ?? null),
 		frameId: activeFrameId,
@@ -133,16 +135,16 @@ import type { BreadcrumbItem, Product, ProductDesignPayload } from '~/utils/type
 	}
 
 	onBeforeRouteLeave((to) => {
-		const nextId = to.params.id || to.params.productId
-		const nextProductId = Array.isArray(nextId) ? nextId[0] : nextId
-		const stayingOnSameProduct = to.path.startsWith('/products/') && String(nextProductId ?? '') === productId.value
+		const nextSlug = normalizeRouteParam(to.params.slug ?? to.params.id ?? to.params.productId)
+		const stayingOnSameProduct =
+			to.path.startsWith('/products/') && nextSlug.length > 0 && nextSlug === productSlug.value
 		if (!stayingOnSameProduct) {
 			designStore.clearSession()
 		}
 	})
 
-	watch(productId, async (newId, oldId) => {
-		if (!oldId || newId === oldId) return
+	watch(productSlug, async (newSlug, oldSlug) => {
+		if (!oldSlug || newSlug === oldSlug) return
 		designStore.clearSession()
 		await router.replace('/products')
 	})
