@@ -282,7 +282,7 @@
 				:delivery-direction-colors="deliveryDirectionColors"
 			/>
 
-			<ProductRatingReviews />
+			<ProductRatingReviews :comments="product?.comments ?? []" />
 		</section>
 		<section class="mt-20 bg-white">
 			<div class="max-w-[1400px] mx-auto px-4 md:px-10 py-10 md:py-16">
