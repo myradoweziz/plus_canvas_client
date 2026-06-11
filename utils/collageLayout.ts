@@ -76,18 +76,15 @@ export function isProductMockupImage(img: Image | Record<string, unknown>): bool
 	return Boolean(parseMockupSceneFromImage(img))
 }
 
-/** Фото для слотов коллажа (сессия; у Product одно `image` — mockup). */
+/** Фото для слотов коллажа. Одиночное `image` продукта — всегда mockup, не коллаж. */
 export function getProductCollageImages(product: unknown): Image[] {
 	const list = getProductImagesList(product)
-	if (!list.length) return []
+	if (list.length <= 1) return []
 
 	const collageOnly = list.filter((img) => !isProductMockupImage(img))
 	if (collageOnly.length) return collageOnly
 
-	if (list.length > 1) return list.slice(1)
-	if (list.length === 1 && !isProductMockupImage(list[0])) return list
-
-	return []
+	return list.slice(1)
 }
 
 /** Mockup / фон комнаты — product.image или images[] категории. */

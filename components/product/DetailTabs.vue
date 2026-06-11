@@ -90,12 +90,7 @@
 		</div>
 
 		<div v-else class="mt-6 text-left">
-			<h2>Çiçek Açan Badem Ağacı (Almond Blossom) kanvas tablo nedir?</h2>
-			<p>
-				Vincent van Gogh’un “Almond Blossom” adlı eseri, çiçek açan badem dallarını masmavi bir gökyüzü üzerine resmeden
-				ünlü bir tablondur. Bu kanvas tablo baskısı, eserin orijinal atmosferini yüksek kaliteli kanvas malzeme ve baskı
-				teknolojisiyle duvarınıza taşır.
-			</p>
+			<div v-html="product?.product_dimensions"></div>
 		</div>
 	</div>
 </template>

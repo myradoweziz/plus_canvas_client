@@ -60,6 +60,7 @@
 
 	const {
 		thumbImages,
+		thumbOverlayByIndex,
 		canvasPreviewSrc,
 		canvasDesignPreviewSrc,
 		formatPreviewById,
@@ -218,6 +219,7 @@
 						:product="product"
 						:images="thumbImages"
 						:is-thumb-active="isThumbActive"
+						:thumb-overlay-by-index="thumbOverlayByIndex"
 						:get-thumb-preview-src="getThumbPreviewSrc"
 						:get-product-thumb-background-src="getProductThumbBackgroundSrc"
 						:get-product-thumb-collage-src="getProductThumbCollageSrc"
@@ -241,10 +243,6 @@
 							<div ref="canvasWrapRef" class="mySwiper2 relative w-full overflow-hidden" />
 						</template>
 					</ProductDesignEditorPanel>
-
-					<p v-if="!formatPresets.length" class="mt-4 text-sm text-amber-700">
-						Bu ürün için format bulunamadı (API: canvas_formats).
-					</p>
 
 					<ProductDetailTabs :product="product" />
 				</div>

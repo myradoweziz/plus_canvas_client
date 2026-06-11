@@ -1,11 +1,7 @@
 <script setup lang="ts">
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import {
-		extractCollageLayoutFromProduct,
-		getProductImageUrl,
-		getProductUploadMaxImages
-	} from '~/utils/collageLayout'
+	import { getProductImageUrl, getProductUploadMaxImages } from '~/utils/collageLayout'
 	import { editorPagePath, productPagePath } from '~/utils/productRoute'
 	import type { Product, TempDesignImage } from '~/utils/types'
 	import { CANVAS_PAINTING_CATEGORY_SLUG } from '~/utils/types/category'
@@ -63,11 +59,6 @@
 		const url = getProductImageUrl(props.product.image)
 		return url ? [url] : []
 	})
-
-	const hasCollageLayout = computed(() => {
-		const layout = extractCollageLayoutFromProduct(props.product)
-		return (layout?.layout_json.length ?? 0) > 0
-	})
 </script>
 
 <template>
@@ -76,9 +67,11 @@
 			<!-- Картинка -->
 			<div
 				class="canvas-card-media relative w-full rounded-2xl overflow-hidden aspect-[4/5]"
-				:class="!hasCollageLayout ? 'canvas-card-media--collage' : 'bg-gray-100'"
+				:class="
+					product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG ? 'canvas-card-media--collage' : 'bg-gray-100'
+				"
 			>
-				<template v-if="!hasCollageLayout">
+				<template v-if="product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG">
 					<img
 						src="/images/product-card-bg.svg"
 						alt=""

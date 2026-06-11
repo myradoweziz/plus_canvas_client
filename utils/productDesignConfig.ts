@@ -9,6 +9,8 @@ export type CanvasFormat = {
 	aspect?: number
 	/** «N Parçalı» — холст из N вертикальных панелей (3 Parçalı Simetrik и т.п.). */
 	panels?: number
+	/** Технический fallback (API не отдал форматы) — в UI не показывается. */
+	synthetic?: boolean
 }
 
 export type PrintSizeOption = {

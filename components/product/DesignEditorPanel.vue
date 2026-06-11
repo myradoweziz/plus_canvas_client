@@ -5,6 +5,8 @@
 	const props = defineProps<{
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
+		/** Реактивные Fabric-превью — обновляются при смене формата/рамки на холсте */
+		thumbOverlayByIndex?: Record<number, string>
 		getThumbPreviewSrc: (index: number) => string
 		getProductThumbBackgroundSrc?: (index: number) => string
 		getProductThumbCollageSrc?: (index: number) => string
@@ -49,6 +51,7 @@
 		<ProductDesignThumbs
 			:images="images"
 			:is-thumb-active="isThumbActive"
+			:thumb-overlay-by-index="thumbOverlayByIndex"
 			:get-thumb-preview-src="getThumbPreviewSrc"
 			:get-product-thumb-background-src="
 				hideThumbCollageOverlay || useStaticThumbBackground ? undefined : getProductThumbBackgroundSrc

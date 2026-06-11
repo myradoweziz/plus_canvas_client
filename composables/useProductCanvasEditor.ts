@@ -78,8 +78,14 @@ export function useProductCanvasEditor(options: {
 		const fromApi = options.canvasFormats.value
 		if (fromApi.length) return fromApi
 		if (isCanvasPaintingGallery.value) return [getCanvasPaintingDefaultFormat()]
+		// Продукт без canvas_formats (например, только collage_layout) —
+		// дефолтный формат, иначе canvas не инициализируется. В UI его не показываем.
+		if (options.product?.value) return [{ ...getCanvasPaintingDefaultFormat(), synthetic: true }]
 		return []
 	})
+
+	/** Форматы для UI (полоса/сайдбар) — без технического fallback. */
+	const displayFormatPresets = computed(() => formatPresets.value.filter((f) => !f.synthetic))
 	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
 	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
 	const isCanvasPaintingGallery = computed(() => isCanvasPaintingGalleryProduct(options.product?.value))
@@ -112,7 +118,13 @@ export function useProductCanvasEditor(options: {
 			return
 		}
 		const current = selectedFormat.value
-		const format = current && formats.some((f) => f.id === current.id) ? current : formats[0]
+		// Дефолт — active_canvas_format_id продукта; выбор пользователя не перетираем.
+		const activeId = Number(options.product?.value?.active_canvas_format_id)
+		const productDefault = Number.isFinite(activeId)
+			? formats.find((f) => Number(f.id) === activeId)
+			: undefined
+		const format =
+			current && formats.some((f) => f.id === current.id) ? current : (productDefault ?? formats[0])
 		selectedFormat.value = format
 		const sizeList = format.sizes
 		const sizeCurrent = selectedSize.value
@@ -438,7 +450,7 @@ export function useProductCanvasEditor(options: {
 					const url = obj.toDataURL?.({
 						format: 'png',
 						quality: 0.92,
-						multiplier: 0.35
+						multiplier: 0.9
 					})
 					if (url) next[i] = url
 				} catch {
@@ -450,7 +462,7 @@ export function useProductCanvasEditor(options: {
 				const url = photoObject.toDataURL?.({
 					format: 'png',
 					quality: 0.92,
-					multiplier: 0.35
+					multiplier: 0.9
 				})
 				if (url) next[0] = url
 			} catch {
@@ -554,6 +566,32 @@ export function useProductCanvasEditor(options: {
 		const url = innerThumbImages.value[index]?.url
 		return url ? previewUrl(url) : ''
 	}
+
+	/** Реактивные превью миниатюр (Fabric-снимок слота / коллаж mockup). */
+	const thumbOverlayByIndex = computed((): Record<number, string> => {
+		const out: Record<number, string> = {}
+		const count = thumbImages.value.length
+		for (let i = 0; i < count; i++) {
+			const collageOverlay = productThumbCollageByIndex.value[i]?.trim()
+			if (collageOverlay) {
+				out[i] = collageOverlay
+				continue
+			}
+			const fromCanvas = thumbPreviewByIndex.value[i]?.trim()
+			if (fromCanvas) {
+				out[i] = fromCanvas
+				continue
+			}
+			if (thumbsAreProductImages.value) {
+				const bg = getProductThumbBackgroundSrc(i)
+				if (bg) out[i] = bg
+				continue
+			}
+			const url = innerThumbImages.value[i]?.url
+			if (url) out[i] = previewUrl(url)
+		}
+		return out
+	})
 
 	let canvasPreviewSyncId = 0
 
@@ -3170,6 +3208,7 @@ export function useProductCanvasEditor(options: {
 		thumbsAreProductImages,
 		innerThumbImages,
 		thumbPreviewByIndex,
+		thumbOverlayByIndex,
 		getThumbPreviewSrc,
 		getProductThumbBackgroundSrc,
 		getProductThumbCollageSrc,
@@ -3187,11 +3226,11 @@ export function useProductCanvasEditor(options: {
 		selectedFormat,
 		selectedSize,
 		selectedFrame,
-		formatPresets,
+		formatPresets: displayFormatPresets,
 		collageLayout,
 		hasCollageLayout,
 		productBackgroundUrl,
-		sizeOptions: computed(() => selectedFormat.value?.sizes ?? []),
+		sizeOptions: computed(() => (selectedFormat.value?.synthetic ? [] : (selectedFormat.value?.sizes ?? []))),
 		frameOptions,
 		initCanvas,
 		selectThumb,

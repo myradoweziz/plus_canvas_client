@@ -13,6 +13,8 @@
 	const props = defineProps<{
 		images: TempDesignImage[]
 		isThumbActive: (index: number) => boolean
+		/** Реактивные Fabric-превью (снимок слота / коллаж) */
+		thumbOverlayByIndex?: Record<number, string>
 		getThumbPreviewSrc: (index: number) => string
 		getProductThumbBackgroundSrc?: (index: number) => string
 		getProductThumbCollageSrc?: (index: number) => string
@@ -38,11 +40,16 @@
 	const prevEl = ref<HTMLElement | null>(null)
 	const nextEl = ref<HTMLElement | null>(null)
 
-	const getThumbOverlaySrc = (index: number) => {
+	const overlaySrcFor = (index: number) => {
+		const reactive = props.thumbOverlayByIndex?.[index]?.trim()
+		if (reactive) return reactive
 		const collage = props.getProductThumbCollageSrc?.(index)?.trim()
 		if (collage) return collage
 		return props.getThumbPreviewSrc(index)?.trim() ?? ''
 	}
+
+	/** Зависимость от thumbOverlayByIndex — перерисовка при смене формата/рамки на холсте. */
+	const overlaySrcByIndex = computed(() => props.images.map((_, index) => overlaySrcFor(index)))
 
 	const onThumbClick = (index: number) => {
 		emit('select', index)
@@ -117,8 +124,9 @@
 						aria-hidden="true"
 					/>
 					<img
-						v-if="getThumbOverlaySrc(index)"
-						:src="getThumbOverlaySrc(index)"
+						v-if="overlaySrcByIndex[index]"
+						:key="overlaySrcByIndex[index]"
+						:src="overlaySrcByIndex[index]"
 						:alt="`preview-${img.id}`"
 						class="thumb-slide__collage"
 						loading="lazy"
@@ -133,8 +141,9 @@
 						aria-hidden="true"
 					/>
 					<img
-						v-if="getThumbOverlaySrc(index)"
-						:src="getThumbOverlaySrc(index)"
+						v-if="overlaySrcByIndex[index]"
+						:key="overlaySrcByIndex[index]"
+						:src="overlaySrcByIndex[index]"
 						:alt="img.session_id === 'product-image' ? `mockup-${img.id}` : `preview-${img.id}`"
 						class="thumb-slide__collage"
 						loading="lazy"

@@ -53,4 +53,6 @@ export interface Product {
 	specifications?: ProductFeature[]
 	effects?: EffectOption[]
 	comments?: Comment[]
+	product_dimensions: string
+	active_canvas_format_id?: number
 }
