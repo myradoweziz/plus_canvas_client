@@ -10,7 +10,8 @@
 
 	const form = ref<LoginForm>({
 		email: 'admin@pluscanvas.com',
-		password: 'admin123'
+		password: 'admin123',
+		subscribe_newsletter: true
 	})
 
 	const touched = ref({
@@ -109,7 +110,21 @@
 					required
 					:error="passwordError ?? undefined"
 					@blur="touched.password = true"
+					passwordToggle
 				/>
+
+				<label class="flex items-start gap-3 cursor-pointer select-none">
+					<input
+						id="login-subscribe-newsletter"
+						v-model="form.subscribe_newsletter"
+						type="checkbox"
+						name="subscribe_newsletter"
+						class="login-newsletter-checkbox mt-0.5 h-5 w-5 shrink-0 rounded border-[#D0D5DD] text-[#2B7FFF] focus:ring-[#2B7FFF]"
+					/>
+					<span class="text-sm leading-5 text-[#364153]">
+						Kampanya ve yeniliklerden haberdar olmak için bültene abone olmak istiyorum.
+					</span>
+				</label>
 
 				<div
 					v-if="submitError"
@@ -138,4 +153,8 @@
 	</section>
 </template>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+	.login-newsletter-checkbox {
+		accent-color: #2b7fff;
+	}
+</style>

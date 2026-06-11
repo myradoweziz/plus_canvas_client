@@ -51,7 +51,10 @@
 	/** Зависимость от thumbOverlayByIndex — перерисовка при смене формата/рамки на холсте. */
 	const overlaySrcByIndex = computed(() => props.images.map((_, index) => overlaySrcFor(index)))
 
+	const isSingleCanvasPreview = computed(() => props.images.length === 1)
+
 	const onThumbClick = (index: number) => {
+		if (isSingleCanvasPreview.value) return
 		emit('select', index)
 		thumbsSwiper.value?.slideTo?.(index)
 	}
@@ -73,7 +76,10 @@
 <template>
 	<section
 		class="product-design-thumbs relative shrink-0"
-		:class="isCompact ? 'product-design-thumbs--horizontal w-full h-[108px]' : 'h-[510px] w-[100px]'"
+		:class="[
+			isCompact ? 'product-design-thumbs--horizontal w-full h-[108px]' : 'h-[510px] w-[100px]',
+			{ 'product-design-thumbs--single': isSingleCanvasPreview }
+		]"
 	>
 		<swiper
 			@swiper="setThumbsSwiper"
@@ -93,8 +99,9 @@
 			<swiper-slide
 				v-for="(img, index) in images"
 				:key="`${img.session_id}-${img.id}`"
-				class="thumb-slide cursor-pointer"
+				class="thumb-slide"
 				:class="{
+					'cursor-pointer': !isSingleCanvasPreview,
 					'is-thumb-active': isThumbActive(index),
 					'thumb-slide--product': useStackedProductThumb(img)
 				}"
@@ -197,6 +204,34 @@
 	.product-design-thumbs--horizontal .mySwiper {
 		margin-top: 0;
 		padding: 0 2rem;
+	}
+
+	.product-design-thumbs--single {
+		.mySwiper {
+			margin-top: 0;
+		}
+
+		:deep(.swiper-slide.thumb-slide) {
+			opacity: 1;
+
+			.thumb-slide__stack {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.thumb-slide__collage {
+				position: relative;
+				inset: auto;
+				width: 100%;
+				height: 100%;
+				max-width: 100%;
+				max-height: 100%;
+				padding: 6px;
+				object-fit: contain;
+				object-position: center;
+			}
+		}
 	}
 
 	.mySwiper {

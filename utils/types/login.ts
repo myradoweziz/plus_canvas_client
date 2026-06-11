@@ -31,6 +31,7 @@ export interface LoginResponse {
 export interface LoginForm {
 	email: string
 	password: string
+	subscribe_newsletter: boolean
 }
 
 export interface RegisterForm {

@@ -42,5 +42,4 @@ export interface Stock {
 export interface Faq {
 	question: string
 	answer: string
-	id: number
 }

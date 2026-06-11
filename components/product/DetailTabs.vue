@@ -13,16 +13,10 @@
 	const activeFaqIndex = ref(-1)
 	const activeFeatureIndex = ref(-1)
 
-	const homeStore = useHomeStore()
-
-	onMounted(() => {
-		if (!homeStore.faqs.length) void homeStore.fetchFaqs()
-	})
-
 	const faqItems = computed<Faq[]>(() => {
-		const fromProduct = props.product?.faqs
+		const fromProduct = props.product?.faq
 		if (Array.isArray(fromProduct) && fromProduct.length) return fromProduct
-		return homeStore.faqs
+		return fromProduct ?? []
 	})
 
 	const toggleFaq = (index: number) => {
@@ -61,7 +55,7 @@
 			<div v-if="faqItems.length" class="space-y-4">
 				<div
 					v-for="(faq, index) in faqItems"
-					:key="faq.id ?? index"
+					:key="index"
 					class="overflow-hidden rounded-xl border border-gray-100 shadow-sm"
 				>
 					<button

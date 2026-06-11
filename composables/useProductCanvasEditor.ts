@@ -6,6 +6,7 @@ import {
 	collageSlotsBoundsOnMockup,
 	collageSlotsToLoad,
 	extractCollageLayoutFromProduct,
+	productUsesCollageLayout,
 	extractProductImageUrls,
 	getProductCollageImages,
 	getProductImageUrl,
@@ -78,9 +79,15 @@ export function useProductCanvasEditor(options: {
 		const fromApi = options.canvasFormats.value
 		if (fromApi.length) return fromApi
 		if (isCanvasPaintingGallery.value) return [getCanvasPaintingDefaultFormat()]
-		// Продукт без canvas_formats (например, только collage_layout) —
-		// дефолтный формат, иначе canvas не инициализируется. В UI его не показываем.
-		if (options.product?.value) return [{ ...getCanvasPaintingDefaultFormat(), synthetic: true }]
+		// Upload-редактор / товар с collage_layout_id: canvas_formats опциональны,
+		// слоты коллажа задаёт collage_layout (независимо от форматов).
+		const product = options.product?.value
+		if (
+			product &&
+			(useStaticMockupBackground.value || productUsesCollageLayout(product))
+		) {
+			return [{ ...getCanvasPaintingDefaultFormat(), synthetic: true }]
+		}
 		return []
 	})
 
@@ -244,10 +251,22 @@ export function useProductCanvasEditor(options: {
 		)
 	})
 
+	/** Одна миниатюра слева = снимок всего дизайна с главного canvas (коллаж / 3-parçalı / галерея). */
+	const useSingleCanvasThumb = computed(
+		() =>
+			isCanvasPaintingGallery.value ||
+			(useStaticMockupBackground.value && hasCollageLayout.value)
+	)
+
+	const mainCanvasThumbSrc = ref('')
+
 	/** Миниатюры слева: mockup из product.image; personalized — uploads из сессии. */
 	const thumbImages = computed((): TempDesignImage[] => {
 		const bg = productBackgroundThumbs.value
 		if (bg.length || isCanvasPaintingGallery.value) return bg
+		if (useSingleCanvasThumb.value) {
+			return [{ url: '', id: 1, session_id: 'canvas-design' }]
+		}
 		return innerThumbImages.value
 	})
 
@@ -354,6 +373,7 @@ export function useProductCanvasEditor(options: {
 	})
 
 	const isThumbActive = (index: number) => {
+		if (useSingleCanvasThumb.value) return index === 0
 		if (thumbsAreProductImages.value) return activeProductImageIndex.value === index
 		return activeImageIndex.value === index
 	}
@@ -440,8 +460,14 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
+	const refreshMainCanvasThumb = () => {
+		if (!useSingleCanvasThumb.value || !fabricCanvas) return
+		const snap = captureMainCanvasThumbOverlay()
+		if (snap) mainCanvasThumbSrc.value = snap
+	}
+
 	const captureSlotThumbnails = () => {
-		if (!fabricCanvas) return
+		if (!fabricCanvas || useSingleCanvasThumb.value) return
 		const next: Record<number, string> = {}
 
 		if (hasCollageLayout.value && collagePhotoObjects.length) {
@@ -480,7 +506,12 @@ export function useProductCanvasEditor(options: {
 
 	const syncCanvasDerivedPreviews = () => {
 		if (!isCanvasAlive()) return
-		captureSlotThumbnails()
+		if (useSingleCanvasThumb.value) {
+			refreshMainCanvasThumb()
+			thumbPreviewByIndex.value = {}
+		} else {
+			captureSlotThumbnails()
+		}
 		scheduleActiveProductThumbCollage()
 		const snap = captureCanvasPreview()
 		const designSnap = captureFormatDesignOverlay()
@@ -570,6 +601,11 @@ export function useProductCanvasEditor(options: {
 	/** Реактивные превью миниатюр (Fabric-снимок слота / коллаж mockup). */
 	const thumbOverlayByIndex = computed((): Record<number, string> => {
 		const out: Record<number, string> = {}
+		if (useSingleCanvasThumb.value) {
+			const snap = mainCanvasThumbSrc.value.trim()
+			if (snap) out[0] = snap
+			return out
+		}
 		const count = thumbImages.value.length
 		for (let i = 0; i < count; i++) {
 			const collageOverlay = productThumbCollageByIndex.value[i]?.trim()
@@ -1255,45 +1291,70 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	const isThumbOverlayObject = (obj: import('fabric').fabric.Object) => {
+	/** Полоса форматов: только фото/коллаж, без рамки. */
+	const isFormatDesignOverlayObject = (obj: import('fabric').fabric.Object) => {
 		if (collagePhotoObjects.includes(obj)) return true
+		if (obj === photoObject) return true
+		return false
+	}
+
+	/** Левая миниатюра: фото/коллаж + рамка. */
+	const isMainCanvasThumbOverlayObject = (obj: import('fabric').fabric.Object) => {
+		if (isFormatDesignOverlayObject(obj)) return true
 		if (obj === frameObject) return true
 		const role = (obj as { data?: { role?: string } }).data?.role
 		return role === 'frame-border' || role === 'frame-gap'
 	}
 
-	const isFormatDesignOverlayObject = (obj: import('fabric').fabric.Object) => {
-		if (isThumbOverlayObject(obj)) return true
-		if (obj === photoObject) return true
-		return false
+	const centerExportBoundsInViewport = (
+		centerLeft: number,
+		centerTop: number,
+		rawWidth: number,
+		rawHeight: number,
+		padRatio: number
+	) => {
+		let width = rawWidth * (1 + padRatio * 2)
+		let height = rawHeight * (1 + padRatio * 2)
+		const maxW = viewportW.value
+		const maxH = viewportH.value
+		const fitScale = Math.min(1, maxW / width, maxH / height)
+		width *= fitScale
+		height *= fitScale
+
+		let left = centerLeft - width / 2
+		let top = centerTop - height / 2
+
+		if (width <= maxW) {
+			left = Math.max(0, Math.min(left, maxW - width))
+		} else {
+			left = 0
+			width = maxW
+		}
+		if (height <= maxH) {
+			top = Math.max(0, Math.min(top, maxH - height))
+		} else {
+			top = 0
+			height = maxH
+		}
+
+		return {
+			left: Math.floor(left),
+			top: Math.floor(top),
+			width: Math.ceil(Math.max(1, width)),
+			height: Math.ceil(Math.max(1, height))
+		}
 	}
 
 	const getProductThumbCollageExportBounds = () => {
 		const outer = getFrameOuterBounds()
 		if (outer && outer.width >= 1 && outer.height >= 1) {
-			const padRatio = 0.1
-			const w = outer.width * (1 + padRatio * 2)
-			const h = outer.height * (1 + padRatio * 2)
-			return {
-				left: Math.max(0, Math.floor(outer.left - w / 2)),
-				top: Math.max(0, Math.floor(outer.top - h / 2)),
-				width: Math.min(viewportW.value, Math.ceil(w)),
-				height: Math.min(viewportH.value, Math.ceil(h))
-			}
+			return centerExportBoundsInViewport(outer.left, outer.top, outer.width, outer.height, 0.08)
 		}
 
 		const bounds = getCollageBoundsFromObjects()
 		if (!bounds || bounds.width < 1 || bounds.height < 1) return null
 
-		const padRatio = 0.06
-		const w = bounds.width * (1 + padRatio * 2)
-		const h = bounds.height * (1 + padRatio * 2)
-		return {
-			left: Math.max(0, Math.floor(bounds.left - w / 2)),
-			top: Math.max(0, Math.floor(bounds.top - h / 2)),
-			width: Math.min(viewportW.value, Math.ceil(w)),
-			height: Math.min(viewportH.value, Math.ceil(h))
-		}
+		return centerExportBoundsInViewport(bounds.left, bounds.top, bounds.width, bounds.height, 0.06)
 	}
 
 	const captureDesignOverlay = (
@@ -1336,12 +1397,19 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	/** PNG коллажа + рамка (без mockup) — слой поверх фона в левом слайдере. */
-	const captureProductThumbCollageOverlay = (): string | null => {
-		if (!fabricCanvas || !collagePhotoObjects.length) return null
+	/** PNG дизайна (фото/коллаж + рамка) без mockup — левая миниатюра. */
+	const captureMainCanvasThumbOverlay = (): string | null => {
+		if (!fabricCanvas) return null
+		if (!collagePhotoObjects.length && !photoObject) return null
 		const exportBounds = getProductThumbCollageExportBounds()
 		if (!exportBounds) return null
-		return captureDesignOverlay(exportBounds, isThumbOverlayObject)
+		return captureDesignOverlay(exportBounds, isMainCanvasThumbOverlayObject, 0.55)
+	}
+
+	/** PNG коллажа + рамка (без mockup) — слой поверх product.image mockup. */
+	const captureProductThumbCollageOverlay = (): string | null => {
+		if (!fabricCanvas || !collagePhotoObjects.length) return null
+		return captureMainCanvasThumbOverlay()
 	}
 
 	/** PNG дизайна (коллаж/фото + рамка) без mockup — полоса форматов. */
@@ -2763,6 +2831,7 @@ export function useProductCanvasEditor(options: {
 
 	/** Клик по миниатюре слева. */
 	const selectThumb = async (index: number) => {
+		if (useSingleCanvasThumb.value) return
 		if (thumbsAreProductImages.value) {
 			await selectProductBackground(index)
 			return
@@ -3051,7 +3120,11 @@ export function useProductCanvasEditor(options: {
 	const canInitEditor = () => {
 		if (!import.meta.client || !options.wrapRef.value) return false
 		if (isCanvasPaintingGallery.value) return Boolean(canvasPaintingArtworkUrl.value)
-		return formatPresets.value.length > 0 && designStore.hasSessionFor(options.productId.value)
+		const hasSession = designStore.hasSessionFor(options.productId.value)
+		if (!hasSession) return false
+		// Коллаж из upload: layout_json обязателен; форматы — нет.
+		if (productUsesCollageLayout(options.product?.value) && !hasCollageLayout.value) return false
+		return formatPresets.value.length > 0
 	}
 
 	const tryInitOrSyncFormats = async () => {

@@ -37,29 +37,24 @@
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
 
-		// Снимок дизайна с холста для каждого формата (одинаковая логика для active и остальных).
+		// Снимок дизайна с холста (без рамки) для каждого формата.
 		const fromFabric = props.formatDesignPreviewById?.[id]
 		if (fromFabric) return fromFabric
 
 		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
 
-		const legacy = props.formatPreviewById[id]
-		if (legacy) return legacy
-
-		if (isCurrent && props.canvasPreviewSrc) return props.canvasPreviewSrc
-
 		// Пока Fabric ещё не снял превью — SVG формата с API.
 		const fromApi = formatImageSrc(format)
 		if (fromApi) return fromApi
 
-		return props.canvasPreviewSrc ?? ''
+		return ''
 	}
 
 	const usesFormatSvgImage = (format: CanvasFormat) => {
 		const id = Number(format.id)
-		if (props.formatDesignPreviewById?.[id] || props.formatPreviewById[id]) return false
+		if (props.formatDesignPreviewById?.[id]) return false
 		const isCurrent = Number(props.activeFormatId) === id
-		if (isCurrent && (props.canvasDesignPreviewSrc || props.canvasPreviewSrc)) return false
+		if (isCurrent && props.canvasDesignPreviewSrc) return false
 		return Boolean(format.image_url?.trim())
 	}
 

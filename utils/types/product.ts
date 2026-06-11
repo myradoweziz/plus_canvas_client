@@ -46,8 +46,10 @@ export interface Product {
 	color_id?: number | null
 	canvas_formats?: CanvasFormat[]
 	frames?: FrameOption[]
+	/** Раскладка слотов загрузки (независимо от canvas_formats). */
+	collage_layout_id?: number | null
 	collage_layout?: CollageLayout | null
-	faqs?: Faq[]
+	faq?: Faq[]
 	features?: ProductFeature[]
 	product_features?: ProductFeature[]
 	specifications?: ProductFeature[]

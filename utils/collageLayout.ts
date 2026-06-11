@@ -145,11 +145,40 @@ export function parseLayoutJson(raw: unknown): CollageLayoutSlot[] {
 	return list.map(normalizeSlot).filter((s): s is CollageLayoutSlot => s !== null)
 }
 
+const readCollageLayoutId = (product: unknown): number | null => {
+	if (!product || typeof product !== 'object') return null
+	const row = product as Record<string, unknown>
+	const id = Number(row.collage_layout_id ?? row.collageLayoutId)
+	return Number.isFinite(id) && id > 0 ? id : null
+}
+
+/** Товар с upload-коллажем (collage_layout_id или вложенный collage_layout). */
+export function productUsesCollageLayout(product: unknown): boolean {
+	if (readCollageLayoutId(product) != null) return true
+	const layout = extractCollageLayoutFromProduct(product)
+	return (layout?.layout_json.length ?? 0) > 0
+}
+
 export function extractCollageLayoutFromProduct(product: unknown): CollageLayout | null {
 	if (!product || typeof product !== 'object') return null
 	const row = product as Record<string, unknown>
 	const raw = row.collage_layout ?? row.collageLayout
-	if (!raw || typeof raw !== 'object') return null
+	const productLayoutId = readCollageLayoutId(product)
+
+	if (!raw || typeof raw !== 'object') {
+		const slotsFromRoot = parseLayoutJson(row.layout_json ?? row.layoutJson)
+		if (!slotsFromRoot.length) return null
+		const refW = Number(row.canvas_width ?? row.reference_width)
+		const refH = Number(row.canvas_height ?? row.reference_height)
+		const maxImages = Number(row.max_images ?? row.upload_image_count)
+		return {
+			id: productLayoutId ?? undefined,
+			layout_json: slotsFromRoot,
+			max_images: Number.isFinite(maxImages) && maxImages > 0 ? maxImages : undefined,
+			reference_width: Number.isFinite(refW) && refW > 0 ? refW : undefined,
+			reference_height: Number.isFinite(refH) && refH > 0 ? refH : undefined
+		}
+	}
 
 	const layoutRow = raw as Record<string, unknown>
 	const slots = parseLayoutJson(layoutRow.layout_json ?? layoutRow.layoutJson ?? layoutRow.slots)
@@ -158,9 +187,10 @@ export function extractCollageLayoutFromProduct(product: unknown): CollageLayout
 	const refW = Number(layoutRow.canvas_width ?? layoutRow.reference_width ?? layoutRow.width)
 	const refH = Number(layoutRow.canvas_height ?? layoutRow.reference_height ?? layoutRow.height)
 	const maxImages = Number(layoutRow.max_images ?? layoutRow.maxImages)
+	const nestedId = Number(layoutRow.id)
 
 	return {
-		id: Number(layoutRow.id) || undefined,
+		id: (Number.isFinite(nestedId) && nestedId > 0 ? nestedId : productLayoutId) ?? undefined,
 		name: typeof layoutRow.name === 'string' ? layoutRow.name : undefined,
 		layout_json: slots,
 		max_images: Number.isFinite(maxImages) && maxImages > 0 ? maxImages : undefined,
