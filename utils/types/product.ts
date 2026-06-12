@@ -1,5 +1,5 @@
 import type { CollageLayout } from '~/utils/collageLayout'
-import type { CanvasFormat, FrameOption } from '~/utils/productDesignConfig'
+import type { CanvasFormat, FrameOption, PrintSizeOption } from '~/utils/productDesignConfig'
 import type { MainCategory } from './category'
 import type { Faq, Image } from './home'
 
@@ -45,6 +45,8 @@ export interface Product {
 	color?: string
 	color_id?: number | null
 	canvas_formats?: CanvasFormat[]
+	/** Размеры без привязки к формату — если canvas_formats пуст. */
+	canvas_sizes?: PrintSizeOption[]
 	frames?: FrameOption[]
 	/** Раскладка слотов загрузки (независимо от canvas_formats). */
 	collage_layout_id?: number | null

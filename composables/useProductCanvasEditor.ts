@@ -1,24 +1,5 @@
 import { useFabricImageLoader } from '~/composables/useFabricImageLoader'
 import {
-	centerRectsIntersect,
-	clampCenterRectToFrameInner,
-	collageSlotsBoundsInPrintArea,
-	collageSlotsBoundsOnMockup,
-	collageSlotsToLoad,
-	extractCollageLayoutFromProduct,
-	productUsesCollageLayout,
-	extractProductImageUrls,
-	getProductCollageImages,
-	getProductImageUrl,
-	getProductMockupImages,
-	insetCenterRectByPx,
-	resolveLayoutRefBounds,
-	slotRectInPrintArea,
-	slotRectOnMockup,
-	sortLayoutSlots,
-	type CollageLayoutSlot
-} from '~/utils/collageLayout'
-import {
 	CANVAS_PAINTING_STATIC_BG,
 	getCanvasPaintingArtworkUrl,
 	getCanvasPaintingDefaultFormat,
@@ -26,19 +7,39 @@ import {
 	isCanvasPaintingGalleryProduct
 } from '~/utils/canvasPaintingDisplay'
 import {
+	centerRectsIntersect,
+	clampCenterRectToFrameInner,
+	collageSlotsBoundsInPrintArea,
+	collageSlotsBoundsOnMockup,
+	collageSlotsToLoad,
+	extractCollageLayoutFromProduct,
+	extractProductImageUrls,
+	getProductCollageImages,
+	getProductImageUrl,
+	getProductMockupImages,
+	insetCenterRectByPx,
+	productUsesCollageLayout,
+	resolveLayoutRefBounds,
+	slotRectInPrintArea,
+	slotRectOnMockup,
+	sortLayoutSlots,
+	type CollageLayoutSlot
+} from '~/utils/collageLayout'
+import { loadFormatPanelLayout, type FormatPanelLayout } from '~/utils/formatSvgLayout'
+import { mediaUrlForCanvas } from '~/utils/mediaUrl'
+import {
 	buildMockupSceneUrl,
 	getDefaultPaletteForSetting,
 	getInitialSceneColors,
 	getSettingPoint,
 	parseMockupSceneFromImage
 } from '~/utils/mockupScene'
-import { loadFormatPanelLayout, type FormatPanelLayout } from '~/utils/formatSvgLayout'
-import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	CANVAS_FRAME_GAP_PX,
 	CANVAS_FRAME_OUTER_PX,
 	formatAspect,
 	formatOrientationAspect,
+	extractCanvasSizesFromProduct,
 	formatPanelCount,
 	FRAME_NONE_OPTION,
 	getDefaultSize,
@@ -75,18 +76,20 @@ export function useProductCanvasEditor(options: {
 	const { loadHtmlImage } = useFabricImageLoader()
 	const useStaticMockupBackground = computed(() => options.useStaticMockupBackground === true)
 
+	const attachProductCanvasSizes = (format: CanvasFormat): CanvasFormat => {
+		const sizes = extractCanvasSizesFromProduct(options.product?.value)
+		return sizes.length ? { ...format, sizes } : format
+	}
+
 	const formatPresets = computed(() => {
 		const fromApi = options.canvasFormats.value
 		if (fromApi.length) return fromApi
-		if (isCanvasPaintingGallery.value) return [getCanvasPaintingDefaultFormat()]
+		if (isCanvasPaintingGallery.value) return [attachProductCanvasSizes(getCanvasPaintingDefaultFormat())]
 		// Upload-редактор / товар с collage_layout_id: canvas_formats опциональны,
 		// слоты коллажа задаёт collage_layout (независимо от форматов).
 		const product = options.product?.value
-		if (
-			product &&
-			(useStaticMockupBackground.value || productUsesCollageLayout(product))
-		) {
-			return [{ ...getCanvasPaintingDefaultFormat(), synthetic: true }]
+		if (product && (useStaticMockupBackground.value || productUsesCollageLayout(product))) {
+			return [attachProductCanvasSizes({ ...getCanvasPaintingDefaultFormat(), synthetic: true })]
 		}
 		return []
 	})
@@ -127,11 +130,8 @@ export function useProductCanvasEditor(options: {
 		const current = selectedFormat.value
 		// Дефолт — active_canvas_format_id продукта; выбор пользователя не перетираем.
 		const activeId = Number(options.product?.value?.active_canvas_format_id)
-		const productDefault = Number.isFinite(activeId)
-			? formats.find((f) => Number(f.id) === activeId)
-			: undefined
-		const format =
-			current && formats.some((f) => f.id === current.id) ? current : (productDefault ?? formats[0])
+		const productDefault = Number.isFinite(activeId) ? formats.find((f) => Number(f.id) === activeId) : undefined
+		const format = current && formats.some((f) => f.id === current.id) ? current : (productDefault ?? formats[0])
 		selectedFormat.value = format
 		const sizeList = format.sizes
 		const sizeCurrent = selectedSize.value
@@ -253,9 +253,7 @@ export function useProductCanvasEditor(options: {
 
 	/** Одна миниатюра слева = снимок всего дизайна с главного canvas (коллаж / 3-parçalı / галерея). */
 	const useSingleCanvasThumb = computed(
-		() =>
-			isCanvasPaintingGallery.value ||
-			(useStaticMockupBackground.value && hasCollageLayout.value)
+		() => isCanvasPaintingGallery.value || (useStaticMockupBackground.value && hasCollageLayout.value)
 	)
 
 	const mainCanvasThumbSrc = ref('')
@@ -282,10 +280,13 @@ export function useProductCanvasEditor(options: {
 			hasCollageLayout.value
 	)
 
+	const resolvedActiveFrameId = () =>
+		isMultiPanelActiveFormat.value ? null : (selectedFrame.value?.id ?? null)
+
 	const mockupSceneUrlOptions = () => ({
 		formatId: selectedFormat.value?.id ?? null,
 		sizeId: selectedSize.value?.id ?? null,
-		frameId: selectedFrame.value?.id ?? null,
+		frameId: resolvedActiveFrameId(),
 		productId: options.product?.value?.id ?? null,
 		width: 1400,
 		height: 720
@@ -328,8 +329,7 @@ export function useProductCanvasEditor(options: {
 		if (!scene?.settings.length) return raw
 
 		ensureMockupSceneColors(thumbIndex)
-		const colors =
-			mockupSceneColors.value[thumbIndex] ?? scene.settings.map((s) => s.value)
+		const colors = mockupSceneColors.value[thumbIndex] ?? scene.settings.map((s) => s.value)
 		return buildMockupSceneUrl(raw, colors, mockupSceneUrlOptions())
 	}
 
@@ -344,8 +344,7 @@ export function useProductCanvasEditor(options: {
 		const scene = productBackgroundThumbs.value[idx]?.mockupScene
 		if (!scene?.settings.length) return []
 
-		const colors =
-			mockupSceneColors.value[idx] ?? getInitialSceneColors(scene)
+		const colors = mockupSceneColors.value[idx] ?? getInitialSceneColors(scene)
 
 		return scene.settings.map((setting, index) => ({
 			index,
@@ -721,6 +720,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const hasActiveFrame = () => {
+		if (!hasCollageLayout.value && getActivePanelCount() > 1) return false
 		const frame = selectedFrame.value
 		return Boolean(frame && !isNoFrame(frame))
 	}
@@ -771,8 +771,32 @@ export function useProductCanvasEditor(options: {
 		return layout && layout.panels.length > 1 ? layout : null
 	}
 
-	const getActivePanelCount = () =>
-		getActivePanelLayout()?.panels.length ?? formatPanelCount(getActivePanelFormat())
+	const getActivePanelCount = () => getActivePanelLayout()?.panels.length ?? formatPanelCount(getActivePanelFormat())
+
+	const resolvePanelCountForFormat = (format: CanvasFormat | null | undefined): number => {
+		if (!format) return 1
+		const cached = panelLayoutByFormatId.get(Number(format.id))
+		if (cached && cached.panels.length > 1) return cached.panels.length
+		return formatPanelCount(format)
+	}
+
+	const isMultiPanelFormat = (format: CanvasFormat | null | undefined) => resolvePanelCountForFormat(format) > 1
+
+	const isMultiPanelActiveFormat = computed(() => isMultiPanelFormat(selectedFormat.value))
+
+	const enforceNoFrameForMultiPanelFormat = async (opts?: { render?: boolean }) => {
+		if (!isMultiPanelFormat(selectedFormat.value)) return
+		const none = frameOptions.value.find(isNoFrame) ?? FRAME_NONE_OPTION
+		if (!isNoFrame(selectedFrame.value)) selectedFrame.value = none
+		if (!fabricCanvas || !canvasReady) {
+			emitDesign()
+			return
+		}
+		await updateFrame({ render: opts?.render !== false })
+		reorderLayers()
+		if (opts?.render !== false) fabricCanvas.requestRenderAll()
+		emitDesign()
+	}
 
 	const getPanelRects = (
 		faceW: number,
@@ -866,7 +890,7 @@ export function useProductCanvasEditor(options: {
 			printPrice: selectedSize.value?.price,
 			formatId: selectedFormat.value?.id,
 			formatLabel: selectedFormat.value?.name,
-			frameId: selectedFrame.value?.id ?? undefined
+			frameId: resolvedActiveFrameId() ?? undefined
 		}
 		options.onDesignUpdate(payload)
 	}
@@ -931,9 +955,7 @@ export function useProductCanvasEditor(options: {
 
 		const aspect =
 			svgAspect ??
-			(opts?.preferSize && size && size.height > 0
-				? formatAspect(format, size)
-				: formatOrientationAspect(format))
+			(opts?.preferSize && size && size.height > 0 ? formatAspect(format, size) : formatOrientationAspect(format))
 
 		return printBoxInViewport(aspect, maxW, maxH)
 	}
@@ -1610,9 +1632,7 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	const resolveFrameBarFill = async (
-		frame: FrameOption
-	): Promise<string | import('fabric').fabric.Pattern> => {
+	const resolveFrameBarFill = async (frame: FrameOption): Promise<string | import('fabric').fabric.Pattern> => {
 		const lib = fabricLib
 		if (!lib) return normalizeFrameColor(frame.color_hex)
 
@@ -1638,6 +1658,7 @@ export function useProductCanvasEditor(options: {
 
 		const frame = selectedFrame.value
 		if (!frame || isNoFrame(frame)) return
+		if (!hasCollageLayout.value && getActivePanelCount() > 1) return
 
 		const outer = getFrameOuterBounds()
 		if (!outer || outer.width < 1 || outer.height < 1) return
@@ -1827,11 +1848,10 @@ export function useProductCanvasEditor(options: {
 	}
 
 	/** Fabric-фильтры по названию эффекта (image_url — только превью в сайдбаре). */
-	const buildEffectFilters = (
-		effect: EffectOption,
-		opacityPercent: number
-	): import('fabric').fabric.IBaseFilter[] => {
-		const filtersLib = fabricLib?.Image?.filters as Record<string, new (opts?: object) => import('fabric').fabric.IBaseFilter> | undefined
+	const buildEffectFilters = (effect: EffectOption, opacityPercent: number): import('fabric').fabric.IBaseFilter[] => {
+		const filtersLib = fabricLib?.Image?.filters as
+			| Record<string, new (opts?: object) => import('fabric').fabric.IBaseFilter>
+			| undefined
 		if (!filtersLib) return []
 
 		const name = effect.name.toLowerCase()
@@ -1942,9 +1962,7 @@ export function useProductCanvasEditor(options: {
 			return
 		}
 
-		const effect = (options.product?.value?.effects ?? []).find(
-			(item) => Number(item.id) === Number(effectId)
-		)
+		const effect = (options.product?.value?.effects ?? []).find((item) => Number(item.id) === Number(effectId))
 		if (!effect) return
 		if (!getPhotoImagesForEffect().length) return
 
@@ -2090,9 +2108,7 @@ export function useProductCanvasEditor(options: {
 		const pairs = collageSlotsToLoad(metrics.sortedSlots, metrics.allSlots, uploads.length)
 		const layoutSlot = (group as { data?: { layoutSlot?: number } }).data?.layoutSlot
 		const pair =
-			layoutSlot != null
-				? pairs.find((p) => p.slotDef.slot === layoutSlot)
-				: pairs[collagePhotoObjects.indexOf(group)]
+			layoutSlot != null ? pairs.find((p) => p.slotDef.slot === layoutSlot) : pairs[collagePhotoObjects.indexOf(group)]
 		return pair?.uploadIndex ?? 0
 	}
 
@@ -2108,9 +2124,7 @@ export function useProductCanvasEditor(options: {
 
 		const slot = pair.slotDef.slot
 		return (
-			collagePhotoObjects.find(
-				(g) => (g as { data?: { layoutSlot?: number } }).data?.layoutSlot === slot
-			) ??
+			collagePhotoObjects.find((g) => (g as { data?: { layoutSlot?: number } }).data?.layoutSlot === slot) ??
 			collagePhotoObjects[uploadIndex] ??
 			collagePhotoObjects[0] ??
 			null
@@ -2259,10 +2273,7 @@ export function useProductCanvasEditor(options: {
 				if (hit !== inner && hit !== group) continue
 
 				const uploadIdx = getUploadIndexForCollageGroup(group)
-				if (
-					designStore.productId === options.productId.value &&
-					designStore.activeImageIndex !== uploadIdx
-				) {
+				if (designStore.productId === options.productId.value && designStore.activeImageIndex !== uploadIdx) {
 					designStore.setActiveImageIndex(uploadIdx)
 				} else if (isCropModeActive.value) {
 					refreshCropModeTargets()
@@ -2444,9 +2455,7 @@ export function useProductCanvasEditor(options: {
 
 		const p = options.product?.value
 		const productCollageRaw = getProductCollageImages(p)
-		const productCollageWithUrl = productCollageRaw
-			.map((img) => getProductImageUrl(img))
-			.filter((u) => u.length > 0)
+		const productCollageWithUrl = productCollageRaw.map((img) => getProductImageUrl(img)).filter((u) => u.length > 0)
 		const sessionUploads = getSessionUploads()
 		const layoutSlots = collageLayout.value?.layout_json.length ?? 0
 		return {
@@ -2454,11 +2463,7 @@ export function useProductCanvasEditor(options: {
 			productCollageWithUrl: productCollageWithUrl.length,
 			sessionUploads: sessionUploads.length,
 			layoutSlots,
-			expected: Math.max(
-				productCollageWithUrl.length,
-				sessionUploads.length,
-				layoutSlots > 0 ? layoutSlots : 0
-			)
+			expected: Math.max(productCollageWithUrl.length, sessionUploads.length, layoutSlots > 0 ? layoutSlots : 0)
 		}
 	}
 
@@ -2538,15 +2543,7 @@ export function useProductCanvasEditor(options: {
 			const upload = uploads[uploadIndex]
 			if (!upload?.url || !slotDef) continue
 
-			const ok = await loadOneCollageSlot(
-				upload,
-				slotDef,
-				allSlots,
-				mockupW,
-				mockupH,
-				layoutRef,
-				uploadIndex
-			)
+			const ok = await loadOneCollageSlot(upload, slotDef, allSlots, mockupW, mockupH, layoutRef, uploadIndex)
 			if (ok) loaded++
 			else failed++
 		}
@@ -2630,16 +2627,12 @@ export function useProductCanvasEditor(options: {
 
 			removeCollagePhotos()
 			const artworkUrl = isCanvasPaintingGallery.value ? getGalleryArtworkUrl() : null
-			const list = artworkUrl
-				? [{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' as const }]
-				: uploadImages.value
+			const list = artworkUrl ? [{ url: artworkUrl, id: 1, session_id: 'canvas-artwork' as const }] : uploadImages.value
 			if (list.length > 0) {
 				if (photoObject) {
 					await refitSinglePhoto()
 				} else {
-					const idx = isCanvasPaintingGallery.value
-						? 0
-						: Math.min(designStore.activeImageIndex, list.length - 1)
+					const idx = isCanvasPaintingGallery.value ? 0 : Math.min(designStore.activeImageIndex, list.length - 1)
 					await setPhotoFromUrl(list[idx]?.url ?? list[0].url, list[idx] ?? list[0], {
 						skipBackground: true
 					})
@@ -2658,67 +2651,64 @@ export function useProductCanvasEditor(options: {
 		}
 	}
 
-	const syncPrintArea = async (opts?: {
-		preferSize?: boolean
-		syncCollage?: boolean
-		manageLoading?: boolean
-	}) => {
+	const syncPrintArea = async (opts?: { preferSize?: boolean; syncCollage?: boolean; manageLoading?: boolean }) => {
 		if (!fabricCanvas || !fabricLib || !selectedFormat.value) return
 
 		const manageLoading = opts?.manageLoading !== false
 		if (manageLoading) beginCanvasLoading()
 		try {
-		await ensureFormatPanelLayout(selectedFormat.value)
-		const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
+			await ensureFormatPanelLayout(selectedFormat.value)
+			await enforceNoFrameForMultiPanelFormat({ render: false })
+			const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
 
-		if (!printAreaRect) {
-			printAreaRect = new fabricLib.Rect({
-				width,
-				height,
-				left: cx(),
-				top: cy(),
-				originX: 'center',
-				originY: 'center',
-				fill: resolvePrintAreaFill(),
-				stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
-				strokeWidth: hasCollageLayout.value ? 0 : 1,
-				selectable: false,
-				evented: false
-			})
-			fabricCanvas.add(printAreaRect)
-		} else {
-			printAreaRect.set({
-				width,
-				height,
-				scaleX: 1,
-				scaleY: 1,
-				left: cx(),
-				top: cy(),
-				stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
-				strokeWidth: hasCollageLayout.value ? 0 : 1
-			})
-			printAreaRect.setCoords()
-		}
-		updatePrintAreaPanelClip()
-
-		await syncPhotos({
-			syncCollage: opts?.syncCollage ?? !hasCollageLayout.value,
-			manageLoading: false
-		})
-		if (!fabricCanvas) return
-
-		if (hasCollageLayout.value) {
-			if (collagePhotoObjects.length) {
-				refitCollageSlotRects()
-				await updateFrame()
-				reorderLayers()
-				fabricCanvas.requestRenderAll()
-				emitDesign()
-				scheduleCanvasPreview()
+			if (!printAreaRect) {
+				printAreaRect = new fabricLib.Rect({
+					width,
+					height,
+					left: cx(),
+					top: cy(),
+					originX: 'center',
+					originY: 'center',
+					fill: resolvePrintAreaFill(),
+					stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
+					strokeWidth: hasCollageLayout.value ? 0 : 1,
+					selectable: false,
+					evented: false
+				})
+				fabricCanvas.add(printAreaRect)
 			} else {
-				await syncCollageSlots({ manageLoading: false })
+				printAreaRect.set({
+					width,
+					height,
+					scaleX: 1,
+					scaleY: 1,
+					left: cx(),
+					top: cy(),
+					stroke: hasCollageLayout.value ? 'transparent' : '#d1d5db',
+					strokeWidth: hasCollageLayout.value ? 0 : 1
+				})
+				printAreaRect.setCoords()
 			}
-		}
+			updatePrintAreaPanelClip()
+
+			await syncPhotos({
+				syncCollage: opts?.syncCollage ?? !hasCollageLayout.value,
+				manageLoading: false
+			})
+			if (!fabricCanvas) return
+
+			if (hasCollageLayout.value) {
+				if (collagePhotoObjects.length) {
+					refitCollageSlotRects()
+					await updateFrame()
+					reorderLayers()
+					fabricCanvas.requestRenderAll()
+					emitDesign()
+					scheduleCanvasPreview()
+				} else {
+					await syncCollageSlots({ manageLoading: false })
+				}
+			}
 		} finally {
 			if (manageLoading) endCanvasLoading()
 		}
@@ -2847,6 +2837,7 @@ export function useProductCanvasEditor(options: {
 				selectedFormat.value = format
 				selectedSize.value = getDefaultSize(format)
 				sizeChosenByUser.value = false
+				await enforceNoFrameForMultiPanelFormat({ render: false })
 				if (!fabricCanvas || !canvasReady) {
 					await tryInitOrSyncFormats()
 					return
@@ -2902,6 +2893,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyFrame = async (frame: FrameOption) => {
+		if (isMultiPanelActiveFormat.value) return
 		await runWithCanvasLoading(async () => {
 			selectedFrame.value = frame
 			if (!fabricCanvas || !canvasReady) {
@@ -3303,7 +3295,13 @@ export function useProductCanvasEditor(options: {
 		collageLayout,
 		hasCollageLayout,
 		productBackgroundUrl,
-		sizeOptions: computed(() => (selectedFormat.value?.synthetic ? [] : (selectedFormat.value?.sizes ?? []))),
+		sizeOptions: computed(() => {
+			const format = selectedFormat.value
+			const fromProduct = extractCanvasSizesFromProduct(options.product?.value)
+			if (!format) return fromProduct
+			if (!options.canvasFormats.value.length && fromProduct.length) return fromProduct
+			return format.sizes ?? fromProduct
+		}),
 		frameOptions,
 		initCanvas,
 		selectThumb,
@@ -3330,7 +3328,10 @@ export function useProductCanvasEditor(options: {
 		isCropModeActive,
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),
-		activeFrameId: computed(() => selectedFrame.value?.id ?? null),
+		activeFrameId: computed(() =>
+			isMultiPanelActiveFormat.value ? null : (selectedFrame.value?.id ?? null)
+		),
+		showFrameSelector: computed(() => !isMultiPanelActiveFormat.value),
 		isFrameActive: (id: string | null) => selectedFrame.value?.id === id,
 		isMockupSceneActive,
 		activeMockupSceneSettings,

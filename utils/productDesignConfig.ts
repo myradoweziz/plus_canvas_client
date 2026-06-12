@@ -88,7 +88,7 @@ const pickString = (...values: unknown[]): string => {
 	return ''
 }
 
-const normalizeSizes = (sizesRaw: unknown): PrintSizeOption[] => {
+export const normalizePrintSizes = (sizesRaw: unknown): PrintSizeOption[] => {
 	if (!Array.isArray(sizesRaw)) return []
 	return sizesRaw
 		.map((s) => {
@@ -203,7 +203,7 @@ export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 			const id = Number(row.id)
 			const name = pickString(row.name, row.title, row.label)
 			const slug = pickString(row.slug, row.code, row.key)
-			const sizes = normalizeSizes(
+			const sizes = normalizePrintSizes(
 				row.sizes ?? row.canvas_format_sizes ?? row.format_sizes ?? row.print_sizes ?? row.canvas_sizes
 			)
 			if (!Number.isFinite(id) || !name || !sizes.length) return null
@@ -265,6 +265,13 @@ export function normalizeCanvasFrames(raw: unknown): FrameOption[] {
 			return frame
 		})
 		.filter((f): f is FrameOption => f !== null)
+}
+
+/** Размеры с уровня продукта, когда нет canvas_formats (API: canvas_sizes). */
+export function extractCanvasSizesFromProduct(product: unknown): PrintSizeOption[] {
+	if (!product || typeof product !== 'object') return []
+	const row = product as Record<string, unknown>
+	return normalizePrintSizes(row.canvas_sizes ?? row.product_sizes)
 }
 
 export function extractCanvasFramesFromProduct(product: unknown): FrameOption[] {

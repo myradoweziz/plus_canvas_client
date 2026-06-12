@@ -79,6 +79,7 @@
 		applyFrameByIndex,
 		activeFormatId,
 		activeFrameId,
+		showFrameSelector,
 		isCanvasLoading,
 		selectedFormat,
 		selectedSize,
@@ -256,6 +257,7 @@
 						:selected-format-id="selectedFormat?.id ?? null"
 						:selected-size-id="selectedSize?.id ?? null"
 						:active-frame-id="activeFrameId"
+						:show-frame-selector="showFrameSelector"
 						:is-canvas-loading="isCanvasLoading"
 						:crop-size-label="cropSizeLabel"
 						:crop-position-label="cropPositionLabel"

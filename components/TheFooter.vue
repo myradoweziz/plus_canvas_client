@@ -51,8 +51,8 @@
 	})
 
 	const topLinks = [
-		{ name: 'Hesabım', href: '#' },
-		{ name: 'Sipariş Takibi', href: '#' }
+		{ name: 'Hesabım', to: '/profile' },
+		{ name: 'Sipariş Takibi', to: '/profile/orders' }
 	]
 
 	const bottomLinks = [
@@ -119,7 +119,7 @@
 				<div>
 					<h4 class="font-bold text-[#101828] text-base mb-6">Kanvas Tablo Galerisi</h4>
 					<ul class="space-y-4">
-						<li v-for="link in footerLinks.gallery" :key="link.name">
+						<li v-for="link in footerLinks.gallery?.slice(0, 8)" :key="link.name">
 							<a :href="link.href" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
 								{{ link.name }}
 							</a>
@@ -127,11 +127,10 @@
 					</ul>
 				</div>
 
-				<!-- Personalized Links -->
 				<div>
 					<h4 class="font-bold text-[#101828] text-base mb-6">Kişiye Özel Kanvas Tablo</h4>
 					<ul class="space-y-4">
-						<li v-for="link in footerLinks.personalized" :key="link.name">
+						<li v-for="link in footerLinks.personalized?.slice(0, 8)" :key="link.name">
 							<a :href="link.href" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
 								{{ link.name }}
 							</a>
@@ -215,9 +214,9 @@
 			<!-- Top Links (Hesabım, etc) -->
 			<div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
 				<template v-for="(link, index) in topLinks" :key="link.name">
-					<a :href="link.href" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
+					<nuxt-link :to="link.to" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
 						{{ link.name }}
-					</a>
+					</nuxt-link>
 					<div v-if="index !== topLinks.length - 1" class="hidden sm:block w-[1px] h-3 bg-gray-300"></div>
 				</template>
 			</div>
@@ -253,6 +252,4 @@
 	</footer>
 </template>
 
-<style lang="scss" scoped>
-	/* Custom styles if needed beyond Tailwind */
-</style>
+<style lang="scss" scoped></style>

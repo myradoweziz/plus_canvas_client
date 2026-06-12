@@ -12,6 +12,7 @@
 		selectedFormatId: number | null
 		selectedSizeId: number | null
 		activeFrameId: string | null | undefined
+		showFrameSelector?: boolean
 		isCanvasLoading?: boolean
 		showEditorTools?: boolean
 		cropSizeLabel?: string
@@ -57,11 +58,13 @@
 
 	const selectedFrame = computed(() => props.frames.find((f) => f.id === props.activeFrameId) ?? null)
 
+	const showFrames = computed(() => props.showFrameSelector !== false)
+
 	const { quote: priceQuote, isPriceLoading } = useCanvasProductPrice({
 		productId: computed(() => props.product.slug),
 		formatId: computed(() => props.selectedFormatId),
 		sizeId: computed(() => props.selectedSizeId),
-		frameId: computed(() => props.activeFrameId),
+		frameId: computed(() => (showFrames.value ? props.activeFrameId : null)),
 		frames: computed(() => props.frames)
 	})
 
@@ -231,7 +234,7 @@
 				</div>
 			</div>
 
-			<template v-if="frames?.length">
+			<template v-if="frames?.length && showFrames">
 				<div class="mt-8 text-sm font-bold text-gray-950 uppercase tracking-wider">Çerçeve Seçin</div>
 				<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-3 mt-3">
 					<button
