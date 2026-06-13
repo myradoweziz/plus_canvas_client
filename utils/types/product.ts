@@ -59,4 +59,6 @@ export interface Product {
 	comments?: Comment[]
 	product_dimensions: string
 	active_canvas_format_id?: number
+	discount_price?: number
+	calculated_discount?: any
 }

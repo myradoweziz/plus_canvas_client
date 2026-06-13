@@ -49,10 +49,7 @@
 	}
 
 	const discountedPrice = computed(() => {
-		if (props.product.calculated_discount) {
-			return Math.round(props.product.calculated_discount.final_price)
-		}
-		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
+		return props.product.discount_price ?? props.product.price
 	})
 
 	const displayDiscount = computed(() => {
