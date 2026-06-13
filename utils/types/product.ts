@@ -61,4 +61,6 @@ export interface Product {
 	active_canvas_format_id?: number
 	discount_price?: number
 	calculated_discount?: any
+	product_tags?: { id: number; name: string }[]
+	tags?: string[]
 }

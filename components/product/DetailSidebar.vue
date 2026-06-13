@@ -5,6 +5,7 @@
 	import { isNoFrame, type FrameOption, type PrintSizeOption } from '~/utils/productDesignConfig'
 	import type { EditorToolId } from '~/utils/productEditorTypes'
 	import type { Product } from '~/utils/types'
+	import { useCartStore } from '~/stores/cart'
 
 	const props = defineProps<{
 		sizeOptions: PrintSizeOption[]
@@ -103,7 +104,6 @@
 
 	// New premium interactive features
 	const copied = ref(false)
-	const isFavorited = ref(false)
 	const isAddingToCart = ref(false)
 	const showToast = ref(false)
 	const toastMessage = ref('')
@@ -131,28 +131,43 @@
 		}, 3500)
 	}
 
-	const toggleFavorite = () => {
-		isFavorited.value = !isFavorited.value
-		triggerToast(
-			isFavorited.value ? 'Favorilere Eklendi!' : 'Favorilerden Çıkarıldı!',
-			`"${props.product.name}" favori listenize ${isFavorited.value ? 'eklendi' : 'çıkarıldı'}.`
-		)
+	const cartStore = useCartStore()
+	const wishlistStore = useWishlistStore()
+
+	const isFavorited = computed(() => {
+		return wishlistStore.wishlistItems.some(item => item.canvas_product_id === props.product.id)
+	})
+
+	const toggleFavorite = async () => {
+		const item = wishlistStore.wishlistItems.find(i => i.canvas_product_id === props.product.id)
+		if (item) {
+			await wishlistStore.removeFromWishlist(item.id)
+			triggerToast('Favorilerden Çıkarıldı!', `"${props.product.name}" favori listenizden çıkarıldı.`)
+		} else {
+			const options = {
+				canvas_format_id: props.selectedFormatId,
+				canvas_size_id: props.selectedSizeId,
+				canvas_frame_id: props.activeFrameId
+			}
+			await wishlistStore.addToWishlist(props.product.id, options)
+			// triggerToast is not needed as the store shows its own toast, but if we want to show this custom toast:
+			triggerToast('Favorilere Eklendi!', `"${props.product.name}" favori listenize eklendi.`)
+		}
 	}
 
-	const addToCart = () => {
+	const addToCart = async () => {
 		if (isAddingToCart.value) return
 		isAddingToCart.value = true
-		setTimeout(() => {
-			isAddingToCart.value = false
-			const size = props.sizeOptions.find((s) => s.id === props.selectedSizeId)
-			const sizeLabel = size?.display_name || 'Standart'
-			const frameLabel = selectedFrame.value?.name || 'Çerçevesiz'
+		
+		const options = {
+			canvas_format_id: props.selectedFormatId,
+			canvas_size_id: props.selectedSizeId,
+			canvas_frame_id: props.activeFrameId
+		}
 
-			triggerToast(
-				'Sepete Eklendi!',
-				`Ürün: ${props.product.name}\nBoyut: ${sizeLabel}\nÇerçeve: ${frameLabel}\nFiyat: ${displayPrice.value}${currencySuffix.value}`
-			)
-		}, 1000)
+		await cartStore.addToCart(props.product.id, 1, options)
+		
+		isAddingToCart.value = false
 	}
 </script>
 
@@ -383,12 +398,7 @@
 			<button
 				type="button"
 				@click="toggleFavorite"
-				class="flex items-center justify-center rounded-full w-[54px] h-[54px] border-2 transition-all active:scale-[0.9] cursor-pointer shadow-md"
-				:class="
-					isFavorited
-						? 'bg-red-50 border-red-200 text-red-500 shadow-red-100 scale-105'
-						: 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-				"
+				class="flex items-center justify-center rounded-full w-[54px] h-[54px] transition-all active:scale-[0.98] cursor-pointer shadow-lg bg-[#2B7FFF] text-white hover:bg-[#2B7FFF]/90 shrink-0 shadow-[#2B7FFF]/20"
 			>
 				<Icon
 					name="favorite"
@@ -396,6 +406,28 @@
 					:class="isFavorited ? 'scale-110 fill-current' : ''"
 				/>
 			</button>
+		</div>
+
+		<!-- Product Tags -->
+		<div class="mt-8 flex flex-wrap gap-2" v-if="(product.tags && product.tags.length > 0) || (product.product_tags && product.product_tags.length > 0)">
+			<template v-if="product.tags && product.tags.length > 0">
+				<span
+					v-for="(tag, index) in product.tags"
+					:key="'str-'+index"
+					class="bg-[#e9e8e5] text-[#5e5e5e] text-xs font-semibold px-4 py-2 rounded-full cursor-pointer hover:bg-[#d8d7d4] transition-colors"
+				>
+					{{ tag }}
+				</span>
+			</template>
+			<template v-else-if="product.product_tags && product.product_tags.length > 0">
+				<span
+					v-for="(tag, index) in product.product_tags"
+					:key="'obj-'+index"
+					class="bg-[#e9e8e5] text-[#5e5e5e] text-xs font-semibold px-4 py-2 rounded-full cursor-pointer hover:bg-[#d8d7d4] transition-colors"
+				>
+					{{ tag.name }}
+				</span>
+			</template>
 		</div>
 	</div>
 </template>

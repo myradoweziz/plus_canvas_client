@@ -12,9 +12,13 @@
 	const contactInfo = computed<ContactInfo>(() => contactInfoData.value?.data ?? ({} as ContactInfo))
 
 	const homeStore = useHomeStore()
+	const cartStore = useCartStore()
+	const wishlistStore = useWishlistStore()
 
 	onMounted(() => {
 		void homeStore.ensureCategoryMenuData()
+		void cartStore.fetchCart()
+		void wishlistStore.fetchWishlist()
 	})
 </script>
 
@@ -22,6 +26,7 @@
 	<the-header :contact-info="contactInfo" />
 	<slot />
 	<the-footer :contact-info="contactInfo" />
+	<cart-drawer />
 </template>
 
 <style scoped></style>

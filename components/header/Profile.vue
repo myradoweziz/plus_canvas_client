@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { storeToRefs } from 'pinia'
-
+	import { useCartStore } from '~/stores/cart'
+	import { useWishlistStore } from '~/stores/wishlist'
 	import Icon from '~/utils/ui/Icon.vue'
 
 	type ProfileItem = {
@@ -11,6 +12,8 @@
 	}
 
 	const authStore = useAuthStore()
+	const cartStore = useCartStore()
+	const wishlistStore = useWishlistStore()
 	const { user } = storeToRefs(authStore)
 	const tokenCookie = useCookie('Authorization')
 	const route = useRoute()
@@ -60,6 +63,7 @@
 
 	onMounted(async () => {
 		document.addEventListener('click', handleClickOutside)
+		wishlistStore.fetchWishlist()
 		if (tokenCookie.value) {
 			await authStore.getMe()
 		}
@@ -80,18 +84,32 @@
 </script>
 
 <template>
-	<div class="flex items-center gap-4 relative" ref="profileContainer">
+	<div class="flex items-center gap-4 md:gap-5 relative" ref="profileContainer">
 		<Icon
 			name="profile"
 			@click="openProfileMenu(0)"
 			class="hidden md:block hover:text-[#215EA5] transition-all duration-300"
 		/>
-		<div class="relative cursor-pointer group" @click="openProfileMenu(1)">
+
+		<!-- Wishlist Icon -->
+		<div class="relative cursor-pointer group" @click="navigateTo('/profile/favorites')">
+			<Icon name="favorite" class="group-hover:text-[#e11d48] transition-all duration-300 w-[20px] h-[20px]" />
+			<span
+				v-if="wishlistStore.wishlistItems.length > 0"
+				class="absolute -top-1.5 -right-2.5 bg-[#e11d48] text-white text-[10px] font-bold min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full pointer-events-none transition-transform group-hover:scale-110"
+			>
+				{{ wishlistStore.wishlistItems.length }}
+			</span>
+		</div>
+
+		<!-- Cart Icon -->
+		<div class="relative cursor-pointer group" @click="navigateTo('/cart')">
 			<Icon name="basket" class="group-hover:text-[#215EA5] transition-all duration-300" />
 			<span
+				v-if="cartStore.cartItems.length > 0"
 				class="absolute -top-1.5 -right-2 bg-[#215EA5] text-white text-[10px] font-bold min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full pointer-events-none transition-transform group-hover:scale-110"
 			>
-				0
+				{{ cartStore.cartItems.reduce((acc, item) => acc + item.quantity, 0) }}
 			</span>
 		</div>
 
