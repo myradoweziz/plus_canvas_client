@@ -49,7 +49,17 @@
 	}
 
 	const discountedPrice = computed(() => {
+		if (props.product.calculated_discount) {
+			return Math.round(props.product.calculated_discount.final_price)
+		}
 		return Math.round(props.product.price - (props.product.price * props.product.discount) / 100)
+	})
+
+	const displayDiscount = computed(() => {
+		if (props.product.calculated_discount && props.product.calculated_discount.is_percentage) {
+			return Math.round(props.product.calculated_discount.amount)
+		}
+		return props.product.discount > 0 ? props.product.discount : 0
 	})
 
 	const uploadMaxImages = computed(() => getProductUploadMaxImages(props.product))
@@ -98,10 +108,10 @@
 
 				<!-- Бейдж скидки -->
 				<div
-					v-if="product.discount > 0"
+					v-if="displayDiscount > 0"
 					class="absolute top-4 left-4 bg-[#1853a0] text-white text-[11px] md:text-[12px] font-bold px-2 py-1 rounded-md z-10"
 				>
-					-{{ product.discount }}%
+					-{{ displayDiscount }}%
 				</div>
 
 				<!-- Кнопки действий -->
@@ -129,7 +139,7 @@
 					{{ product.name }}
 				</h3>
 				<div class="flex items-center gap-2 mt-1.5 md:mt-2">
-					<span v-if="product.discount > 0" class="text-sm md:text-[14px] font-medium text-gray-400 line-through"
+					<span v-if="displayDiscount > 0" class="text-sm md:text-[14px] font-medium text-gray-400 line-through"
 						>₺{{ product.price }}</span
 					>
 					<span class="text-lg md:text-[18px] font-bold text-[#1853a0]">₺{{ discountedPrice }}</span>
