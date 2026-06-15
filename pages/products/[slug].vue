@@ -249,6 +249,7 @@
 						:active-frame-id="activeFrameId"
 						:show-frame-selector="showFrameSelector"
 						:is-canvas-loading="isCanvasLoading"
+						:cart-preview-src="canvasPreviewSrc || canvasDesignPreviewSrc || ''"
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"

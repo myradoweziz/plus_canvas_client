@@ -152,7 +152,7 @@
 			Ürün Özellikleri
 		</h2>
 
-		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
 			<article
 				v-for="(card, index) in featureCards"
 				:key="card.title"

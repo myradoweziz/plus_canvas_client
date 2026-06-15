@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCartStore } from '~/stores/cart'
+import { cartItemHasFormatOptions } from '~/utils/cartItemPreview'
 import Icon from '~/utils/ui/Icon.vue'
 
 const cartStore = useCartStore()
@@ -85,12 +86,7 @@ const formatPrice = (price: any) => {
 						>
 							<!-- Product Image -->
 							<div class="w-[80px] h-[80px] rounded-xl overflow-hidden bg-gray-100 shrink-0">
-								<img
-									v-if="item.canvas_product?.image?.url"
-									:src="item.canvas_product.image.url"
-									:alt="item.canvas_product?.name"
-									class="w-full h-full object-cover"
-								/>
+								<CartItemThumb :item="item" />
 							</div>
 
 							<!-- Info -->
@@ -111,7 +107,7 @@ const formatPrice = (price: any) => {
 									<span v-if="item.resolved_options?.canvas_format">Format: {{ item.resolved_options.canvas_format.name }}</span>
 									<span v-if="item.resolved_options?.canvas_size" class="before:content-['•'] before:mr-2 before:text-gray-300">Boyut: {{ item.resolved_options.canvas_size.display_name }}</span>
 									<span v-if="item.resolved_options?.canvas_frame" class="before:content-['•'] before:mr-2 before:text-gray-300">Çerçeve: {{ item.resolved_options.canvas_frame.name }}</span>
-									<span v-else class="before:content-['•'] before:mr-2 before:text-gray-300">Çerçevesiz</span>
+									<span v-else-if="cartItemHasFormatOptions(item)" class="before:content-['•'] before:mr-2 before:text-gray-300">Çerçevesiz</span>
 								</div>
 
 								<div class="flex items-center justify-between mt-3">

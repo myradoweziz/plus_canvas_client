@@ -19,6 +19,8 @@
 		cropSizeLabel?: string
 		cropPositionLabel?: string
 		product: Product
+		/** Снимок canvas с выбранным форматом/рамкой — для превью в корзине */
+		cartPreviewSrc?: string
 	}>()
 
 	const emit = defineEmits<{
@@ -162,7 +164,8 @@
 		const options = {
 			canvas_format_id: props.selectedFormatId,
 			canvas_size_id: props.selectedSizeId,
-			canvas_frame_id: props.activeFrameId
+			canvas_frame_id: props.activeFrameId,
+			...(props.cartPreviewSrc?.trim() ? { preview_src: props.cartPreviewSrc.trim() } : {})
 		}
 
 		await cartStore.addToCart(props.product.id, 1, options)

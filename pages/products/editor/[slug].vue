@@ -262,6 +262,7 @@
 						:crop-size-label="cropSizeLabel"
 						:crop-position-label="cropPositionLabel"
 						show-editor-tools
+						:cart-preview-src="canvasPreviewSrc || canvasDesignPreviewSrc || ''"
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"

@@ -33,6 +33,58 @@ export const useCartStore = defineStore('cart', () => {
         }
     }
 
+    const PREVIEW_STORAGE_KEY = 'pluscanvas:cart-item-previews'
+
+    const loadStoredPreviews = (): Record<number, string> => {
+        if (!import.meta.client) return {}
+        try {
+            const raw = localStorage.getItem(PREVIEW_STORAGE_KEY)
+            if (!raw) return {}
+            const parsed = JSON.parse(raw) as Record<string, string>
+            const next: Record<number, string> = {}
+            for (const [id, src] of Object.entries(parsed)) {
+                const numId = Number(id)
+                if (Number.isFinite(numId) && String(src).trim()) next[numId] = String(src).trim()
+            }
+            return next
+        } catch {
+            return {}
+        }
+    }
+
+    const saveStoredPreviews = () => {
+        if (!import.meta.client) return
+        localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(itemPreviewById.value))
+    }
+
+    const itemPreviewById = ref<Record<number, string>>(loadStoredPreviews())
+
+    const pruneItemPreviews = (items: { id: number }[]) => {
+        const ids = new Set(items.map((item) => item.id))
+        const next: Record<number, string> = {}
+        for (const [id, src] of Object.entries(itemPreviewById.value)) {
+            if (ids.has(Number(id)) && src.trim()) next[Number(id)] = src
+        }
+        itemPreviewById.value = next
+        saveStoredPreviews()
+    }
+
+    const getItemPreview = (itemId: number) => itemPreviewById.value[itemId] ?? ''
+
+    const setItemPreview = (itemId: number, src: string) => {
+        const trimmed = String(src ?? '').trim()
+        if (!itemId || !trimmed) return
+        itemPreviewById.value = { ...itemPreviewById.value, [itemId]: trimmed }
+        saveStoredPreviews()
+    }
+
+    const attachPreviewToLatestItem = (productId: number, previewSrc: string) => {
+        const trimmed = String(previewSrc ?? '').trim()
+        if (!trimmed) return
+        const match = [...cartItems.value].reverse().find((item) => item.canvas_product_id === productId)
+        if (match) setItemPreview(match.id, trimmed)
+    }
+
     const fetchCart = async () => {
         try {
             const { $customFetch } = useNuxtApp()
@@ -54,6 +106,7 @@ export const useCartStore = defineStore('cart', () => {
 
             if (response && response.cart) {
                 cartItems.value = response.cart.items || []
+                pruneItemPreviews(cartItems.value)
                 subtotal.value = response.cart.subtotal || 0
                 total.value = response.cart.total || 0
                 shipping.value = response.cart.shipping || 0
@@ -64,7 +117,7 @@ export const useCartStore = defineStore('cart', () => {
         }
     }
 
-    const addToCart = async (productId: number, quantity = 1, options = {}) => {
+    const addToCart = async (productId: number, quantity = 1, options: Record<string, unknown> = {}) => {
         try {
             const { $customFetch, $toast } = useNuxtApp()
             const headers: any = {}
@@ -72,13 +125,18 @@ export const useCartStore = defineStore('cart', () => {
                 headers['X-Session-ID'] = sessionId.value
             }
 
+            const previewSrc = String(options.preview_src ?? options.preview_url ?? '').trim()
+            const apiOptions = { ...options }
+            delete apiOptions.preview_src
+            delete apiOptions.preview_url
+
             const response: any = await $customFetch('/api/carts', {
                 method: 'POST',
                 headers,
                 body: {
                     canvas_product_id: productId,
                     quantity,
-                    options
+                    options: apiOptions
                 }
             })
 
@@ -91,6 +149,8 @@ export const useCartStore = defineStore('cart', () => {
 
             if (response && response.cart) {
                 cartItems.value = response.cart.items || []
+                pruneItemPreviews(cartItems.value)
+                if (previewSrc) attachPreviewToLatestItem(productId, previewSrc)
                 subtotal.value = response.cart.subtotal || 0
                 total.value = response.cart.total || 0
                 shipping.value = response.cart.shipping || 0
@@ -125,6 +185,7 @@ export const useCartStore = defineStore('cart', () => {
 
             if (response && response.cart) {
                 cartItems.value = response.cart.items || []
+                pruneItemPreviews(cartItems.value)
                 subtotal.value = response.cart.subtotal || 0
                 total.value = response.cart.total || 0
                 shipping.value = response.cart.shipping || 0
@@ -149,6 +210,10 @@ export const useCartStore = defineStore('cart', () => {
 
             // Filter item locally immediately for better UX
             cartItems.value = cartItems.value.filter(item => item.id !== itemId)
+            const nextPreviews = { ...itemPreviewById.value }
+            delete nextPreviews[itemId]
+            itemPreviewById.value = nextPreviews
+            saveStoredPreviews()
             
             // Refetch to get updated totals and recommended
             fetchCart()
@@ -215,6 +280,8 @@ export const useCartStore = defineStore('cart', () => {
         freeShippingProgress,
         freeShippingThreshold,
         recommendedProducts,
-        fetchRecommendedProducts
+        fetchRecommendedProducts,
+        getItemPreview,
+        setItemPreview
     }
 })
