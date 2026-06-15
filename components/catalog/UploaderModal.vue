@@ -11,9 +11,12 @@
 			isOpen: boolean
 			/** Maksimum yüklenebilir görsel sayısı; tanımsız = sınırsız */
 			maxImages?: number
+			/** maxImages dolunca otomatik editor sayfasına geç (go-next) */
+			autoContinueOnMax?: boolean
 		}>(),
 		{
-			maxImages: undefined
+			maxImages: undefined,
+			autoContinueOnMax: true
 		}
 	)
 
@@ -56,6 +59,7 @@
 	const uploadedImages = ref<UploadedItem[]>([])
 	const errorMessage = ref<string | null>(null)
 	const uploadSessionId = ref<string | null>(null)
+	const autoContinueTriggered = ref(false)
 
 	const getOrCreateUploadSessionId = () => {
 		if (!uploadSessionId.value) {
@@ -73,6 +77,7 @@
 		resetUploadSessionId()
 		errorMessage.value = null
 		isDragging.value = false
+		autoContinueTriggered.value = false
 		if (fileInput.value) fileInput.value.value = ''
 	}
 
@@ -223,6 +228,7 @@
 			item.sessionId = res.data.session_id?.trim() || sessionId
 			item.progress = 100
 			item.isUploading = false
+			nextTick(() => tryAutoContinueOnMax())
 		} catch (e) {
 			uploadedImages.value = uploadedImages.value.filter((i) => i.id !== localId)
 			if (isAxiosError(e)) {
@@ -302,6 +308,16 @@
 		}
 
 		emit('go-next', { images: ready })
+	}
+
+	const tryAutoContinueOnMax = () => {
+		if (!props.autoContinueOnMax || !props.isOpen || autoContinueTriggered.value) return
+		if (!hasUploadLimit.value) return
+		if (hasUploadInProgress.value) return
+		if (readyImages.value.length !== requiredImageCount.value) return
+
+		autoContinueTriggered.value = true
+		goNext()
 	}
 </script>
 

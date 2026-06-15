@@ -21,12 +21,16 @@
 			effects?: EffectOption[]
 			cropSizeLabel?: string
 			cropPositionLabel?: string
+			canCropUndo?: boolean
+			canCropRedo?: boolean
 		}>(),
 		{
 			disabled: false,
 			effects: () => [],
 			cropSizeLabel: '—',
-			cropPositionLabel: 'X:0 Y:0'
+			cropPositionLabel: 'X:0 Y:0',
+			canCropUndo: false,
+			canCropRedo: false
 		}
 	)
 
@@ -37,14 +41,13 @@
 		(e: 'effect-details-change', details: number): void
 		(e: 'effect-color-change', color: string): void
 		(e: 'effect-color-secondary-change', color: string): void
-		(e: 'text-change', value: string): void
 		(e: 'text-apply', payload: { text: string; fontFamily: string; color: string }): void
+		(e: 'text-style-change', payload: { text: string; fontFamily: string; color: string }): void
 		(e: 'crop-undo'): void
 		(e: 'crop-redo'): void
 		(e: 'crop-zoom-in'): void
 		(e: 'crop-zoom-out'): void
 		(e: 'crop-rotate'): void
-		(e: 'crop-apply'): void
 	}>()
 
 	const stickyTools: StickyTool[] = [
@@ -118,13 +121,23 @@
 		emit('effect-color-secondary-change', value)
 	}
 
-	const onTextApply = () => {
-		emit('text-apply', {
-			text: textValue.value,
-			fontFamily: textFontFamily.value,
-			color: textColor.value
-		})
+	const buildTextPayload = () => ({
+		text: textValue.value,
+		fontFamily: textFontFamily.value,
+		color: textColor.value
+	})
+
+	const debouncedApplyText = useDebounce(() => {
+		emit('text-apply', buildTextPayload())
+	}, 300)
+
+	watch(textValue, debouncedApplyText)
+
+	const emitTextStyleChange = () => {
+		emit('text-style-change', buildTextPayload())
 	}
+
+	watch([textFontFamily, textColor], emitTextStyleChange)
 </script>
 
 <template>
@@ -181,13 +194,13 @@
 				v-model:font-family="textFontFamily"
 				v-model:color="textColor"
 				:disabled="disabled"
-				@apply="onTextApply"
-				@update:model-value="emit('text-change', $event)"
 			/>
 
 			<ProductDesignEditorCropPanel
 				v-else-if="activeTool === 'frame'"
 				:disabled="disabled"
+				:can-undo="canCropUndo"
+				:can-redo="canCropRedo"
 				:crop-size-label="cropSizeLabel"
 				:position-label="cropPositionLabel"
 				@undo="emit('crop-undo')"
@@ -195,7 +208,6 @@
 				@zoom-in="emit('crop-zoom-in')"
 				@zoom-out="emit('crop-zoom-out')"
 				@rotate="emit('crop-rotate')"
-				@apply="emit('crop-apply')"
 			/>
 		</div>
 	</div>

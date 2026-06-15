@@ -67,6 +67,12 @@ const PRINT_AREA_VIEWPORT_RATIO = 0.85
 /** Цвет «загиба» между холстом и рамкой (как PlusCanvas). */
 const FRAME_GAP_FILL = '#E8E4DC'
 
+export type DesignTextPayload = {
+	text: string
+	fontFamily: string
+	color: string
+}
+
 export function useProductCanvasEditor(options: {
 	productId: Ref<string>
 	wrapRef: Ref<HTMLElement | null>
@@ -189,6 +195,7 @@ export function useProductCanvasEditor(options: {
 	let mockupNaturalH = 0
 	let printAreaRect: import('fabric').fabric.Rect | null = null
 	let frameObject: import('fabric').fabric.Object | null = null
+	let designTextObject: import('fabric').fabric.Textbox | null = null
 	const activeEffectId = ref<number | null>(null)
 	const activeEffectOpacity = ref(100)
 	const activeEffectDetails = ref(110)
@@ -212,10 +219,13 @@ export function useProductCanvasEditor(options: {
 	const isCropModeActive = ref(false)
 	const cropSizeLabel = ref('—')
 	const cropPositionLabel = ref('X:0 Y:0')
+	const canCropUndo = ref(false)
+	const canCropRedo = ref(false)
 	const cropStateByUploadIndex = new Map<number, CropTransform>()
 	let cropHistory: CropTransform[] = []
 	let cropHistoryIndex = -1
 	let cropModifiedHandler: ((e: import('fabric').fabric.IEvent) => void) | null = null
+	let cropMovingHandler: ((e: import('fabric').fabric.IEvent) => void) | null = null
 	let cropSelectionHandler: ((e: import('fabric').fabric.IEvent) => void) | null = null
 	const CROP_ZOOM_FACTOR = 1.12
 
@@ -886,6 +896,7 @@ export function useProductCanvasEditor(options: {
 			printAreaRect.clipPath = buildPanelClipPath(pw, ph, getPrintAreaCenter())
 		}
 		printAreaRect.dirty = true
+		updateDesignTextClipPath()
 	}
 
 	const emitDesign = () => {
@@ -911,6 +922,48 @@ export function useProductCanvasEditor(options: {
 		photoObject.clipPath = buildPanelClipPath(width, height, getPrintAreaCenter())
 		photoObject.dirty = true
 		photoObject.setCoords()
+		updateDesignTextClipPath()
+	}
+
+	const updateDesignTextClipPath = () => {
+		const textObj = resolveDesignTextObject()
+		if (!textObj || !printAreaRect || !fabricLib) return
+		const { width, height } = getPhotoFaceSize()
+		textObj.clipPath = buildPanelClipPath(width, height, getPrintAreaCenter())
+		textObj.dirty = true
+		textObj.setCoords()
+	}
+
+	const constrainDesignTextToPrintArea = (textObj: import('fabric').fabric.Textbox) => {
+		if (!printAreaRect) return
+		const { width: faceW, height: faceH } = getPhotoFaceSize()
+		const center = getPrintAreaCenter()
+		const minX = center.left - faceW / 2
+		const maxX = center.left + faceW / 2
+		const minY = center.top - faceH / 2
+		const maxY = center.top + faceH / 2
+
+		textObj.setCoords()
+		const bounds = textObj.getBoundingRect(true, true)
+		let dx = 0
+		let dy = 0
+
+		if (bounds.width <= faceW) {
+			if (bounds.left < minX) dx = minX - bounds.left
+			else if (bounds.left + bounds.width > maxX) dx = maxX - (bounds.left + bounds.width)
+		}
+		if (bounds.height <= faceH) {
+			if (bounds.top < minY) dy = minY - bounds.top
+			else if (bounds.top + bounds.height > maxY) dy = maxY - (bounds.top + bounds.height)
+		}
+
+		if (dx || dy) {
+			textObj.set({
+				left: (textObj.left ?? 0) + dx,
+				top: (textObj.top ?? 0) + dy
+			})
+			textObj.setCoords()
+		}
 	}
 
 	const removeCollagePhotos = () => {
@@ -1214,6 +1267,11 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas.moveTo(photoObject, z)
 			z += 1
 		}
+		const designText = resolveDesignTextObject()
+		if (designText) {
+			fabricCanvas.moveTo(designText, z)
+			z += 1
+		}
 		for (const obj of fabricCanvas.getObjects()) {
 			const role = (obj as { data?: { role?: string } }).data?.role
 			if (role === 'frame-gap') {
@@ -1232,6 +1290,247 @@ export function useProductCanvasEditor(options: {
 			fabricCanvas.moveTo(frameObject, z)
 			z += 1
 		}
+	}
+
+	const resolveDesignTextObject = () => {
+		if (designTextObject && fabricCanvas?.getObjects().includes(designTextObject)) {
+			return designTextObject
+		}
+		if (!fabricCanvas) return null
+		for (const obj of fabricCanvas.getObjects()) {
+			if ((obj as { data?: { role?: string } }).data?.role === 'design-text') {
+				designTextObject = obj as import('fabric').fabric.Textbox
+				return designTextObject
+			}
+		}
+		designTextObject = null
+		return null
+	}
+
+	const getDesignTextFontSize = () => {
+		const pw = printAreaRect?.width ?? viewportW.value * PRINT_AREA_VIEWPORT_RATIO
+		return Math.max(18, Math.round(pw * 0.08))
+	}
+
+	const getDesignTextBoxWidth = () => {
+		const { width } = getPhotoFaceSize()
+		const padding = Math.round(width * 0.08)
+		return Math.max(80, width - padding * 2)
+	}
+
+	const isLightHexColor = (color: string) => {
+		const hex = color.trim().replace('#', '')
+		if (!hex) return false
+		const full =
+			hex.length === 3
+				? hex
+						.split('')
+						.map((ch) => ch + ch)
+						.join('')
+				: hex.slice(0, 6)
+		const r = Number.parseInt(full.slice(0, 2), 16)
+		const g = Number.parseInt(full.slice(2, 4), 16)
+		const b = Number.parseInt(full.slice(4, 6), 16)
+		if ([r, g, b].some((v) => Number.isNaN(v))) return false
+		return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62
+	}
+
+	const buildDesignTextFabricStyle = (fill: string, fontSize = getDesignTextFontSize()) => {
+		const light = isLightHexColor(fill)
+		const strokeWidth = Math.max(1, Math.round(fontSize * 0.08))
+		const shadow = fabricLib
+			? new fabricLib.Shadow({
+					color: 'rgba(0, 0, 0, 0.38)',
+					blur: Math.max(3, Math.round(fontSize * 0.14)),
+					offsetX: 0,
+					offsetY: Math.max(1, Math.round(fontSize * 0.05))
+				})
+			: undefined
+
+		return {
+			fill,
+			fontWeight: 'bold' as const,
+			stroke: light ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.9)',
+			strokeWidth,
+			paintFirst: 'stroke' as const,
+			shadow
+		}
+	}
+
+	const applyDesignTextVisualStyle = (textObj: import('fabric').fabric.Textbox, fill: string) => {
+		const fontSize = textObj.fontSize ?? getDesignTextFontSize()
+		textObj.set(buildDesignTextFabricStyle(fill, fontSize))
+	}
+
+	const syncDesignTextLayout = (textObj: import('fabric').fabric.Textbox) => {
+		textObj.set({
+			width: getDesignTextBoxWidth(),
+			splitByGrapheme: true,
+			textAlign: 'center'
+		})
+		const fill = (textObj.fill as string) || '#101828'
+		applyDesignTextVisualStyle(textObj, fill)
+		textObj.dirty = true
+		textObj.setCoords()
+	}
+
+	const configureDesignTextObject = (obj: import('fabric').fabric.Textbox) => {
+		const cropActive = isCropModeActive.value
+		obj.set({
+			selectable: !cropActive,
+			evented: !cropActive,
+			hasControls: !cropActive,
+			hasBorders: !cropActive,
+			lockScalingFlip: true,
+			lockRotation: false,
+			editable: false,
+			originX: 'center',
+			originY: 'center',
+			hoverCursor: cropActive ? 'default' : 'move',
+			moveCursor: cropActive ? 'default' : 'move',
+			borderColor: '#2B7FFF',
+			cornerColor: '#2B7FFF',
+			cornerStrokeColor: '#FFFFFF',
+			cornerSize: 12,
+			cornerStyle: 'circle',
+			transparentCorners: false,
+			padding: 12,
+			borderDashArray: [4, 4],
+			data: { role: 'design-text' }
+		})
+	}
+
+	const removeDesignText = () => {
+		const obj = resolveDesignTextObject()
+		if (obj && fabricCanvas) {
+			fabricCanvas.remove(obj)
+		}
+		designTextObject = null
+	}
+
+	const renderDesignTextChange = () => {
+		const textObj = resolveDesignTextObject()
+		if (textObj) {
+			syncDesignTextLayout(textObj)
+			updateDesignTextClipPath()
+			constrainDesignTextToPrintArea(textObj)
+		}
+		reorderLayers()
+		fabricCanvas?.requestRenderAll()
+		emitDesign()
+		scheduleCanvasPreview()
+	}
+
+	const bindDesignTextInteraction = (textObj: import('fabric').fabric.Textbox) => {
+		textObj.on('mousedown', () => {
+			if (!fabricCanvas || isCropModeActive.value) return
+			fabricCanvas.setActiveObject(textObj)
+			fabricCanvas.requestRenderAll()
+		})
+		textObj.on('moving', () => {
+			constrainDesignTextToPrintArea(textObj)
+		})
+		textObj.on('modified', () => {
+			updateDesignTextClipPath()
+			constrainDesignTextToPrintArea(textObj)
+			emitDesign()
+			scheduleCanvasPreview()
+		})
+	}
+
+	const applyDesignText = (payload: DesignTextPayload) => {
+		if (!fabricCanvas || !fabricLib || !canvasReady) return
+
+		const trimmed = payload.text.trim()
+		if (!trimmed) {
+			removeDesignText()
+			renderDesignTextChange()
+			return
+		}
+
+		const center = getPrintAreaCenter()
+		let textObj = resolveDesignTextObject()
+		const boxWidth = getDesignTextBoxWidth()
+		const isTextbox = textObj && (textObj as { type?: string }).type === 'textbox'
+
+		if (textObj && !isTextbox) {
+			fabricCanvas.remove(textObj)
+			designTextObject = null
+			textObj = null
+		}
+
+		if (textObj) {
+			textObj.set({
+				text: trimmed,
+				fontFamily: payload.fontFamily,
+				width: boxWidth,
+				splitByGrapheme: true,
+				textAlign: 'center',
+				...buildDesignTextFabricStyle(payload.color, textObj.fontSize ?? getDesignTextFontSize())
+			})
+		} else {
+			const fontSize = getDesignTextFontSize()
+			textObj = new fabricLib.Textbox(trimmed, {
+				left: center.left,
+				top: center.top,
+				fontFamily: payload.fontFamily,
+				fontSize,
+				width: boxWidth,
+				splitByGrapheme: true,
+				textAlign: 'center',
+				...buildDesignTextFabricStyle(payload.color, fontSize)
+			})
+			configureDesignTextObject(textObj)
+			bindDesignTextInteraction(textObj)
+			designTextObject = textObj
+			fabricCanvas.add(textObj)
+		}
+
+		textObj.dirty = true
+		textObj.setCoords()
+		renderDesignTextChange()
+	}
+
+	const updateDesignTextStyle = (payload: DesignTextPayload) => {
+		const textObj = resolveDesignTextObject()
+		if (!textObj || !fabricCanvas) return
+
+		const trimmed = payload.text.trim()
+		if (!trimmed) return
+
+		textObj.set({
+			text: trimmed,
+			fontFamily: payload.fontFamily,
+			width: getDesignTextBoxWidth(),
+			splitByGrapheme: true,
+			textAlign: 'center',
+			...buildDesignTextFabricStyle(payload.color, textObj.fontSize ?? getDesignTextFontSize())
+		})
+		textObj.dirty = true
+		textObj.setCoords()
+		renderDesignTextChange()
+	}
+
+	const updateDesignTextContent = (text: string) => {
+		const textObj = resolveDesignTextObject()
+		if (!textObj || !fabricCanvas) return
+
+		const trimmed = text.trim()
+		if (!trimmed) {
+			removeDesignText()
+			renderDesignTextChange()
+			return
+		}
+
+		textObj.set({
+			text: trimmed,
+			width: getDesignTextBoxWidth(),
+			splitByGrapheme: true,
+			textAlign: 'center'
+		})
+		textObj.dirty = true
+		textObj.setCoords()
+		renderDesignTextChange()
 	}
 
 	/** Фон canvas — изображение товара (product.image), без паттерна PlusCanvas. */
@@ -2203,20 +2502,104 @@ export function useProductCanvasEditor(options: {
 		if (!target) {
 			cropSizeLabel.value = '—'
 			cropPositionLabel.value = 'X:0 Y:0'
+			syncCropHistoryFlags()
 			return
 		}
 
+		const img = target.image
+		img.setCoords()
+		const bounds = img.getBoundingRect(true, true)
+		const displayW = Math.round(bounds.width)
+		const displayH = Math.round(bounds.height)
+
 		if (target.kind === 'collage' && target.group) {
-			const w = Math.round(target.group.width ?? 0)
-			const h = Math.round(target.group.height ?? 0)
-			cropSizeLabel.value = `${w} x ${h} px`
+			const slotW = Math.round(target.group.width ?? 0)
+			const slotH = Math.round(target.group.height ?? 0)
+			cropSizeLabel.value = `${displayW} x ${displayH} px · alan ${slotW} x ${slotH}`
 		} else {
 			const { width, height } = getPhotoFaceSize()
-			cropSizeLabel.value = `${Math.round(width)} x ${Math.round(height)} px`
+			cropSizeLabel.value = `${displayW} x ${displayH} px · alan ${Math.round(width)} x ${Math.round(height)}`
 		}
 
+		const cx = Math.round(bounds.left + bounds.width / 2)
+		const cy = Math.round(bounds.top + bounds.height / 2)
+		cropPositionLabel.value = `X:${cx} Y:${cy}`
+		syncCropHistoryFlags()
+	}
+
+	const syncCropHistoryFlags = () => {
+		canCropUndo.value = cropHistoryIndex > 0
+		canCropRedo.value = cropHistoryIndex >= 0 && cropHistoryIndex < cropHistory.length - 1
+	}
+
+	const getCropFaceBounds = (target: CropTarget) => {
+		if (target.kind === 'collage' && target.group) {
+			target.group.setCoords()
+			const gb = target.group.getBoundingRect(true, true)
+			return {
+				minX: gb.left,
+				maxX: gb.left + gb.width,
+				minY: gb.top,
+				maxY: gb.top + gb.height
+			}
+		}
+		const center = getPrintAreaCenter()
+		const { width, height } = getPhotoFaceSize()
+		return {
+			minX: center.left - width / 2,
+			maxX: center.left + width / 2,
+			minY: center.top - height / 2,
+			maxY: center.top + height / 2
+		}
+	}
+
+	const constrainCropTarget = (target: CropTarget) => {
+		if (!fabricLib) return
 		const img = target.image
-		cropPositionLabel.value = `X:${Math.round(img.left ?? 0)} Y:${Math.round(img.top ?? 0)}`
+		const face = getCropFaceBounds(target)
+
+		img.setCoords()
+		const bounds = img.getBoundingRect(true, true)
+		let dx = 0
+		let dy = 0
+
+		if (bounds.left > face.minX) dx = face.minX - bounds.left
+		else if (bounds.left + bounds.width < face.maxX) dx = face.maxX - (bounds.left + bounds.width)
+
+		if (bounds.top > face.minY) dy = face.minY - bounds.top
+		else if (bounds.top + bounds.height < face.maxY) dy = face.maxY - (bounds.top + bounds.height)
+
+		if (!dx && !dy) return
+
+		if (target.kind === 'collage' && target.group) {
+			const point = new fabricLib.Point(dx, dy)
+			const local = fabricLib.util.transformPoint(
+				point,
+				fabricLib.util.invertTransform(target.group.calcTransformMatrix())
+			)
+			img.set({
+				left: (img.left ?? 0) + local.x,
+				top: (img.top ?? 0) + local.y
+			})
+		} else {
+			img.set({
+				left: (img.left ?? 0) + dx,
+				top: (img.top ?? 0) + dy
+			})
+		}
+
+		img.setCoords()
+		if (target.group) {
+			target.group.dirty = true
+			target.group.setCoords()
+		}
+	}
+
+	const persistCropSession = () => {
+		const target = getActiveCropTarget()
+		if (target) persistCropTransform(target)
+		emitDesign()
+		scheduleCanvasPreview()
 	}
 
 	const enableCropOnImage = (img: import('fabric').fabric.Image) => {
@@ -2253,17 +2636,20 @@ export function useProductCanvasEditor(options: {
 		if (!target) {
 			cropHistory = []
 			cropHistoryIndex = -1
+			syncCropHistoryFlags()
 			return
 		}
 		const current = readCropTransform(target.image)
 		cropHistory = [current]
 		cropHistoryIndex = 0
+		syncCropHistoryFlags()
 	}
 
 	const restoreCropHistoryState = () => {
 		const target = getActiveCropTarget()
 		if (!target || cropHistoryIndex < 0 || cropHistoryIndex >= cropHistory.length) return
 		applyCropTransform(target.image, cropHistory[cropHistoryIndex])
+		constrainCropTarget(target)
 		persistCropTransform(target)
 		target.image.dirty = true
 		if (target.group) {
@@ -2292,12 +2678,20 @@ export function useProductCanvasEditor(options: {
 		cropHistory = cropHistory.slice(0, cropHistoryIndex + 1)
 		cropHistory.push(current)
 		cropHistoryIndex = cropHistory.length - 1
+		syncCropHistoryFlags()
+	}
+
+	const detachCropMovingListener = () => {
+		if (!fabricCanvas || !cropMovingHandler) return
+		fabricCanvas.off('object:moving', cropMovingHandler)
+		cropMovingHandler = null
 	}
 
 	const detachCropModifiedListener = () => {
 		if (!fabricCanvas || !cropModifiedHandler) return
 		fabricCanvas.off('object:modified', cropModifiedHandler)
 		cropModifiedHandler = null
+		detachCropMovingListener()
 	}
 
 	const detachCropSelectionListener = () => {
@@ -2335,10 +2729,20 @@ export function useProductCanvasEditor(options: {
 	const attachCropModifiedListener = () => {
 		if (!fabricCanvas) return
 		detachCropModifiedListener()
+		cropMovingHandler = (e) => {
+			if (!isCropModeActive.value) return
+			const target = getActiveCropTarget()
+			if (!target || e.target !== target.image) return
+			constrainCropTarget(target)
+			updateCropPanelInfo()
+		}
+		fabricCanvas.on('object:moving', cropMovingHandler)
+
 		cropModifiedHandler = (e) => {
 			if (!isCropModeActive.value) return
 			const target = getActiveCropTarget()
 			if (!target || e.target !== target.image) return
+			constrainCropTarget(target)
 			pushCropHistory()
 			persistCropTransform(target)
 			updateCropPanelInfo()
@@ -2392,6 +2796,8 @@ export function useProductCanvasEditor(options: {
 		if (!fabricCanvas || !canvasReady) return
 
 		if (active) {
+			const textObj = resolveDesignTextObject()
+			if (textObj) configureDesignTextObject(textObj)
 			attachCropModifiedListener()
 			attachCropSelectionListener()
 			refreshCropModeTargets()
@@ -2400,9 +2806,10 @@ export function useProductCanvasEditor(options: {
 
 		detachCropModifiedListener()
 		detachCropSelectionListener()
-		const target = getActiveCropTarget()
-		if (target) persistCropTransform(target)
+		persistCropSession()
 		lockAllCropTargets()
+		const textObj = resolveDesignTextObject()
+		if (textObj) configureDesignTextObject(textObj)
 		fabricCanvas.discardActiveObject()
 		fabricCanvas.requestRenderAll()
 	}
@@ -2417,6 +2824,7 @@ export function useProductCanvasEditor(options: {
 			scaleY: (img.scaleY ?? 1) * factor
 		})
 		img.setCoords()
+		constrainCropTarget(target)
 		if (target.group) {
 			target.group.dirty = true
 			target.group.setCoords()
@@ -2437,6 +2845,7 @@ export function useProductCanvasEditor(options: {
 		const img = target.image
 		img.set({ angle: ((img.angle ?? 0) + 90) % 360 })
 		img.setCoords()
+		constrainCropTarget(target)
 		if (target.group) {
 			target.group.dirty = true
 			target.group.setCoords()
@@ -2463,10 +2872,7 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyCrop = () => {
-		const target = getActiveCropTarget()
-		if (target) persistCropTransform(target)
-		emitDesign()
-		scheduleCanvasPreview()
+		persistCropSession()
 	}
 
 	const isMockupDimensionsReady = () => mockupNaturalW > 0 && mockupNaturalH > 0
@@ -3046,6 +3452,7 @@ export function useProductCanvasEditor(options: {
 		mockupNaturalH = 0
 		printAreaRect = null
 		frameObject = null
+		designTextObject = null
 		if (options.wrapRef.value) options.wrapRef.value.innerHTML = ''
 	}
 
@@ -3091,7 +3498,7 @@ export function useProductCanvasEditor(options: {
 				backgroundColor: '#F5F2ED',
 				preserveObjectStacking: true,
 				selection: false,
-				skipTargetFind: true,
+				skipTargetFind: false,
 				defaultCursor: 'default',
 				hoverCursor: 'default'
 			})
@@ -3369,6 +3776,9 @@ export function useProductCanvasEditor(options: {
 		setEffectDetails,
 		setEffectColor,
 		setEffectColorSecondary,
+		applyDesignText,
+		updateDesignTextStyle,
+		updateDesignTextContent,
 		activeEffectId,
 		activeEffectOpacity,
 		activeEffectDetails,
@@ -3383,6 +3793,8 @@ export function useProductCanvasEditor(options: {
 		applyCrop,
 		cropSizeLabel,
 		cropPositionLabel,
+		canCropUndo,
+		canCropRedo,
 		isCropModeActive,
 		activeFormatId: computed(() => selectedFormat.value?.id ?? null),
 		isFormatActive: (id: number) => Number(selectedFormat.value?.id) === Number(id),

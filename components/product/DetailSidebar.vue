@@ -18,6 +18,8 @@
 		showEditorTools?: boolean
 		cropSizeLabel?: string
 		cropPositionLabel?: string
+		canCropUndo?: boolean
+		canCropRedo?: boolean
 		product: Product
 		/** Снимок canvas с выбранным форматом/рамкой — для превью в корзине */
 		cartPreviewSrc?: string
@@ -32,14 +34,13 @@
 		(e: 'effect-details-change', details: number): void
 		(e: 'effect-color-change', color: string): void
 		(e: 'effect-color-secondary-change', color: string): void
-		(e: 'text-change', value: string): void
 		(e: 'text-apply', payload: { text: string; fontFamily: string; color: string }): void
+		(e: 'text-style-change', payload: { text: string; fontFamily: string; color: string }): void
 		(e: 'crop-undo'): void
 		(e: 'crop-redo'): void
 		(e: 'crop-zoom-in'): void
 		(e: 'crop-zoom-out'): void
 		(e: 'crop-rotate'): void
-		(e: 'crop-apply'): void
 	}>()
 
 	const onSizeChange = (e: Event) => {
@@ -300,20 +301,21 @@
 				:disabled="isCanvasLoading"
 				:crop-size-label="cropSizeLabel"
 				:crop-position-label="cropPositionLabel"
+				:can-crop-undo="canCropUndo"
+				:can-crop-redo="canCropRedo"
 				@tool-change="emit('editor-tool-change', $event)"
 				@effect-select="emit('effect-select', $event)"
 				@effect-opacity-change="emit('effect-opacity-change', $event)"
 				@effect-details-change="emit('effect-details-change', $event)"
 				@effect-color-change="emit('effect-color-change', $event)"
 				@effect-color-secondary-change="emit('effect-color-secondary-change', $event)"
-				@text-change="emit('text-change', $event)"
 				@text-apply="emit('text-apply', $event)"
+				@text-style-change="emit('text-style-change', $event)"
 				@crop-undo="emit('crop-undo')"
 				@crop-redo="emit('crop-redo')"
 				@crop-zoom-in="emit('crop-zoom-in')"
 				@crop-zoom-out="emit('crop-zoom-out')"
 				@crop-rotate="emit('crop-rotate')"
-				@crop-apply="emit('crop-apply')"
 			/>
 			<div
 				v-if="isCanvasLoading"

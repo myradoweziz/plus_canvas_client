@@ -1,15 +1,17 @@
 <script setup lang="ts">
-	import Icon from '~/utils/ui/Icon.vue'
-
 	const props = withDefaults(
 		defineProps<{
 			disabled?: boolean
+			canUndo?: boolean
+			canRedo?: boolean
 			cropSizeLabel?: string
 			positionLabel?: string
 		}>(),
 		{
 			disabled: false,
-			cropSizeLabel: '200 x 200 px',
+			canUndo: false,
+			canRedo: false,
+			cropSizeLabel: '—',
 			positionLabel: 'X:0 Y:0'
 		}
 	)
@@ -20,7 +22,6 @@
 		(e: 'zoom-out'): void
 		(e: 'zoom-in'): void
 		(e: 'rotate'): void
-		(e: 'apply'): void
 	}>()
 </script>
 
@@ -35,7 +36,7 @@
 			<button
 				type="button"
 				class="editor-crop-btn"
-				:disabled="disabled"
+				:disabled="disabled || !canUndo"
 				aria-label="Geri al"
 				@click="emit('undo')"
 			>
@@ -44,7 +45,7 @@
 			<button
 				type="button"
 				class="editor-crop-btn"
-				:disabled="disabled"
+				:disabled="disabled || !canRedo"
 				aria-label="Yinele"
 				@click="emit('redo')"
 			>
@@ -68,29 +69,14 @@
 			>
 				+
 			</button>
-			<button
-				type="button"
-				class="editor-crop-btn"
-				:disabled="disabled"
-				aria-label="Döndür"
-				@click="emit('rotate')"
-			>
+			<button type="button" class="editor-crop-btn" :disabled="disabled" aria-label="Döndür" @click="emit('rotate')">
 				↻
-			</button>
-			<button
-				type="button"
-				class="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-[#2B7FFF] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-				:disabled="disabled"
-				aria-label="Kadrajı uygula"
-				@click="emit('apply')"
-			>
-				<Icon name="checked" class="h-4 w-4" />
 			</button>
 		</div>
 
 		<div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#6B7280]">
-			<span>Kadraj: {{ cropSizeLabel }}</span>
-			<span>Konum: {{ positionLabel }}</span>
+			<span>Fotoğraf: {{ cropSizeLabel }}</span>
+			<span>Merkez: {{ positionLabel }}</span>
 		</div>
 	</div>
 </template>

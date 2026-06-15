@@ -97,9 +97,12 @@
 		cropZoomIn,
 		cropZoomOut,
 		cropRotate,
-		applyCrop,
 		cropSizeLabel,
-		cropPositionLabel
+		cropPositionLabel,
+		canCropUndo,
+		canCropRedo,
+		applyDesignText,
+		updateDesignTextStyle
 	} = useProductCanvasEditor({
 		productId: productSessionKey,
 		wrapRef: canvasWrapRef,
@@ -264,6 +267,8 @@
 						:is-canvas-loading="isCanvasLoading"
 						:crop-size-label="cropSizeLabel"
 						:crop-position-label="cropPositionLabel"
+						:can-crop-undo="canCropUndo"
+						:can-crop-redo="canCropRedo"
 						show-editor-tools
 						:cart-preview-src="canvasPreviewSrc || canvasDesignPreviewSrc || ''"
 						@format-change="applyFormatById"
@@ -280,7 +285,8 @@
 						@crop-zoom-in="cropZoomIn"
 						@crop-zoom-out="cropZoomOut"
 						@crop-rotate="cropRotate"
-						@crop-apply="applyCrop"
+						@text-apply="applyDesignText"
+						@text-style-change="updateDesignTextStyle"
 					/>
 				</div>
 			</div>
