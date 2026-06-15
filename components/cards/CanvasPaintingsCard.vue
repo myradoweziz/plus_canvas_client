@@ -81,16 +81,11 @@
 	}
 
 	const handleAddToCart = async () => {
-		if (props.product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
-			// Redirect to product page if it is a canvas painting (needs sizes, formats)
-			router.push(productPagePath(props.product.slug))
-			return
-		}
-		await cartStore.addToCart(props.product.id, 1, {})
+		openUploader()
 	}
 
 	const handleAddToWishlist = async () => {
-		await wishlistStore.addToWishlist(props.product.id, {})
+		openUploader()
 	}
 </script>
 
@@ -193,7 +188,7 @@
 		/>
 
 		<!-- Quick View Modal -->
-		<QuickViewModal 
+		<ProductQuickViewModal 
 			:is-open="isQuickViewOpen" 
 			:product="product" 
 			@close="closeQuickView" 
