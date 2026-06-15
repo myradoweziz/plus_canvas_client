@@ -102,7 +102,8 @@
 		canCropUndo,
 		canCropRedo,
 		applyDesignText,
-		updateDesignTextStyle
+		updateDesignTextStyle,
+		getDesignCartOptions
 	} = useProductCanvasEditor({
 		productId: productSessionKey,
 		wrapRef: canvasWrapRef,
@@ -271,6 +272,7 @@
 						:can-crop-redo="canCropRedo"
 						show-editor-tools
 						:cart-preview-src="canvasPreviewSrc || canvasDesignPreviewSrc || ''"
+						:editor-options="getDesignCartOptions()"
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"

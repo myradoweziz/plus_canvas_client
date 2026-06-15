@@ -125,10 +125,36 @@ export const useCartStore = defineStore('cart', () => {
                 headers['X-Session-ID'] = sessionId.value
             }
 
-            const previewSrc = String(options.preview_src ?? options.preview_url ?? '').trim()
+            let previewUrl = String(options.preview_url ?? '').trim()
+            const previewSrc = String(options.preview_src ?? '').trim()
             const apiOptions = { ...options }
+
+            // If we have a base64 preview, upload it to the backend to get a permanent URL
+            if (!previewUrl && previewSrc && previewSrc.startsWith('data:image/')) {
+                try {
+                    const res = await fetch(previewSrc)
+                    const blob = await res.blob()
+                    const file = new File([blob], 'cart_preview.png', { type: 'image/png' })
+                    const formData = new FormData()
+                    formData.append('file', file)
+
+                    const uploadRes: any = await $customFetch('/api/media/upload-temp', {
+                        method: 'POST',
+                        body: formData
+                    })
+
+                    if (uploadRes && uploadRes.url) {
+                        previewUrl = uploadRes.url
+                    }
+                } catch (e) {
+                    console.error('Failed to upload preview image:', e)
+                }
+            }
+
+            if (previewUrl) {
+                apiOptions.preview_url = previewUrl
+            }
             delete apiOptions.preview_src
-            delete apiOptions.preview_url
 
             const response: any = await $customFetch('/api/carts', {
                 method: 'POST',

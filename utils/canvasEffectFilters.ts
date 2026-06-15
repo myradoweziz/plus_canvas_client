@@ -83,11 +83,13 @@ export const defaultEffectColors = (kind: EffectKind) => {
 		case 'duotone':
 			return { color: '#7C3AED', colorSecondary: '#EAB308' }
 		case 'pop-yellow-blue':
-			return { color: '#FACC15', colorSecondary: '#1D4ED8' }
+			return { color: '#22D3EE', colorSecondary: '#EA580C' } // Cyan & Orange
 		case 'pop-cyan':
-			return { color: '#22D3EE', colorSecondary: '#0E7490' }
+			return { color: '#4ADE80', colorSecondary: '#78350F' } // Green & Brown
+		case 'posterize':
+			return { color: '#EF4444', colorSecondary: '#1E3A8A' } // Red & Blue
 		case 'pop-green':
-			return { color: '#4ADE80', colorSecondary: '#15803D' }
+			return { color: '#FACC15', colorSecondary: '#15803D' }
 		case 'pop-purple':
 			return { color: '#C084FC', colorSecondary: '#5B21B6' }
 		default:
@@ -171,35 +173,12 @@ export const buildCanvasEffectFilters = (
 			return filters
 
 		case 'duotone':
-			pushPopArtDuotone(filters, filtersLib, params.color, params.colorSecondary, amount)
-			return filters
-
 		case 'posterize':
-			if (filtersLib.Contrast) {
-				filters.push(new filtersLib.Contrast({ contrast: (0.25 + detail * 1.35) * amount }))
-			}
-			if (filtersLib.Saturate) {
-				filters.push(new filtersLib.Saturate({ saturation: (0.2 + detail * 1.15) * amount }))
-			}
-			if (filtersLib.Brightness) {
-				filters.push(new filtersLib.Brightness({ brightness: (-0.08 + detail * 0.18) * amount }))
-			}
-			return filters
-
 		case 'pop-yellow-blue':
-			pushPopArtDuotone(filters, filtersLib, '#FACC15', '#1D4ED8', amount, detail)
-			return filters
-
 		case 'pop-cyan':
-			pushPopArtDuotone(filters, filtersLib, '#22D3EE', '#0E7490', amount, detail)
-			return filters
-
 		case 'pop-green':
-			pushPopArtDuotone(filters, filtersLib, '#4ADE80', '#166534', amount, detail)
-			return filters
-
 		case 'pop-purple':
-			pushPopArtDuotone(filters, filtersLib, '#C084FC', '#5B21B6', amount, detail)
+			pushPopArtDuotone(filters, filtersLib, params.color, params.colorSecondary, amount, detail)
 			return filters
 
 		case 'invert':

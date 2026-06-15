@@ -3723,6 +3723,29 @@ export function useProductCanvasEditor(options: {
 		disposeCanvas()
 	})
 
+	const getDesignCartOptions = () => {
+		const textObj = resolveDesignTextObject()
+		const cropTransforms: Record<number, any> = {}
+		for (const [key, val] of cropStateByUploadIndex.entries()) {
+			cropTransforms[key] = val
+		}
+
+		return {
+			effect_id: activeEffectId.value,
+			effect_opacity: activeEffectOpacity.value,
+			effect_details: activeEffectDetails.value,
+			effect_color: activeEffectColor.value,
+			effect_color_secondary: activeEffectColorSecondary.value,
+			text_settings: textObj ? {
+				text: textObj.text,
+				fontFamily: textObj.fontFamily,
+				color: textObj.fill,
+			} : null,
+			crop_settings: Object.keys(cropTransforms).length > 0 ? cropTransforms : null,
+			uploaded_images: uploadImages.value.map(u => ({ url: u.url, id: u.id, session_id: u.session_id }))
+		}
+	}
+
 	return {
 		viewportW,
 		viewportH,
@@ -3807,6 +3830,7 @@ export function useProductCanvasEditor(options: {
 		activeMockupSceneSettings,
 		setMockupSceneColor,
 		isCanvasPaintingGallery,
-		useStaticFormatPreviews
+		useStaticFormatPreviews,
+		getDesignCartOptions
 	}
 }

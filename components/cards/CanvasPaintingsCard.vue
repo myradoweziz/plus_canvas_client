@@ -66,6 +66,32 @@
 		const url = getProductImageUrl(props.product.image)
 		return url ? [url] : []
 	})
+
+	const cartStore = useCartStore()
+	const wishlistStore = useWishlistStore()
+
+	const isQuickViewOpen = ref(false)
+
+	const openQuickView = () => {
+		isQuickViewOpen.value = true
+	}
+
+	const closeQuickView = () => {
+		isQuickViewOpen.value = false
+	}
+
+	const handleAddToCart = async () => {
+		if (props.product.main_category?.slug === CANVAS_PAINTING_CATEGORY_SLUG) {
+			// Redirect to product page if it is a canvas painting (needs sizes, formats)
+			router.push(productPagePath(props.product.slug))
+			return
+		}
+		await cartStore.addToCart(props.product.id, 1, {})
+	}
+
+	const handleAddToWishlist = async () => {
+		await wishlistStore.addToWishlist(props.product.id, {})
+	}
 </script>
 
 <template>
@@ -116,11 +142,13 @@
 					class="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
 				>
 					<button
+						@click.stop="openQuickView"
 						class="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white flex items-center justify-center shadow-md hover:bg-[#1853a0] hover:text-white transition-all text-[#1853a0]"
 					>
 						<Icon name="eye" class="w-4 h-4 md:w-5 md:h-5" />
 					</button>
 					<button
+						@click.stop="handleAddToWishlist"
 						class="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white flex items-center justify-center shadow-md hover:bg-red-500 hover:text-white transition-all text-[#1853a0]"
 					>
 						<Icon name="heart" class="w-4 h-4 md:w-5 md:h-5" />
@@ -145,6 +173,7 @@
 				<!-- Кнопка -->
 				<div v-if="showButton" class="mt-auto pt-4">
 					<button
+						@click.stop="handleAddToCart"
 						class="w-full bg-[#1853a0] hover:bg-[#124080] text-white py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm md:text-[14px] shadow-sm hover:shadow-md"
 					>
 						<Icon name="basket" class="w-4 h-4 text-white" />
@@ -161,6 +190,13 @@
 			:max-images="uploadMaxImages"
 			@close="closeUploader"
 			@go-next="goNext"
+		/>
+
+		<!-- Quick View Modal -->
+		<QuickViewModal 
+			:is-open="isQuickViewOpen" 
+			:product="product" 
+			@close="closeQuickView" 
 		/>
 	</div>
 </template>

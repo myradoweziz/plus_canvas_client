@@ -37,7 +37,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
         }
     }
 
-    const addToWishlist = async (productId: number, options = {}) => {
+    const addToWishlist = async (productId: number, options: Record<string, unknown> = {}) => {
         try {
             const { $customFetch, $toast } = useNuxtApp()
             const headers: any = {}
@@ -45,12 +45,43 @@ export const useWishlistStore = defineStore('wishlist', () => {
                 headers['X-Session-ID'] = sessionId.value
             }
 
+            let previewUrl = String(options.preview_url ?? '').trim()
+            const previewSrc = String(options.preview_src ?? '').trim()
+            const apiOptions = { ...options }
+
+            // If we have a base64 preview, upload it to the backend to get a permanent URL
+            if (!previewUrl && previewSrc && previewSrc.startsWith('data:image/')) {
+                try {
+                    const res = await fetch(previewSrc)
+                    const blob = await res.blob()
+                    const file = new File([blob], 'wishlist_preview.png', { type: 'image/png' })
+                    const formData = new FormData()
+                    formData.append('file', file)
+
+                    const uploadRes: any = await $customFetch('/api/media/upload-temp', {
+                        method: 'POST',
+                        body: formData
+                    })
+
+                    if (uploadRes && uploadRes.url) {
+                        previewUrl = uploadRes.url
+                    }
+                } catch (e) {
+                    console.error('Failed to upload preview image:', e)
+                }
+            }
+
+            if (previewUrl) {
+                apiOptions.preview_url = previewUrl
+            }
+            delete apiOptions.preview_src
+
             const response: any = await $customFetch('/api/wishlists', {
                 method: 'POST',
                 headers,
                 body: {
                     canvas_product_id: productId,
-                    options
+                    options: apiOptions
                 }
             })
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { Navigation, Autoplay } from 'swiper/modules'
 	import Icon from '~/utils/ui/Icon.vue'
+	import { ref, onMounted } from 'vue'
 
 	const modules = [Navigation, Autoplay]
 
@@ -17,32 +18,44 @@
 		})
 	}
 
-	const reviews = [
-		{
-			name: 'Ayşe Yılmaz',
-			avatar: '/images/banner.png',
-			rating: 5,
-			text: 'Harika bir hizmet! Fotoğrafım çok kaliteli bir şekilde basıldı. Off renk tablosu. Ürünü ailemle kullanmak üzere duvarıma müthiş bir şekilde tavsiye ederim.',
-			product: 'Çiçek Açan Badem Ağacı - Almond Blossom',
-			images: ['/images/banner.png', '/images/banner.png']
-		},
-		{
-			name: 'Ayşe Yılmaz',
-			avatar: '/images/banner.png',
-			rating: 5,
-			text: 'Harika bir hizmet! Fotoğrafım çok kaliteli bir şekilde basıldı. Ürünü ailemle kullanmak üzere duvarıma müthiş bir şekilde tavsiye ederim.',
-			product: 'Çiçek Açan Badem Ağacı - Almond Blossom',
-			images: ['/images/banner.png', '/images/banner.png']
-		},
-		{
-			name: 'Ayşe Yılmaz',
-			avatar: '/images/banner.png',
-			rating: 5,
-			text: 'Harika ve hayreti! Fotoğrafım çok kaliteli bir şekilde basıldı. Ürünü ailemle kullanmak üzere duvarıma müthiş bir şekilde tavsiye ederim.',
-			product: 'Çiçek Açan Badem Ağacı - Almond Blossom',
-			images: ['/images/banner.png', '/images/banner.png']
+	interface Comment {
+		id: number
+		author_name: string
+		product_id: number
+		rating: number
+		comment: string
+		is_active: boolean
+		created_at: string
+		canvas_product: {
+			name: string
+			slug: string
+		} | null
+	}
+
+	const comments = ref<Comment[]>([])
+	const reviews = ref<any[]>([])
+
+	const fetchComments = async () => {
+		try {
+			const { data, error } = await useCustomFetch<Comment[]>('/api/product-comments?limit=10')
+			if (!error.value && data.value) {
+				comments.value = data.value
+				reviews.value = comments.value.map(c => ({
+					name: c.author_name || 'Müşteri',
+					avatar: '/images/favicon-32x32.png',
+					rating: c.rating,
+					text: c.comment,
+					product: c.canvas_product?.name || 'Kanvas Tablo',
+					slug: c.canvas_product?.slug || '',
+					images: []
+				}))
+			}
+		} catch (e) {
+			console.error(e)
 		}
-	]
+	}
+
+	onMounted(fetchComments)
 </script>
 
 <template>

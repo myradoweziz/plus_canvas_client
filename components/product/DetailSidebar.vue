@@ -23,6 +23,7 @@
 		product: Product
 		/** Снимок canvas с выбранным форматом/рамкой — для превью в корзине */
 		cartPreviewSrc?: string
+		editorOptions?: Record<string, any>
 	}>()
 
 	const emit = defineEmits<{
@@ -153,7 +154,8 @@
 			const options = {
 				canvas_format_id: props.selectedFormatId,
 				canvas_size_id: props.selectedSizeId,
-				canvas_frame_id: props.activeFrameId
+				canvas_frame_id: props.activeFrameId,
+				...(props.editorOptions || {})
 			}
 			await wishlistStore.addToWishlist(props.product.id, options)
 			// triggerToast is not needed as the store shows its own toast, but if we want to show this custom toast:
@@ -169,6 +171,7 @@
 			canvas_format_id: props.selectedFormatId,
 			canvas_size_id: props.selectedSizeId,
 			canvas_frame_id: props.activeFrameId,
+			...(props.editorOptions || {}),
 			...(props.cartPreviewSrc?.trim() ? { preview_src: props.cartPreviewSrc.trim() } : {})
 		}
 
