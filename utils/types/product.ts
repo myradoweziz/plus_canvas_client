@@ -12,6 +12,9 @@ export type EffectOption = {
 	id: number
 	name: string
 	image_url: string
+	image?: string
+	sort_order?: number
+	is_active?: boolean
 }
 
 export type Comment = {

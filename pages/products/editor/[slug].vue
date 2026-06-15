@@ -88,6 +88,9 @@
 		setMockupSceneColor,
 		applyEffectById,
 		setEffectOpacity,
+		setEffectDetails,
+		setEffectColor,
+		setEffectColorSecondary,
 		setCropModeActive,
 		cropUndo,
 		cropRedo,
@@ -269,6 +272,9 @@
 						@editor-tool-change="onEditorToolChange"
 						@effect-select="(id) => void applyEffectById(id)"
 						@effect-opacity-change="setEffectOpacity"
+						@effect-details-change="setEffectDetails"
+						@effect-color-change="setEffectColor"
+						@effect-color-secondary-change="setEffectColorSecondary"
 						@crop-undo="cropUndo"
 						@crop-redo="cropRedo"
 						@crop-zoom-in="cropZoomIn"

@@ -1,4 +1,10 @@
 <script setup lang="ts">
+	import {
+		defaultEffectColors,
+		effectUsesDetails,
+		getSortedEffects,
+		resolveEffectKind
+	} from '~/utils/canvasEffectFilters'
 	import type { EditorToolId } from '~/utils/productEditorTypes'
 	import type { EffectOption } from '~/utils/types'
 	import Icon from '~/utils/ui/Icon.vue'
@@ -28,6 +34,9 @@
 		(e: 'tool-change', tool: EditorToolId | null): void
 		(e: 'effect-select', effectId: number | null): void
 		(e: 'effect-opacity-change', opacity: number): void
+		(e: 'effect-details-change', details: number): void
+		(e: 'effect-color-change', color: string): void
+		(e: 'effect-color-secondary-change', color: string): void
 		(e: 'text-change', value: string): void
 		(e: 'text-apply', payload: { text: string; fontFamily: string; color: string }): void
 		(e: 'crop-undo'): void
@@ -47,6 +56,9 @@
 	const activeTool = ref<EditorToolId | null>(null)
 	const selectedEffectId = ref<number | null>(null)
 	const effectOpacity = ref(100)
+	const effectDetails = ref(110)
+	const effectColor = ref('#8B6914')
+	const effectColorSecondary = ref('#EAB308')
 	const textValue = ref('')
 	const textFontFamily = ref('Roboto')
 	const textColor = ref('#101828')
@@ -64,12 +76,46 @@
 		selectedEffectId.value = id
 		emit('effect-select', id)
 		if (id == null) return
+
+		const effect = (props.effects ?? []).find((item) => Number(item.id) === Number(id))
+		if (effect) {
+			const kind = resolveEffectKind(effect, props.effects)
+			const presetColors = defaultEffectColors(kind)
+			if (kind === 'sepia' || kind === 'duotone') {
+				effectColor.value = presetColors.color
+				emit('effect-color-change', presetColors.color)
+			}
+			if (kind === 'duotone') {
+				effectColorSecondary.value = presetColors.colorSecondary
+				emit('effect-color-secondary-change', presetColors.colorSecondary)
+			}
+			if (effectUsesDetails(effect, props.effects)) {
+				effectDetails.value = 110
+				emit('effect-details-change', 110)
+			}
+		}
+
 		emit('effect-opacity-change', effectOpacity.value)
 	}
 
 	const onEffectOpacityChange = (value: number) => {
 		effectOpacity.value = value
 		emit('effect-opacity-change', value)
+	}
+
+	const onEffectDetailsChange = (value: number) => {
+		effectDetails.value = value
+		emit('effect-details-change', value)
+	}
+
+	const onEffectColorChange = (value: string) => {
+		effectColor.value = value
+		emit('effect-color-change', value)
+	}
+
+	const onEffectColorSecondaryChange = (value: string) => {
+		effectColorSecondary.value = value
+		emit('effect-color-secondary-change', value)
 	}
 
 	const onTextApply = () => {
@@ -119,8 +165,14 @@
 				:disabled="disabled"
 				:selected-effect-id="selectedEffectId"
 				:opacity="effectOpacity"
+				:details="effectDetails"
+				:effect-color="effectColor"
+				:effect-color-secondary="effectColorSecondary"
 				@select="onEffectSelect"
 				@opacity-change="onEffectOpacityChange"
+				@details-change="onEffectDetailsChange"
+				@color-change="onEffectColorChange"
+				@color-secondary-change="onEffectColorSecondaryChange"
 			/>
 
 			<ProductDesignEditorTextPanel

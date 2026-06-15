@@ -25,6 +25,13 @@ import {
 	sortLayoutSlots,
 	type CollageLayoutSlot
 } from '~/utils/collageLayout'
+import {
+	buildCanvasEffectFilters,
+	defaultEffectColors,
+	effectUsesDetails,
+	resolveEffectKind
+} from '~/utils/canvasEffectFilters'
+import { createEffectAmountBlendFilter, ensureCanvas2dFilterBackend } from '~/utils/canvasEffectAmountFilter'
 import { loadFormatPanelLayout, type FormatPanelLayout } from '~/utils/formatSvgLayout'
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
@@ -51,7 +58,7 @@ import {
 	type FrameOption,
 	type PrintSizeOption
 } from '~/utils/productDesignConfig'
-import type { EffectOption, Product, ProductDesignPayload, TempDesignImage } from '~/utils/types'
+	import type { EffectOption, Product, ProductDesignPayload, TempDesignImage } from '~/utils/types'
 
 const DEFAULT_VIEWPORT_W = 560
 const DEFAULT_VIEWPORT_H = 520
@@ -184,6 +191,9 @@ export function useProductCanvasEditor(options: {
 	let frameObject: import('fabric').fabric.Object | null = null
 	const activeEffectId = ref<number | null>(null)
 	const activeEffectOpacity = ref(100)
+	const activeEffectDetails = ref(110)
+	const activeEffectColor = ref('#8B6914')
+	const activeEffectColorSecondary = ref('#EAB308')
 
 	type CropTransform = {
 		left: number
@@ -1847,73 +1857,66 @@ export function useProductCanvasEditor(options: {
 		return images
 	}
 
-	/** Fabric-фильтры по названию эффекта (image_url — только превью в сайдбаре). */
-	const buildEffectFilters = (effect: EffectOption, opacityPercent: number): import('fabric').fabric.IBaseFilter[] => {
-		const filtersLib = fabricLib?.Image?.filters as
+	type FabricImageWithEffectBlend = import('fabric').fabric.Image & {
+		_effectOriginalElement?: CanvasImageSource
+	}
+
+	const getFabricFiltersLib = () =>
+		fabricLib?.Image?.filters as
 			| Record<string, new (opts?: object) => import('fabric').fabric.IBaseFilter>
 			| undefined
-		if (!filtersLib) return []
 
-		const name = effect.name.toLowerCase()
-		const strength = Math.min(1, Math.max(0, opacityPercent / 100))
-		const filters: import('fabric').fabric.IBaseFilter[] = []
+	const getEffectOriginalElement = (img: import('fabric').fabric.Image): CanvasImageSource | null => {
+		const sourceEl =
+			(img as FabricImageWithEffectBlend & { _originalElement?: CanvasImageSource })._originalElement ??
+			(img.getElement?.() as CanvasImageSource | undefined)
+		return sourceEl ?? null
+	}
 
-		if (/siyah|beyaz|grayscale|grey|gray|monokrom|monochrome/.test(name)) {
-			if (filtersLib.Grayscale) filters.push(new filtersLib.Grayscale())
-			return filters
-		}
+	const buildEffectFiltersForPhoto = (
+		effect: EffectOption,
+		img: import('fabric').fabric.Image
+	): import('fabric').fabric.IBaseFilter[] => {
+		const filtersLib = getFabricFiltersLib()
+		const effects = options.product?.value?.effects ?? []
+		const kind = resolveEffectKind(effect, effects)
+		const useDetails = effectUsesDetails(effect, effects)
+		const presetColors = defaultEffectColors(kind)
+		const amount = Math.min(1, Math.max(0, activeEffectOpacity.value / 100))
 
-		if (/sepia|vintage|esk[iı]/.test(name)) {
-			if (filtersLib.Sepia) filters.push(new filtersLib.Sepia())
-			return filters
-		}
+		if (amount <= 0) return []
 
-		if (/invert|negatif|negative/.test(name)) {
-			if (filtersLib.Invert) filters.push(new filtersLib.Invert())
-			return filters
-		}
+		const baseFilters = buildCanvasEffectFilters(filtersLib, kind, {
+			details: activeEffectDetails.value,
+			useDetails,
+			color: kind === 'sepia' || kind === 'duotone' ? activeEffectColor.value : presetColors.color,
+			colorSecondary:
+				kind === 'duotone' ? activeEffectColorSecondary.value : presetColors.colorSecondary
+		})
 
-		if (/kontrast|contrast|keskin|sharp/.test(name)) {
-			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: strength * 0.65 }))
-		}
+		if (!baseFilters.length || !fabricLib) return baseFilters
 
-		if (/parlak|bright|neon|canl[ıi]|vivid/.test(name)) {
-			if (filtersLib.Brightness) filters.push(new filtersLib.Brightness({ brightness: strength * 0.35 }))
-			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: strength * 0.45 }))
-			if (filtersLib.Saturate) filters.push(new filtersLib.Saturate({ saturation: strength * 0.55 }))
-		}
+		const originalElement = getEffectOriginalElement(img)
+		const amountFilter = originalElement
+			? createEffectAmountBlendFilter(fabricLib, originalElement, amount)
+			: null
 
-		if (/soluk|fade|soft|yumu[sş]ak/.test(name)) {
-			if (filtersLib.Brightness) filters.push(new filtersLib.Brightness({ brightness: strength * 0.12 }))
-			if (filtersLib.Contrast) filters.push(new filtersLib.Contrast({ contrast: -(strength * 0.25) }))
-		}
+		if (amountFilter) return [...baseFilters, amountFilter]
 
-		if (/so[gğ]uk|cool|mavi|blue|cold/.test(name)) {
-			if (filtersLib.BlendColor) {
-				filters.push(new filtersLib.BlendColor({ color: '#60a5fa', mode: 'multiply', alpha: strength * 0.45 }))
-			}
-		}
-
-		if (/s[ıi]cak|warm|sicak|turuncu|orange/.test(name)) {
-			if (filtersLib.BlendColor) {
-				filters.push(new filtersLib.BlendColor({ color: '#f97316', mode: 'multiply', alpha: strength * 0.4 }))
-			}
-		}
-
-		if (/pembe|pink|rose/.test(name)) {
-			if (filtersLib.BlendColor) {
-				filters.push(new filtersLib.BlendColor({ color: '#f472b6', mode: 'multiply', alpha: strength * 0.4 }))
-			}
-		}
-
-		if (filters.length) return filters
-
-		if (filtersLib.Contrast) return [new filtersLib.Contrast({ contrast: strength * 0.3 })]
-		return []
+		// Fallback: масштабируем параметры фильтров, если оригинал недоступен
+		return buildCanvasEffectFilters(filtersLib, kind, {
+			details: activeEffectDetails.value,
+			useDetails,
+			color: kind === 'sepia' || kind === 'duotone' ? activeEffectColor.value : presetColors.color,
+			colorSecondary:
+				kind === 'duotone' ? activeEffectColorSecondary.value : presetColors.colorSecondary,
+			effectAmount: amount
+		})
 	}
 
 	const clearEffectFiltersFromPhotos = () => {
 		for (const img of getPhotoImagesForEffect()) {
+			;(img as FabricImageWithEffectBlend)._effectOriginalElement = undefined
 			img.filters = []
 			img.applyFilters()
 			img.dirty = true
@@ -1925,12 +1928,18 @@ export function useProductCanvasEditor(options: {
 	}
 
 	const applyEffectFiltersToPhotos = (effect: EffectOption) => {
-		if (!fabricCanvas) return
-		const filters = buildEffectFilters(effect, activeEffectOpacity.value)
-		for (const img of getPhotoImagesForEffect()) {
-			img.filters = filters
-			img.applyFilters()
-			img.dirty = true
+		if (!fabricCanvas || !fabricLib) return
+		ensureCanvas2dFilterBackend(fabricLib)
+		try {
+			for (const img of getPhotoImagesForEffect()) {
+				img.filters = buildEffectFiltersForPhoto(effect, img)
+				img.objectCaching = false
+				img.applyFilters()
+				img.dirty = true
+			}
+		} catch (error) {
+			console.error('Failed to apply effect filters', error)
+			clearEffectFiltersFromPhotos()
 		}
 		for (const group of collagePhotoObjects) {
 			group.dirty = true
@@ -1966,6 +1975,18 @@ export function useProductCanvasEditor(options: {
 		if (!effect) return
 		if (!getPhotoImagesForEffect().length) return
 
+		const kind = resolveEffectKind(effect, options.product?.value?.effects)
+		const presetColors = defaultEffectColors(kind)
+		if (kind === 'sepia' || kind === 'duotone') {
+			activeEffectColor.value = presetColors.color
+		}
+		if (kind === 'duotone') {
+			activeEffectColorSecondary.value = presetColors.colorSecondary
+		}
+		if (effectUsesDetails(effect, options.product?.value?.effects)) {
+			activeEffectDetails.value = 110
+		}
+
 		clearEffectFiltersFromPhotos()
 		applyEffectFiltersToPhotos(effect)
 		emitDesign()
@@ -1986,6 +2007,33 @@ export function useProductCanvasEditor(options: {
 		applyEffectFiltersToPhotos(effect)
 		emitDesign()
 		scheduleCanvasPreview()
+	}
+
+	const reapplyActiveEffectFilters = () => {
+		if (activeEffectId.value == null) return
+		const effect = findActiveEffect()
+		if (!effect || !getPhotoImagesForEffect().length) return
+		applyEffectFiltersToPhotos(effect)
+		emitDesign()
+		scheduleCanvasPreview()
+	}
+
+	const setEffectDetails = (details: number) => {
+		if (!Number.isFinite(details)) return
+		activeEffectDetails.value = Math.min(110, Math.max(0, Math.round(details)))
+		reapplyActiveEffectFilters()
+	}
+
+	const setEffectColor = (color: string) => {
+		if (!color?.trim()) return
+		activeEffectColor.value = color
+		reapplyActiveEffectFilters()
+	}
+
+	const setEffectColorSecondary = (color: string) => {
+		if (!color?.trim()) return
+		activeEffectColorSecondary.value = color
+		reapplyActiveEffectFilters()
 	}
 
 	const getCollageMetrics = () => {
@@ -2991,6 +3039,9 @@ export function useProductCanvasEditor(options: {
 		viewportBgImage = null
 		activeEffectId.value = null
 		activeEffectOpacity.value = 100
+		activeEffectDetails.value = 110
+		activeEffectColor.value = '#8B6914'
+		activeEffectColorSecondary.value = '#EAB308'
 		mockupNaturalW = 0
 		mockupNaturalH = 0
 		printAreaRect = null
@@ -3015,6 +3066,7 @@ export function useProductCanvasEditor(options: {
 			const lib = mod.fabric
 			if (!lib?.Canvas || !lib.Pattern) return
 			fabricLib = lib
+			ensureCanvas2dFilterBackend(lib)
 
 			if (!options.wrapRef.value) return
 
@@ -3314,8 +3366,14 @@ export function useProductCanvasEditor(options: {
 		applyFrameByIndex,
 		applyEffectById,
 		setEffectOpacity,
+		setEffectDetails,
+		setEffectColor,
+		setEffectColorSecondary,
 		activeEffectId,
 		activeEffectOpacity,
+		activeEffectDetails,
+		activeEffectColor,
+		activeEffectColorSecondary,
 		setCropModeActive,
 		cropUndo,
 		cropRedo,

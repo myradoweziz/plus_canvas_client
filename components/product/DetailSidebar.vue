@@ -29,6 +29,9 @@
 		(e: 'editor-tool-change', tool: EditorToolId | null): void
 		(e: 'effect-select', effectId: number | null): void
 		(e: 'effect-opacity-change', opacity: number): void
+		(e: 'effect-details-change', details: number): void
+		(e: 'effect-color-change', color: string): void
+		(e: 'effect-color-secondary-change', color: string): void
 		(e: 'text-change', value: string): void
 		(e: 'text-apply', payload: { text: string; fontFamily: string; color: string }): void
 		(e: 'crop-undo'): void
@@ -300,6 +303,9 @@
 				@tool-change="emit('editor-tool-change', $event)"
 				@effect-select="emit('effect-select', $event)"
 				@effect-opacity-change="emit('effect-opacity-change', $event)"
+				@effect-details-change="emit('effect-details-change', $event)"
+				@effect-color-change="emit('effect-color-change', $event)"
+				@effect-color-secondary-change="emit('effect-color-secondary-change', $event)"
 				@text-change="emit('text-change', $event)"
 				@text-apply="emit('text-apply', $event)"
 				@crop-undo="emit('crop-undo')"
