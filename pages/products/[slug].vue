@@ -260,6 +260,8 @@
 				:delivery-direction-colors="deliveryDirectionColors"
 			/>
 
+			<ProductFeatures />
+
 			<ProductRatingReviews :comments="product?.comments ?? []" />
 		</section>
 		<section class="mt-10 sm:mt-16 md:mt-20 bg-white">
