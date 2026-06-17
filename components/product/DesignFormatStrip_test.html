@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .format-slide__preview-panels {
+    display: flex;
+    width: 300px;
+    height: 150px;
+    gap: 2px;
+    align-items: center;
+    border: 1px solid red;
+  }
+  .format-slide__preview-panel {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid blue;
+  }
+  .format-slide__preview-panel:nth-child(1),
+  .format-slide__preview-panel:nth-child(3) {
+    height: 80%;
+  }
+  .format-slide__preview-panel-img {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+  <div class="format-slide__preview-panels">
+    <div class="format-slide__preview-panel">
+      <img src="https://via.placeholder.com/600x400" class="format-slide__preview-panel-img" style="left: 0; width: calc(300% + 4px);" />
+    </div>
+    <div class="format-slide__preview-panel">
+      <img src="https://via.placeholder.com/600x400" class="format-slide__preview-panel-img" style="left: calc(-100% - 2px); width: calc(300% + 4px);" />
+    </div>
+    <div class="format-slide__preview-panel">
+      <img src="https://via.placeholder.com/600x400" class="format-slide__preview-panel-img" style="left: calc(-200% - 4px); width: calc(300% + 4px);" />
+    </div>
+  </div>
+</body>
+</html>

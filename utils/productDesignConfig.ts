@@ -9,6 +9,8 @@ export type CanvasFormat = {
 	aspect?: number
 	/** «N Parçalı» — холст из N вертикальных панелей (3 Parçalı Simetrik и т.п.). */
 	panels?: number
+	/** Layout template identifier for UI rendering (e.g., 'grid-square', '3-split'). */
+	layout_template?: string
 	/** Технический fallback (API не отдал форматы) — в UI не показывается. */
 	synthetic?: boolean
 }
@@ -183,6 +185,7 @@ export function parseFormatPanelCount(name: string, slug?: string): number {
 }
 
 export function formatPanelCount(format: CanvasFormat | null | undefined): number {
+	if (format?.layout_template === '3-split') return 3
 	const n = Number(format?.panels ?? 1)
 	return Number.isFinite(n) && n > 1 ? Math.round(n) : 1
 }
@@ -211,13 +214,15 @@ export function normalizeCanvasFormats(raw: unknown): CanvasFormat[] {
 			const panelsRaw = Number(row.panels ?? row.panel_count ?? row.piece_count ?? row.pieces)
 			const panels =
 				Number.isFinite(panelsRaw) && panelsRaw > 1 ? Math.round(panelsRaw) : parseFormatPanelCount(name, slug)
+			const layout_template = pickString(row.layout_template)
 			const format: CanvasFormat = {
 				id,
 				name,
 				sizes,
 				...(slug ? { slug } : {}),
 				...(image_url ? { image_url } : {}),
-				...(panels > 1 ? { panels } : {})
+				...(panels > 1 ? { panels } : {}),
+				...(layout_template ? { layout_template } : {})
 			}
 			const fromApi = parseAspectFromRow(row)
 			const fromName = inferFormatAspectFromName(name, slug)
@@ -287,6 +292,11 @@ export function getDefaultSize(format: CanvasFormat): PrintSizeOption {
 
 /** Пропорции холста по формату (Dikey / Kare / Yatay) — для полосы форматов и canvas. */
 export function formatOrientationAspect(format: CanvasFormat): number {
+	if (format.layout_template === 'grid-square') return 1
+	if (format.layout_template === 'grid-landscape') return 1.5
+	if (format.layout_template === 'grid-portrait') return 2 / 3
+	if (format.layout_template === '3-split') return 1.5
+
 	const panels = formatPanelCount(format)
 	const fromName = inferFormatAspectFromName(format.name, format.slug)
 	if (fromName) return totalAspectForPanels(fromName, panels)

@@ -3,7 +3,7 @@
 
 	import { CANVAS_PAINTING_STATIC_BG } from '~/utils/canvasPaintingDisplay'
 	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
-	import { formatOrientationAspect, type CanvasFormat } from '~/utils/productDesignConfig'
+	import { formatOrientationAspect, formatPanelCount, type CanvasFormat } from '~/utils/productDesignConfig'
 	import Icon from '~/utils/ui/Icon.vue'
 
 	import 'swiper/css'
@@ -28,11 +28,6 @@
 
 	const backgroundSrc = computed(() => props.formatStripBackgroundSrc?.trim() || CANVAS_PAINTING_STATIC_BG)
 
-	const formatImageSrc = (format: CanvasFormat) => {
-		const url = format.image_url?.trim()
-		return url ? mediaUrlForCanvas(url) : ''
-	}
-
 	const designSrcFor = (format: CanvasFormat) => {
 		const id = Number(format.id)
 		const isCurrent = Number(props.activeFormatId) === id
@@ -43,19 +38,7 @@
 
 		if (isCurrent && props.canvasDesignPreviewSrc) return props.canvasDesignPreviewSrc
 
-		// Пока Fabric ещё не снял превью — SVG формата с API.
-		const fromApi = formatImageSrc(format)
-		if (fromApi) return fromApi
-
 		return ''
-	}
-
-	const usesFormatSvgImage = (format: CanvasFormat) => {
-		const id = Number(format.id)
-		if (props.formatDesignPreviewById?.[id]) return false
-		const isCurrent = Number(props.activeFormatId) === id
-		if (isCurrent && props.canvasDesignPreviewSrc) return false
-		return Boolean(format.image_url?.trim())
 	}
 
 	const previewOverlayStyle = (format: CanvasFormat) => ({
@@ -148,21 +131,42 @@
 								<div class="format-slide__preview-overlay">
 									<div
 										class="format-slide__preview-img-box"
-										:class="{ 'format-slide__preview-img-box--format-svg': usesFormatSvgImage(format) }"
 										:style="previewOverlayStyle(format)"
 									>
-										<img
-											v-if="designSrcFor(format)"
-											:src="designSrcFor(format)"
-											:alt="format.name"
-											class="format-slide__preview-img"
-										/>
-										<img
-											v-else
-											src="/images/banner.png"
-											:alt="format.name"
-											class="format-slide__preview-img format-slide__preview-img--placeholder"
-										/>
+										<template v-if="formatPanelCount(format) > 1">
+											<div 
+												class="format-slide__preview-panels" 
+												:class="{ 'is-3-split': format.layout_template === '3-split' }"
+												:style="{ '--panel-count': formatPanelCount(format) }"
+											>
+												<div v-for="i in formatPanelCount(format)" :key="i" class="format-slide__preview-panel">
+													<img
+														:src="designSrcFor(format) || '/images/banner.png'"
+														:alt="format.name"
+														class="format-slide__preview-panel-img"
+														:class="{ 'format-slide__preview-panel-img--placeholder': !designSrcFor(format) }"
+														:style="{ 
+															left: `calc(-100% * ${i - 1} - 2px * ${i - 1})`,
+															width: `calc(100% * ${formatPanelCount(format)} + 2px * ${formatPanelCount(format) - 1})`
+														}"
+													/>
+												</div>
+											</div>
+										</template>
+										<template v-else>
+											<img
+												v-if="designSrcFor(format)"
+												:src="designSrcFor(format)"
+												:alt="format.name"
+												class="format-slide__preview-img"
+											/>
+											<img
+												v-else
+												src="/images/banner.png"
+												:alt="format.name"
+												class="format-slide__preview-img format-slide__preview-img--placeholder"
+											/>
+										</template>
 									</div>
 								</div>
 							</div>
@@ -361,8 +365,41 @@
 		aspect-ratio: var(--format-aspect, 1);
 	}
 
-	.format-slide__preview-img-box--format-svg {
-		--format-overlay-max-h: calc(100% - 24px);
+	.format-slide__preview-panels {
+		display: flex;
+		width: 100%;
+		height: 100%;
+		gap: var(--panel-gap, 2px);
+		--panel-count: 1;
+	}
+
+	.format-slide__preview-panels.is-3-split {
+		align-items: center;
+	}
+
+	.format-slide__preview-panel {
+		flex: 1;
+		height: 100%;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.format-slide__preview-panels.is-3-split .format-slide__preview-panel:nth-child(1),
+	.format-slide__preview-panels.is-3-split .format-slide__preview-panel:nth-child(3) {
+		height: 80%;
+	}
+
+	.format-slide__preview-panel-img {
+		position: absolute;
+		top: 0;
+		height: 100%;
+		max-width: none !important;
+		object-fit: cover;
+		pointer-events: none;
+	}
+
+	.format-slide__preview-panel-img--placeholder {
+		opacity: 0.6;
 	}
 
 	.format-slide__preview-img {

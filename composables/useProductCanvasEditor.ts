@@ -32,7 +32,7 @@ import {
 	resolveEffectKind
 } from '~/utils/canvasEffectFilters'
 import { createEffectAmountBlendFilter, ensureCanvas2dFilterBackend } from '~/utils/canvasEffectAmountFilter'
-import { loadFormatPanelLayout, type FormatPanelLayout } from '~/utils/formatSvgLayout'
+
 import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 import {
 	buildMockupSceneUrl,
@@ -764,39 +764,14 @@ export function useProductCanvasEditor(options: {
 
 	const getPanelGapPx = () => (hasActiveFrame() ? 2 * CANVAS_FRAME_OUTER_PX + 10 : PANEL_GAP_PX)
 
-	/** Раскладка панелей из SVG формата (image_url) — источник правды для «parçalı». */
-	const panelLayoutByFormatId = new Map<number, FormatPanelLayout | null>()
-
-	const ensureFormatPanelLayout = async (
-		format: CanvasFormat | null | undefined
-	): Promise<FormatPanelLayout | null> => {
-		if (!format || !import.meta.client) return null
-		const id = Number(format.id)
-		if (panelLayoutByFormatId.has(id)) return panelLayoutByFormatId.get(id) ?? null
-		const url = format.image_url?.trim()
-		const layout = url ? await loadFormatPanelLayout(mediaUrlForCanvas(url)) : null
-		panelLayoutByFormatId.set(id, layout)
-		return layout
-	}
-
 	/** Во время прохода превью форматов — панели снимаемого формата, не выбранного. */
 	let panelFormatOverride: CanvasFormat | null = null
 
 	const getActivePanelFormat = () => panelFormatOverride ?? selectedFormat.value
 
-	const getActivePanelLayout = (): FormatPanelLayout | null => {
-		const format = getActivePanelFormat()
-		if (!format) return null
-		const layout = panelLayoutByFormatId.get(Number(format.id)) ?? null
-		return layout && layout.panels.length > 1 ? layout : null
-	}
-
-	const getActivePanelCount = () => getActivePanelLayout()?.panels.length ?? formatPanelCount(getActivePanelFormat())
+	const getActivePanelCount = () => formatPanelCount(getActivePanelFormat())
 
 	const resolvePanelCountForFormat = (format: CanvasFormat | null | undefined): number => {
-		if (!format) return 1
-		const cached = panelLayoutByFormatId.get(Number(format.id))
-		if (cached && cached.panels.length > 1) return cached.panels.length
 		return formatPanelCount(format)
 	}
 
@@ -824,29 +799,24 @@ export function useProductCanvasEditor(options: {
 		centerLeft: number,
 		centerTop: number
 	): { left: number; top: number; width: number; height: number }[] => {
-		const layout = getActivePanelLayout()
-		if (layout) {
-			const originLeft = centerLeft - faceW / 2
-			const originTop = centerTop - faceH / 2
-			return layout.panels.map((p) => ({
-				left: originLeft + p.left * faceW,
-				top: originTop + p.top * faceH,
-				width: Math.max(1, p.width * faceW),
-				height: Math.max(1, p.height * faceH)
-			}))
-		}
-
-		// SVG не распарсился — равномерный вертикальный сплит по числу панелей из имени.
+		// Равномерный вертикальный сплит по числу панелей из имени.
+		const format = getActivePanelFormat()
 		const panels = getActivePanelCount()
 		const gap = getPanelGapPx()
 		const panelW = Math.max(1, (faceW - gap * (panels - 1)) / panels)
 		const rects: { left: number; top: number; width: number; height: number }[] = []
 		for (let i = 0; i < panels; i++) {
+			let panelH = faceH
+			if (format?.layout_template === '3-split' && panels === 3) {
+				if (i === 0 || i === 2) {
+					panelH = faceH * 0.8
+				}
+			}
 			rects.push({
 				left: centerLeft - faceW / 2 + i * (panelW + gap) + panelW / 2,
 				top: centerTop,
 				width: panelW,
-				height: faceH
+				height: panelH
 			})
 		}
 		return rects
@@ -1012,12 +982,7 @@ export function useProductCanvasEditor(options: {
 		const maxW = viewportW.value * PRINT_AREA_VIEWPORT_RATIO
 		const maxH = viewportH.value * PRINT_AREA_VIEWPORT_RATIO
 
-		// Многопанельный формат: пропорция холста — из SVG с API, не из имени/размера.
-		const svgLayout = panelLayoutByFormatId.get(Number(format.id))
-		const svgAspect = svgLayout && svgLayout.panels.length > 1 ? svgLayout.aspect : null
-
 		const aspect =
-			svgAspect ??
 			(opts?.preferSize && size && size.height > 0 ? formatAspect(format, size) : formatOrientationAspect(format))
 
 		return printBoxInViewport(aspect, maxW, maxH)
@@ -1039,7 +1004,7 @@ export function useProductCanvasEditor(options: {
 	/** Refit под формат для снимка превью — без смены selectedFormat (нет мигания UI). */
 	const applyFormatPreviewLayout = async (format: CanvasFormat, size: PrintSizeOption | null) => {
 		if (!fabricCanvas) return
-		await ensureFormatPanelLayout(format)
+
 		panelFormatOverride = format
 		try {
 			const { width, height } = getPrintDimensionsForFormat(format, size)
@@ -3111,7 +3076,7 @@ export function useProductCanvasEditor(options: {
 		const manageLoading = opts?.manageLoading !== false
 		if (manageLoading) beginCanvasLoading()
 		try {
-			await ensureFormatPanelLayout(selectedFormat.value)
+
 			await enforceNoFrameForMultiPanelFormat({ render: false })
 			const { width, height } = getPrintDimensions({ preferSize: opts?.preferSize })
 
@@ -3287,7 +3252,7 @@ export function useProductCanvasEditor(options: {
 		await runWithCanvasLoading(async () => {
 			suppressFormatPreviewWatch = true
 			try {
-				await ensureFormatPanelLayout(format)
+
 				selectedFormat.value = format
 				selectedSize.value = getDefaultSize(format)
 				sizeChosenByUser.value = false
