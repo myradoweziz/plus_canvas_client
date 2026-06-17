@@ -286,6 +286,51 @@ export const useCartStore = defineStore('cart', () => {
         }
     }
 
+    const finalTotal = computed(() => {
+        let ft = total.value - couponDiscount.value
+        if (ft < 0) ft = 0
+        return ft
+    })
+
+    const isApplyingCoupon = ref(false)
+
+    const applyCoupon = async (code: string) => {
+        if (!code || !code.trim()) return
+        isApplyingCoupon.value = true
+        try {
+            const { $customFetch, $toast } = useNuxtApp()
+            const headers: any = {}
+            if (sessionId.value) {
+                headers['X-Session-ID'] = sessionId.value
+            }
+            const response: any = await $customFetch('/api/orders/apply-coupon', {
+                method: 'POST',
+                headers,
+                body: {
+                    coupon_code: code.trim(),
+                    subtotal: subtotal.value
+                }
+            })
+            if (response && response.success) {
+                couponDiscount.value = response.discount_amount || 0
+                appliedCoupon.value = code.trim()
+                $toast.success('Kupon başarıyla uygulandı.')
+            }
+        } catch (error: any) {
+            const { $toast } = useNuxtApp()
+            $toast.error(error.response?._data?.message || 'Geçersiz kupon kodu.')
+            couponDiscount.value = 0
+            appliedCoupon.value = null
+        } finally {
+            isApplyingCoupon.value = false
+        }
+    }
+
+    const removeCoupon = () => {
+        couponDiscount.value = 0
+        appliedCoupon.value = null
+    }
+
     return {
         isCartOpen,
         cartItems,
@@ -293,8 +338,12 @@ export const useCartStore = defineStore('cart', () => {
         subtotal,
         shipping,
         total,
+        finalTotal,
         couponDiscount,
         appliedCoupon,
+        isApplyingCoupon,
+        applyCoupon,
+        removeCoupon,
         openCart,
         closeCart,
         toggleCart,

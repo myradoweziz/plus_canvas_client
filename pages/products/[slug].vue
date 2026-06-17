@@ -169,12 +169,24 @@
 		}
 	}
 
-	const homeStore = useHomeStore()
-	await homeStore.fetchProducts()
+	const config = useRuntimeConfig()
+	const { data: relatedData } = await useFetch<{ data: Product[] }>(
+		() => `/api/canvas-products`,
+		{
+			method: 'GET',
+			baseURL: config.public.baseUrl,
+			params: {
+				category_id: product.value?.category_id || undefined,
+				limit: 15
+			}
+		}
+	)
 
 	const relatedProducts = computed(() => {
-		const list = homeStore.canvasPaintingProducts.length ? homeStore.canvasPaintingProducts : homeStore.products
-		return list
+		if (!relatedData.value?.data) return []
+		return relatedData.value.data
+			.filter((p) => p.id !== product.value?.id)
+			.slice(0, 10)
 	})
 
 	const swiperModules = [Navigation, Autoplay]

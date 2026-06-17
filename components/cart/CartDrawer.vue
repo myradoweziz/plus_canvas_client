@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useCartStore } from '~/stores/cart'
 import { cartItemHasFormatOptions } from '~/utils/cartItemPreview'
 import Icon from '~/utils/ui/Icon.vue'
@@ -9,6 +9,23 @@ const cartStore = useCartStore()
 const formatPrice = (price: any) => {
 	return Number(price || 0).toFixed(2).replace('.00', '')
 }
+
+const couponCode = ref('')
+
+const applyCoupon = async () => {
+	await cartStore.applyCoupon(couponCode.value)
+}
+
+const removeCoupon = () => {
+	cartStore.removeCoupon()
+	couponCode.value = ''
+}
+
+watch(() => cartStore.appliedCoupon, (val) => {
+	if (val) {
+		couponCode.value = val
+	}
+}, { immediate: true })
 
 </script>
 
@@ -130,8 +147,16 @@ const formatPrice = (price: any) => {
 										</button>
 									</div>
 
-									<div class="font-bold text-gray-900 text-[15px]">
-										{{ formatPrice((item.unit_price || 0) * item.quantity) }}₺
+									<div class="text-right">
+										<div class="font-bold text-gray-900 text-[15px]">
+											{{ formatPrice((item.unit_price || 0) * item.quantity) }}₺
+										</div>
+										<div
+											class="text-[11px] font-medium text-gray-400 line-through mt-0.5"
+											v-if="(item.old_price && item.old_price > item.unit_price) || item.canvas_product?.discount > 0 || item.canvas_product?.calculated_discount"
+										>
+											{{ formatPrice((item.old_price || item.canvas_product?.price || 0) * item.quantity) }}₺
+										</div>
 									</div>
 								</div>
 							</div>
@@ -176,13 +201,27 @@ const formatPrice = (price: any) => {
 								<Icon name="ticket" class="w-4 h-4" />
 							</div>
 							<input
+								v-model="couponCode"
+								:disabled="cartStore.isApplyingCoupon || !!cartStore.appliedCoupon"
 								type="text"
 								placeholder="KUPON KODU GİRİNİZ"
-								class="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm font-medium focus:ring-2 focus:ring-[#1853a0]/20 focus:border-[#1853a0] transition-all"
+								class="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm font-medium focus:ring-2 focus:ring-[#1853a0]/20 focus:border-[#1853a0] transition-all outline-none"
 							/>
 						</div>
-						<button class="bg-[#111827] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors">
-							Uygula
+						<button
+							v-if="!cartStore.appliedCoupon"
+							@click="applyCoupon"
+							:disabled="cartStore.isApplyingCoupon || !couponCode"
+							class="bg-[#111827] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{{ cartStore.isApplyingCoupon ? '...' : 'Uygula' }}
+						</button>
+						<button
+							v-else
+							@click="removeCoupon"
+							class="bg-red-50 text-red-600 px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors"
+						>
+							İptal
 						</button>
 					</div>
 
@@ -191,6 +230,10 @@ const formatPrice = (price: any) => {
 						<div class="flex justify-between items-center">
 							<span>Ara Toplam</span>
 							<span class="font-medium text-gray-900">{{ formatPrice(cartStore.subtotal) }}₺</span>
+						</div>
+						<div v-if="cartStore.couponDiscount > 0" class="flex justify-between items-center text-emerald-600">
+							<span>İndirim ({{ cartStore.appliedCoupon }})</span>
+							<span class="font-bold">-{{ formatPrice(cartStore.couponDiscount) }}₺</span>
 						</div>
 						<div class="flex justify-between items-center">
 							<span>Kargo</span>
@@ -201,7 +244,7 @@ const formatPrice = (price: any) => {
 						
 						<div class="flex justify-between items-center pt-3 border-t border-gray-200 mt-1">
 							<span class="font-bold text-gray-900 text-base">Toplam</span>
-							<span class="font-bold text-[#e11d48] text-lg">{{ formatPrice(cartStore.total) }}₺</span>
+							<span class="font-bold text-[#e11d48] text-lg">{{ formatPrice(cartStore.finalTotal) }}₺</span>
 						</div>
 					</div>
 

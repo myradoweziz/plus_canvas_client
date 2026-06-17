@@ -6,6 +6,23 @@
 
 	const cartStore = useCartStore()
 
+	const couponCode = ref('')
+
+	const applyCoupon = async () => {
+		await cartStore.applyCoupon(couponCode.value)
+	}
+
+	const removeCoupon = () => {
+		cartStore.removeCoupon()
+		couponCode.value = ''
+	}
+
+	watch(() => cartStore.appliedCoupon, (val) => {
+		if (val) {
+			couponCode.value = val
+		}
+	}, { immediate: true })
+
 	const formatPrice = (price: any) => {
 		return Number(price || 0)
 			.toFixed(2)
@@ -139,9 +156,9 @@
 										{{ formatPrice((item.unit_price || 0) * item.quantity) }}₺
 										<span
 											class="text-sm font-medium text-gray-400 line-through ml-2"
-											v-if="item.canvas_product?.discount > 0"
+											v-if="(item.old_price && item.old_price > item.unit_price) || item.canvas_product?.discount > 0 || item.canvas_product?.calculated_discount"
 										>
-											{{ formatPrice((item.canvas_product.price || 0) * item.quantity) }}₺
+											{{ formatPrice((item.old_price || item.canvas_product?.price || 0) * item.quantity) }}₺
 										</span>
 									</div>
 
@@ -213,15 +230,27 @@
 										<Icon name="ticket" class="w-4 h-4" />
 									</div>
 									<input
+										v-model="couponCode"
+										:disabled="cartStore.isApplyingCoupon || !!cartStore.appliedCoupon"
 										type="text"
 										placeholder="Kodu giriniz"
 										class="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-[#1853a0]/20 focus:border-[#1853a0] transition-all outline-none"
 									/>
 								</div>
 								<button
-									class="bg-[#111827] text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors"
+									v-if="!cartStore.appliedCoupon"
+									@click="applyCoupon"
+									:disabled="cartStore.isApplyingCoupon || !couponCode"
+									class="bg-[#111827] text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 								>
-									Uygula
+									{{ cartStore.isApplyingCoupon ? 'Uygulanıyor...' : 'Uygula' }}
+								</button>
+								<button
+									v-else
+									@click="removeCoupon"
+									class="bg-red-50 text-red-600 px-6 py-3 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
+								>
+									İptal Et
 								</button>
 							</div>
 						</div>
@@ -233,6 +262,10 @@
 							<div class="flex justify-between items-center">
 								<span>Ara Toplam</span>
 								<span class="font-bold text-gray-900">{{ formatPrice(cartStore.subtotal) }}₺</span>
+							</div>
+							<div v-if="cartStore.couponDiscount > 0" class="flex justify-between items-center text-emerald-600">
+								<span>İndirim ({{ cartStore.appliedCoupon }})</span>
+								<span class="font-bold">-{{ formatPrice(cartStore.couponDiscount) }}₺</span>
 							</div>
 							<div class="flex justify-between items-center">
 								<span>Kargo</span>
@@ -250,18 +283,18 @@
 
 							<div class="flex justify-between items-center pt-4 border-t border-gray-100 mt-2">
 								<span class="font-extrabold text-gray-900 text-lg">Toplam</span>
-								<span class="font-extrabold text-[#e11d48] text-2xl">{{ formatPrice(cartStore.total) }}₺</span>
+								<span class="font-extrabold text-[#e11d48] text-2xl">{{ formatPrice(cartStore.finalTotal) }}₺</span>
 							</div>
 						</div>
 
 						<!-- Checkout Button -->
-						<nuxt-link
+						<NuxtLink
 							to="/checkout"
-							class="w-full bg-[#ef4444] text-white py-4 rounded-2xl font-bold text-lg hover:bg-[#dc2626] transition-colors shadow-lg shadow-red-500/25 mt-8 flex items-center justify-center gap-2 group cursor-pointer"
+							class="w-full mt-4 bg-[#2B7FFF] text-white font-bold py-4 px-4 rounded-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 group shadow-sm"
 						>
 							Ödemeye Geç
 							<Icon name="arrowRight" class="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-						</nuxt-link>
+						</NuxtLink>
 						<p class="text-center text-xs text-gray-400 font-medium mt-4 flex items-center justify-center gap-1.5">
 							<Icon name="checkCircle" class="w-3.5 h-3.5" />
 							256-bit SSL ile güvenli ödeme
