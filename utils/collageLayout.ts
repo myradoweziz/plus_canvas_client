@@ -165,6 +165,18 @@ export function extractCollageLayoutFromProduct(product: unknown): CollageLayout
 	const raw = row.collage_layout ?? row.collageLayout
 	const productLayoutId = readCollageLayoutId(product)
 
+	if (row.layout_template === '2-split-vertical') {
+		return {
+			layout_json: [
+				{ slot: 0, x: 0, y: 0, w: 300, h: 295 },
+				{ slot: 1, x: 0, y: 305, w: 300, h: 295 }
+			],
+			reference_width: 300,
+			reference_height: 600,
+			max_images: 2
+		}
+	}
+
 	if (!raw || typeof raw !== 'object') {
 		const slotsFromRoot = parseLayoutJson(row.layout_json ?? row.layoutJson)
 		if (!slotsFromRoot.length) return null

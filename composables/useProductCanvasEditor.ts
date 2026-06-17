@@ -110,7 +110,21 @@ export function useProductCanvasEditor(options: {
 	/** Форматы для UI (полоса/сайдбар) — без технического fallback. */
 	const displayFormatPresets = computed(() => formatPresets.value.filter((f) => !f.synthetic))
 	const frameOptions = computed(() => withNoFrameOption(options.canvasFrames?.value ?? []))
-	const collageLayout = computed(() => extractCollageLayoutFromProduct(options.product?.value))
+	const collageLayout = computed(() => {
+		const formatTemplate = selectedFormat.value?.layout_template
+		if (formatTemplate === '2-split-vertical') {
+			return {
+				layout_json: [
+					{ slot: 0, x: 0, y: 0, w: 300, h: 295 },
+					{ slot: 1, x: 0, y: 305, w: 300, h: 295 }
+				],
+				reference_width: 300,
+				reference_height: 600,
+				max_images: 2
+			}
+		}
+		return extractCollageLayoutFromProduct(options.product?.value)
+	})
 	const isCanvasPaintingGallery = computed(() => isCanvasPaintingGalleryProduct(options.product?.value))
 	const useStaticFormatPreviews = computed(() => isCanvasPaintingGallery.value)
 	const canvasPaintingArtworkUrl = computed(() => getCanvasPaintingArtworkUrl(options.product?.value))
