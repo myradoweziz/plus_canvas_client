@@ -138,13 +138,15 @@ export const useHomeStore = defineStore('home', () => {
 	}
 
 	async function fetchHomePage() {
-		await fetchBanners()
-		await fetchFeaturedCategories()
-		await fetchMainCategories()
-		await fetchStocks()
-		await fetchFaqs()
-		await fetchProducts()
-		await fetchSubCategories()
+		await Promise.all([
+			fetchBanners(),
+			fetchFeaturedCategories(),
+			fetchMainCategories(),
+			fetchStocks(),
+			fetchFaqs(),
+			fetchProducts(),
+			fetchSubCategories()
+		])
 	}
 
 	return {

@@ -30,12 +30,13 @@
 			{ name: 'Anılar için Hediye', href: '#' }
 		],
 		about: [
-			{ name: 'Biz Kimiz?', href: '/about' },
-			{ name: 'Garanti', href: '#' },
-			{ name: 'Teslimat', href: '#' },
-			{ name: 'Üyelik Bilgileri', href: '#' },
-			{ name: 'Bize Ulaşın', href: '#' },
-			{ name: 'BLOG', href: '#' }
+			{ name: 'Hakkımızda', href: '/sayfa/hakkimizda' },
+			{ name: 'Biz Kimiz?', href: '/sayfa/biz-kimiz' },
+			{ name: 'Garanti', href: '/sayfa/garanti' },
+			{ name: 'Teslimat', href: '/sayfa/teslimat' },
+			{ name: 'Üyelik Bilgileri', href: '/sayfa/uyelik-bilgileri' },
+			{ name: 'Bize Ulaşın', href: '/sayfa/bize-ulasin' },
+			{ name: 'BLOG', href: '/sayfa/blog' }
 		]
 	})
 
@@ -143,9 +144,9 @@
 					<h4 class="font-bold text-[#101828] text-base mb-6">Hakkımızda</h4>
 					<ul class="space-y-4">
 						<li v-for="link in footerLinks.about" :key="link.name">
-							<a :href="link.href" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
+							<nuxt-link :to="link.href" class="text-gray-500 hover:text-[#215EA5] text-sm md:text-[15px] transition-colors">
 								{{ link.name }}
-							</a>
+							</nuxt-link>
 						</li>
 					</ul>
 				</div>
