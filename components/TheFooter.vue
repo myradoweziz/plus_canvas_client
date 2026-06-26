@@ -30,12 +30,11 @@
 			{ name: 'Anılar için Hediye', href: '#' }
 		],
 		about: [
-			{ name: 'Hakkımızda', href: '/sayfa/hakkimizda' },
-			{ name: 'Biz Kimiz?', href: '/sayfa/biz-kimiz' },
-			{ name: 'Garanti', href: '/sayfa/garanti' },
-			{ name: 'Teslimat', href: '/sayfa/teslimat' },
-			{ name: 'Üyelik Bilgileri', href: '/sayfa/uyelik-bilgileri' },
-			{ name: 'Bize Ulaşın', href: '/sayfa/bize-ulasin' },
+			{ name: 'Biz Kimiz?', href: '/sayfa/hakkimizda' },
+			{ name: 'Garanti', href: '/sayfa/pluscanvas-garantisi' },
+			{ name: 'Teslimat', href: '/sayfa/teslimat-bilgileri' },
+			{ name: 'Üyelik Bilgileri', href: '/sayfa/odeme-bilgileri' },
+			{ name: 'Bize Ulaşın', href: '/sayfa/tekil-blog-yazisi' },
 			{ name: 'BLOG', href: '/sayfa/blog' }
 		]
 	})

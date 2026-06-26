@@ -1,31 +1,5 @@
-<script setup lang="ts">
-	import type { ContactInfo } from '~/utils/types'
-
-	const config = useRuntimeConfig()
-
-	type ContactInfoApiResponse = { data: ContactInfo }
-	const { data: contactInfoData } = await useFetch<ContactInfoApiResponse>('/api/contact-info', {
-		baseURL: config.public.baseUrl,
-		method: 'GET'
-	})
-
-	const contactInfo = computed<ContactInfo>(() => contactInfoData.value?.data ?? ({} as ContactInfo))
-
-	const homeStore = useHomeStore()
-	const cartStore = useCartStore()
-	const wishlistStore = useWishlistStore()
-
-	onMounted(() => {
-		void homeStore.ensureCategoryMenuData()
-		void cartStore.fetchCart()
-		void wishlistStore.fetchWishlist()
-	})
-</script>
-
 <template>
-	<div class="min-h-screen flex flex-col bg-[#F5F2ED]">
-		<the-header :contact-info="contactInfo" />
-
+	<div class="bg-[#F5F2ED] flex-1 flex flex-col w-full h-full">
 		<section class="flex-1">
 			<header class="bg-white border-b border-gray-100">
 				<div class="max-w-[1400px] mx-auto px-4 md:px-10 py-10 md:py-8">
@@ -41,8 +15,6 @@
 				</div>
 			</div>
 		</section>
-
-		<the-footer :contact-info="contactInfo" />
 	</div>
 </template>
 
