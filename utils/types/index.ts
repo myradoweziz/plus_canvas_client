@@ -12,6 +12,13 @@ export interface BreadcrumbItem {
 	link?: string
 }
 
+export type SocialLink = {
+	platform: string
+	url: string
+	image?: string
+	image_url?: string
+}
+
 export type ContactInfo = {
 	phone_number: string
 	address: string
@@ -19,4 +26,5 @@ export type ContactInfo = {
 	logo: string
 	logo_path: string
 	slogan: string
+	social_links?: SocialLink[]
 }

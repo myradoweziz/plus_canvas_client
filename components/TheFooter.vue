@@ -187,24 +187,15 @@
 						</div>
 
 						<!-- Social Icons -->
-						<div class="flex items-center gap-3 pt-2">
+						<div v-if="contactInfo.social_links && contactInfo.social_links.length > 0" class="flex items-center gap-3 pt-2">
 							<a
-								href="#"
+								v-for="social in contactInfo.social_links"
+								:key="social.platform"
+								:href="social.url"
+                                target="_blank"
 								class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-[#215EA5] hover:bg-gray-50 transition-colors"
 							>
-								<Icon name="facebook" class="w-5 h-5" />
-							</a>
-							<a
-								href="#"
-								class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-[#215EA5] hover:bg-gray-50 transition-colors"
-							>
-								<Icon name="instagram" class="w-5 h-5" />
-							</a>
-							<a
-								href="#"
-								class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-[#215EA5] hover:bg-gray-50 transition-colors"
-							>
-								<Icon name="linkedin" class="w-5 h-5" />
+								<Icon :name="social.platform.toLowerCase()" class="w-5 h-5" />
 							</a>
 						</div>
 					</div>

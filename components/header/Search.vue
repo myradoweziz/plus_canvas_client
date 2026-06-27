@@ -3,9 +3,24 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import Icon from '~/utils/ui/Icon.vue'
 import { useRouter } from 'vue-router'
 import { useNuxtApp } from '#app'
+import { useHomeStore } from '~/stores/home'
 
 const { $customFetch } = useNuxtApp()
 const router = useRouter()
+const homeStore = useHomeStore()
+
+const getDiscountPrice = (item: any) => {
+    if (item.discount_price) return item.discount_price
+    if (item.type === 'product') {
+        const product = homeStore.products.find(p => p.id === item.id)
+        if (product && product.discount_price) return product.discount_price
+    }
+    return null
+}
+
+const formatPrice = (price: any) => {
+    return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
+}
 
 const searchQuery = ref('')
 const results = ref<any[]>([])
@@ -117,7 +132,10 @@ const performSearch = () => {
 					</div>
 					<div class="flex-1 min-w-0">
 						<p class="text-[14px] font-medium text-[#101828] truncate">{{ item.name }}</p>
-                        <p v-if="item.type === 'product' && item.price" class="text-xs text-[#215EA5] mt-0.5">{{ item.price }} ₺</p>
+                        <p v-if="item.type === 'product' && item.price" class="text-xs mt-0.5 flex items-center gap-1.5">
+							<span v-if="getDiscountPrice(item)" class="line-through text-gray-400">{{ formatPrice(item.price) }} ₺</span>
+							<span class="font-bold text-[#215EA5]">{{ formatPrice(getDiscountPrice(item) ?? item.price) }} ₺</span>
+						</p>
 					</div>
 				</li>
 				<li v-if="results.length === 0 && searchQuery.length >= 2" class="px-4 py-4 text-[14px] text-gray-500 text-center">

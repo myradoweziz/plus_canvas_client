@@ -13,7 +13,7 @@
 	const cartStore = useCartStore()
 
 	const formatPrice = (price: any) => {
-		return Number(price || 0).toFixed(2).replace('.00', '')
+		return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
 	}
 
 	onMounted(() => {
@@ -23,6 +23,21 @@
 	const moveToCart = (item: any) => {
 		cartStore.addToCart(item.canvas_product_id, 1, item.options)
 		wishlistStore.removeFromWishlist(item.id)
+	}
+
+	const isDeleteModalOpen = ref(false)
+	const deletingItemId = ref<number | null>(null)
+
+	const confirmDeleteFavorite = (id: number) => {
+		deletingItemId.value = id
+		isDeleteModalOpen.value = true
+	}
+
+	const deleteFavorite = () => {
+		if (deletingItemId.value) {
+			wishlistStore.removeFromWishlist(deletingItemId.value)
+			isDeleteModalOpen.value = false
+		}
 	}
 </script>
 
@@ -51,14 +66,8 @@
 				:key="item.id"
 				class="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 rounded-2xl bg-white relative group border border-gray-100 shadow-sm"
 			>
-				<!-- Product Image -->
 				<div class="w-[100px] h-[100px] sm:w-[120px] sm:h-[120px] rounded-xl overflow-hidden bg-gray-50 shrink-0 border border-gray-100">
-					<img
-						v-if="item.canvas_product?.image?.url"
-						:src="item.canvas_product.image.url"
-						:alt="item.canvas_product?.name"
-						class="w-full h-full object-cover"
-					/>
+					<CartItemThumb :item="item" />
 				</div>
 
 				<!-- Info -->
@@ -70,7 +79,7 @@
 							</nuxt-link>
 						</h4>
 						<button
-							@click="wishlistStore.removeFromWishlist(item.id)"
+							@click="confirmDeleteFavorite(item.id)"
 							class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
 							title="Sil"
 						>
@@ -105,5 +114,13 @@
 				</div>
 			</div>
 		</div>
+
+		<ConfirmModal
+			:is-open="isDeleteModalOpen"
+			title="Favoriyi Sil"
+			message="Bu ürünü favorilerinizden silmek istediğinize emin misiniz?"
+			@confirm="deleteFavorite"
+			@cancel="isDeleteModalOpen = false"
+		/>
 	</section>
 </template>

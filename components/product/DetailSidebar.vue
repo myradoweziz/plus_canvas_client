@@ -155,7 +155,8 @@
 				canvas_format_id: props.selectedFormatId,
 				canvas_size_id: props.selectedSizeId,
 				canvas_frame_id: props.activeFrameId,
-				...(props.editorOptions || {})
+				...(props.editorOptions || {}),
+				...(props.cartPreviewSrc?.trim() ? { preview_src: props.cartPreviewSrc.trim() } : {})
 			}
 			await wishlistStore.addToWishlist(props.product.id, options)
 			// triggerToast is not needed as the store shows its own toast, but if we want to show this custom toast:

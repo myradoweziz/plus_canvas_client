@@ -275,12 +275,29 @@
 		target.value = ''
 	}
 
-	const removeImage = (id: number) => {
-		uploadedImages.value = uploadedImages.value.filter((img) => img.id !== id)
+	const isDeleteModalOpen = ref(false)
+	const isDeleteAllModalOpen = ref(false)
+	const deletingImageId = ref<number | null>(null)
+
+	const confirmRemoveImage = (id: number) => {
+		deletingImageId.value = id
+		isDeleteModalOpen.value = true
+	}
+
+	const removeImage = () => {
+		if (deletingImageId.value) {
+			uploadedImages.value = uploadedImages.value.filter((img) => img.id !== deletingImageId.value)
+			isDeleteModalOpen.value = false
+		}
+	}
+
+	const confirmResetUpload = () => {
+		isDeleteAllModalOpen.value = true
 	}
 
 	const resetUpload = () => {
 		clearUploaderState()
+		isDeleteAllModalOpen.value = false
 	}
 
 	const goNext = () => {
@@ -382,7 +399,7 @@
 									<button
 										v-if="!img.isUploading"
 										type="button"
-										@click="removeImage(img.id)"
+										@click="confirmRemoveImage(img.id)"
 										class="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur shadow-md rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all text-gray-500 z-[1]"
 									>
 										<Icon name="close" class="w-4 h-4" />
@@ -423,7 +440,7 @@
 									Devam Et
 								</button>
 								<button
-									@click="resetUpload"
+									@click="confirmResetUpload"
 									class="bg-white border border-gray-200 text-gray-600 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-gray-50 transition-all"
 								>
 									Hepsini Sil
@@ -496,6 +513,22 @@
 				</div>
 			</div>
 		</Transition>
+
+		<ConfirmModal
+			:is-open="isDeleteModalOpen"
+			title="Görseli Sil"
+			message="Bu görseli silmek istediğinize emin misiniz?"
+			@confirm="removeImage"
+			@cancel="isDeleteModalOpen = false"
+		/>
+
+		<ConfirmModal
+			:is-open="isDeleteAllModalOpen"
+			title="Hepsini Sil"
+			message="Tüm yüklenen görselleri silmek istediğinize emin misiniz?"
+			@confirm="resetUpload"
+			@cancel="isDeleteAllModalOpen = false"
+		/>
 	</Teleport>
 </template>
 

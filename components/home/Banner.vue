@@ -3,10 +3,11 @@
 
 	import Icon from '~/utils/ui/Icon.vue'
 
-	import { getProductImageUrl } from '~/utils/collageLayout'
+	import { getPrimaryProductBackgroundUrl } from '~/utils/collageLayout'
 	import { mediaUrlForCanvas } from '~/utils/mediaUrl'
 	import { productPagePath } from '~/utils/productRoute'
 	import type { Banner, BreadcrumbItem, MainCategory } from '~/utils/types'
+	import { useHomeStore } from '~/stores/home'
 
 	const props = withDefaults(
 		defineProps<{
@@ -21,9 +22,14 @@
 			mainCategory?: MainCategory
 		}>(),
 		{
-			banners: () => []
 		}
 	)
+
+	const homeStore = useHomeStore()
+	const getBannerProduct = (banner: Banner) => {
+		if (!banner.product) return null
+		return homeStore.products.find((p) => p.id === banner.product!.id) || banner.product
+	}
 
 	const route = useRoute()
 	/** Ortada büyük başlık: yalnızca ürün listesi (`/products`) */
@@ -114,9 +120,9 @@
 						class="hidden md:flex absolute right-4 md:right-[-200px] bottom-8 lg:bottom-12 bg-white rounded-2xl p-3 shadow-2xl gap-4 w-[360px] lg:w-[440px] max-h-[170px] cursor-pointer hover:-translate-y-1 transition-all pointer-events-auto"
 					>
 						<img
-							v-if="banner.product?.image"
-							:src="mediaUrlForCanvas(getProductImageUrl(banner.product.image))"
-							alt="Almond blossom"
+							v-if="getPrimaryProductBackgroundUrl(getBannerProduct(banner))"
+							:src="mediaUrlForCanvas(getPrimaryProductBackgroundUrl(getBannerProduct(banner))!)"
+							:alt="banner.product.name"
 							class="w-full h-full max-w-[190px] max-h-[150px] rounded-xl object-cover shrink-0"
 						/>
 						<div class="flex flex-col pb-2">

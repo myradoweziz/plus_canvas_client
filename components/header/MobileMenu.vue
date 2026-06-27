@@ -22,8 +22,7 @@
 			mid != null && Number.isFinite(Number(mid)) ? `/products?main_category_id=${mid}` : '/products'
 		return [
 			{ id: 0, title: 'KİŞİYE ÖZEL KANVAS TABLO', link: personalizedLink },
-			{ id: 1, title: 'KATEGORİLER', link: '/products' },
-			{ id: 2, title: 'GALERI', link: '/gallery' }
+			{ id: 1, title: 'KATEGORİLER', link: '/products' }
 		] as const
 	})
 
@@ -135,30 +134,17 @@
 						<nuxt-link to="/register" class="hover:text-[#215EA5] transition-colors" @click="close">Kayıt Ol</nuxt-link>
 					</div>
 
-					<div class="mt-10 flex items-center justify-center gap-3">
+					<div v-if="contactInfo.social_links && contactInfo.social_links.length > 0" class="mt-10 flex items-center justify-center gap-3">
 						<a
-							href="#"
+							v-for="social in contactInfo.social_links"
+							:key="social.platform"
+							:href="social.url"
+                            target="_blank"
 							class="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-[#215EA5] hover:bg-gray-50 transition-colors"
-							aria-label="Facebook"
+							:aria-label="social.platform"
 							@click="close"
 						>
-							<Icon name="facebook" class="h-5 w-5" />
-						</a>
-						<a
-							href="#"
-							class="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-[#215EA5] hover:bg-gray-50 transition-colors"
-							aria-label="Instagram"
-							@click="close"
-						>
-							<Icon name="instagram" class="h-5 w-5" />
-						</a>
-						<a
-							href="#"
-							class="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-[#215EA5] hover:bg-gray-50 transition-colors"
-							aria-label="YouTube"
-							@click="close"
-						>
-							<Icon name="youtube" class="h-5 w-5" />
+							<Icon :name="social.platform.toLowerCase()" class="h-5 w-5" />
 						</a>
 					</div>
 

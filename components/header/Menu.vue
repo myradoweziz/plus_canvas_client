@@ -34,8 +34,7 @@
 
 	const menu = computed(() => [
 		{ id: 0, title: 'KİŞİYE ÖZEL KANVAS TABLO', link: `/products?main_category_id=${homeStore.mainCategoryId}` },
-		{ id: 1, title: 'KATEGORİLER', link: '/products' },
-		{ id: 2, title: 'GALERI', link: '/gallery' }
+		{ id: 1, title: 'KATEGORİLER', link: '/products' }
 	])
 
 	watch(

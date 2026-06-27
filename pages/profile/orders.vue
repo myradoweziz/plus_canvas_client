@@ -75,8 +75,8 @@
 		}).format(date)
 	}
 
-	const formatPrice = (price: number) => {
-		return Number(price).toFixed(2).replace('.00', '')
+	const formatPrice = (price: number | any) => {
+		return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
 	}
 
 	const toggleOrder = (order: Order) => {

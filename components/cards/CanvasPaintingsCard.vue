@@ -59,6 +59,10 @@
 		return props.product.discount > 0 ? props.product.discount : 0
 	})
 
+	const formatPrice = (price: any) => {
+		return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
+	}
+
 	const uploadMaxImages = computed(() => getProductUploadMaxImages(props.product))
 
 	const cardImages = computed(() => {
@@ -159,10 +163,12 @@
 					{{ product.name }}
 				</h3>
 				<div class="flex items-center gap-2 mt-1.5 md:mt-2">
-					<span v-if="displayDiscount > 0" class="text-sm md:text-[14px] font-medium text-gray-400 line-through"
-						>₺{{ product.price }}</span
+					<span
+						v-if="displayDiscount > 0"
+						class="text-sm md:text-[14px] font-medium text-gray-400 line-through"
+						>₺{{ formatPrice(product.price) }}</span
 					>
-					<span class="text-lg md:text-[18px] font-bold text-[#1853a0]">₺{{ discountedPrice }}</span>
+					<span class="text-lg md:text-[18px] font-bold text-[#1853a0]">₺{{ formatPrice(discountedPrice) }}</span>
 				</div>
 
 				<!-- Кнопка -->

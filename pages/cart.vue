@@ -24,14 +24,27 @@
 	}, { immediate: true })
 
 	const formatPrice = (price: any) => {
-		return Number(price || 0)
-			.toFixed(2)
-			.replace('.00', '')
+		return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
 	}
 
 	onMounted(() => {
 		cartStore.fetchCart()
 	})
+
+	const isDeleteModalOpen = ref(false)
+	const deletingItemId = ref<number | null>(null)
+
+	const confirmDeleteCartItem = (id: number) => {
+		deletingItemId.value = id
+		isDeleteModalOpen.value = true
+	}
+
+	const deleteCartItem = () => {
+		if (deletingItemId.value) {
+			cartStore.removeFromCart(deletingItemId.value)
+			isDeleteModalOpen.value = false
+		}
+	}
 </script>
 
 <template>
@@ -122,7 +135,7 @@
 										</nuxt-link>
 									</h4>
 									<button
-										@click="cartStore.removeFromCart(item.id)"
+										@click="confirmDeleteCartItem(item.id)"
 										class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
 										title="Sil"
 									>
@@ -303,5 +316,13 @@
 				</div>
 			</div>
 		</div>
+
+		<ConfirmModal
+			:is-open="isDeleteModalOpen"
+			title="Ürünü Sil"
+			message="Bu ürünü sepetinizden silmek istediğinize emin misiniz?"
+			@confirm="deleteCartItem"
+			@cancel="isDeleteModalOpen = false"
+		/>
 	</div>
 </template>

@@ -36,6 +36,9 @@
 		is_default: false
 	})
 
+	const isDeleteModalOpen = ref(false)
+	const deletingAddressId = ref<number | null>(null)
+
 	const fetchAddresses = async () => {
 		isLoading.value = true
 		try {
@@ -112,9 +115,17 @@
 		}
 	}
 
-	const deleteAddress = async (id: number) => {
+	const confirmDeleteAddress = (id: number) => {
+		deletingAddressId.value = id
+		isDeleteModalOpen.value = true
+	}
+
+	const deleteAddress = async () => {
+		const id = deletingAddressId.value
+		if (!id) return
+
 		const { $toast } = useNuxtApp()
-		if (!confirm('Bu adresi silmek istediğinize emin misiniz?')) return
+		isDeleteModalOpen.value = false
 
 		try {
 			const { error } = await useCustomFetch(`/api/user/addresses/${id}`, {
@@ -181,7 +192,7 @@
 						<button @click="openEditModal(address)" class="p-2 text-gray-400 hover:text-[#2B7FFF] hover:bg-blue-50 rounded-lg transition-all" title="Düzenle">
 							<Icon name="edit" class="w-5 h-5" />
 						</button>
-						<button @click="deleteAddress(address.id)" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Sil">
+						<button @click="confirmDeleteAddress(address.id)" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Sil">
 							<Icon name="trash" class="w-5 h-5" />
 						</button>
 					</div>
@@ -264,5 +275,13 @@
 				</div>
 			</div>
 		</Teleport>
+
+		<ConfirmModal
+			:is-open="isDeleteModalOpen"
+			title="Adresi Sil"
+			message="Bu adresi silmek istediğinize emin misiniz?"
+			@confirm="deleteAddress"
+			@cancel="isDeleteModalOpen = false"
+		/>
 	</section>
 </template>

@@ -7,7 +7,7 @@ import Icon from '~/utils/ui/Icon.vue'
 const cartStore = useCartStore()
 
 const formatPrice = (price: any) => {
-	return Number(price || 0).toFixed(2).replace('.00', '')
+	return Number(price || 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
 }
 
 const couponCode = ref('')
@@ -27,6 +27,20 @@ watch(() => cartStore.appliedCoupon, (val) => {
 	}
 }, { immediate: true })
 
+const isDeleteModalOpen = ref(false)
+const deletingItemId = ref<number | null>(null)
+
+const confirmDeleteCartItem = (id: number) => {
+	deletingItemId.value = id
+	isDeleteModalOpen.value = true
+}
+
+const deleteCartItem = () => {
+	if (deletingItemId.value) {
+		cartStore.removeFromCart(deletingItemId.value)
+		isDeleteModalOpen.value = false
+	}
+}
 </script>
 
 <template>
@@ -113,7 +127,7 @@ watch(() => cartStore.appliedCoupon, (val) => {
 										{{ item.canvas_product?.name }}
 									</h4>
 									<button
-										@click="cartStore.removeFromCart(item.id)"
+										@click="confirmDeleteCartItem(item.id)"
 										class="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors"
 									>
 										<Icon name="trash" class="w-4 h-4" />
@@ -258,6 +272,14 @@ watch(() => cartStore.appliedCoupon, (val) => {
 				</div>
 			</div>
 		</Transition>
+
+		<ConfirmModal
+			:is-open="isDeleteModalOpen"
+			title="Ürünü Sil"
+			message="Bu ürünü sepetinizden silmek istediğinize emin misiniz?"
+			@confirm="deleteCartItem"
+			@cancel="isDeleteModalOpen = false"
+		/>
 	</Teleport>
 </template>
 

@@ -3,6 +3,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '~/stores/cart'
 import { useAuthStore } from '~/stores/userAuth'
+import { getCartItemThumbSrc } from '~/utils/cartItemPreview'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -29,8 +30,6 @@ const orderResult = ref<any>(null)
 const paytrToken = ref<string | null>(null)
 
 const couponCode = ref('')
-const appliedCoupon = ref<{ code: string, discount_amount: number } | null>(null)
-const isApplyingCoupon = ref(false)
 
 onMounted(async () => {
     if (!cartStore.cartItems.length) {
@@ -61,44 +60,18 @@ const shippingCost = computed(() => {
 
 const totalAmount = computed(() => {
     let t = cartStore.subtotal + shippingCost.value
-    if (appliedCoupon.value) {
-        t -= appliedCoupon.value.discount_amount
+    if (cartStore.appliedCoupon) {
+        t -= cartStore.couponDiscount
     }
     return Math.max(0, t)
 })
 
 const applyCoupon = async () => {
     if (!couponCode.value) return
-    isApplyingCoupon.value = true
-    try {
-        const { $customFetch, $toast } = useNuxtApp()
-        const res: any = await $customFetch('/api/orders/apply-coupon', {
-            method: 'POST',
-            body: {
-                coupon_code: couponCode.value,
-                subtotal: cartStore.subtotal
-            }
-        })
-        if (res && res.success) {
-            appliedCoupon.value = {
-                code: couponCode.value,
-                discount_amount: res.discount_amount
-            }
-            if ($toast) $toast.success('Kupon başarıyla uygulandı!')
-        } else {
-            if ($toast) $toast.error(res?.message || 'Geçersiz kupon kodu.')
-        }
-    } catch (err: any) {
-        const { $toast } = useNuxtApp()
-        if ($toast) $toast.error(err?.response?._data?.message || 'Kupon uygulanamadı.')
-    } finally {
-        isApplyingCoupon.value = false
+    await cartStore.applyCoupon(couponCode.value)
+    if (cartStore.appliedCoupon) {
+        couponCode.value = ''
     }
-}
-
-const removeCoupon = () => {
-    appliedCoupon.value = null
-    couponCode.value = ''
 }
 
 const showValidationErrors = ref(false)
@@ -147,7 +120,7 @@ const submitOrder = async () => {
             shipping_cost: shippingCost.value,
             total: totalAmount.value,
             items: items,
-            coupon_code: appliedCoupon.value ? appliedCoupon.value.code : null,
+            coupon_code: cartStore.appliedCoupon || null,
         }
 
         const headers: any = {}
@@ -214,36 +187,39 @@ const getDeliveryDate = () => {
         <!-- Progress Steps -->
         <div class="bg-white py-4 shadow-sm relative z-10">
             <div class="container mx-auto max-w-5xl px-4">
-                <div class="flex items-center justify-center gap-4 sm:gap-8">
+                <div class="flex items-center justify-center gap-4 sm:gap-6">
                     <!-- Step 1 -->
-                    <div class="flex items-center gap-2" :class="currentStep >= 1 ? 'text-[#2B7FFF]' : 'text-gray-400'">
-                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                    <div class="flex items-center gap-2 text-gray-900">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors"
                             :class="currentStep > 1 ? 'bg-[#22C55E] text-white' : currentStep === 1 ? 'bg-[#2B7FFF] text-white' : 'bg-gray-100 text-gray-500'">
-                            <Icon name="check" class="w-5 h-5" v-if="currentStep > 1" />
-                            <Icon name="box" class="w-4 h-4" v-else />
+                            <svg v-if="currentStep > 1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <span v-else-if="currentStep === 1" class="text-sm">1</span>
+                            <span v-else class="text-sm">1</span>
                         </div>
-                        <span class="font-semibold text-sm hidden sm:block">Teslimat</span>
-                        <Icon name="chevronRight" class="w-4 h-4 text-gray-300 ml-2 sm:ml-4" />
+                        <span class="font-bold text-sm hidden sm:block">Teslimat</span>
+                        <svg class="w-4 h-4 text-gray-300 ml-1 sm:ml-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </div>
                     
                     <!-- Step 2 -->
-                    <div class="flex items-center gap-2" :class="currentStep >= 2 ? 'text-[#2B7FFF]' : 'text-gray-400'">
-                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                    <div class="flex items-center gap-2" :class="currentStep >= 2 ? 'text-gray-900' : 'text-gray-400'">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors"
                             :class="currentStep > 2 ? 'bg-[#22C55E] text-white' : currentStep === 2 ? 'bg-[#2B7FFF] text-white' : 'bg-gray-100 text-gray-500'">
-                            <Icon name="check" class="w-5 h-5" v-if="currentStep > 2" />
-                            <Icon name="creditCard" class="w-4 h-4" v-else />
+                            <svg v-if="currentStep > 2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <span v-else-if="currentStep === 2" class="text-sm">2</span>
+                            <span v-else class="text-sm">2</span>
                         </div>
-                        <span class="font-semibold text-sm hidden sm:block">Ödeme</span>
-                        <Icon name="chevronRight" class="w-4 h-4 text-gray-300 ml-2 sm:ml-4" />
+                        <span class="font-bold text-sm hidden sm:block">Ödeme</span>
+                        <svg class="w-4 h-4 text-gray-300 ml-1 sm:ml-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </div>
                     
                     <!-- Step 3 -->
-                    <div class="flex items-center gap-2" :class="currentStep === 3 ? 'text-[#2B7FFF]' : 'text-gray-400'">
-                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                    <div class="flex items-center gap-2" :class="currentStep === 3 ? 'text-gray-900' : 'text-gray-400'">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors"
                             :class="currentStep === 3 ? 'bg-[#2B7FFF] text-white' : 'bg-gray-100 text-gray-500'">
-                            <Icon name="checkCircle" class="w-4 h-4" />
+                            <svg v-if="currentStep === 3" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <span v-else class="text-sm">3</span>
                         </div>
-                        <span class="font-semibold text-sm hidden sm:block">Onay</span>
+                        <span class="font-bold text-sm hidden sm:block">Onay</span>
                     </div>
                 </div>
             </div>
@@ -419,7 +395,7 @@ const getDeliveryDate = () => {
                     <!-- STEP 3: ONAY (SUCCESS) -->
                     <div v-else-if="currentStep === 3" class="bg-white rounded-2xl p-8 shadow-sm text-center">
                         <div class="w-16 h-16 bg-[#22C55E]/10 text-[#22C55E] rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Icon name="checkCircle" class="w-8 h-8" />
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         </div>
                         <h2 class="text-3xl font-bold text-gray-900 mb-2">Siparişiniz Alındı!</h2>
                         <p class="text-gray-500 mb-8">Teşekkür ederiz, siparişiniz başarıyla oluşturuldu.</p>
@@ -468,7 +444,7 @@ const getDeliveryDate = () => {
                             <div class="space-y-4">
                                 <div v-for="item in orderResult?.items" :key="item.id" class="flex gap-4">
                                     <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
-                                        <img :src="cartStore.getItemPreview(item.id) || item.canvas_product?.image || '/placeholder.png'" class="w-full h-full object-cover" />
+                                        <img :src="cartStore.getItemPreview(item.id) || getCartItemThumbSrc(item as any) || '/placeholder.png'" class="w-full h-full object-cover" />
                                     </div>
                                     <div class="flex-1">
                                         <div class="flex justify-between items-start">
@@ -505,7 +481,7 @@ const getDeliveryDate = () => {
                         <div class="space-y-4 mb-6 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                             <div v-for="item in cartStore.cartItems" :key="item.id" class="flex gap-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                                 <div class="w-14 h-14 rounded-lg bg-gray-50 overflow-hidden shrink-0 border border-gray-100">
-                                    <img :src="cartStore.getItemPreview(item.id) || item.canvas_product?.image || '/placeholder.png'" class="w-full h-full object-cover" />
+                                    <img :src="cartStore.getItemPreview(item.id) || getCartItemThumbSrc(item as any) || '/placeholder.png'" class="w-full h-full object-cover" />
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <div class="flex justify-between items-start gap-2">
@@ -528,14 +504,14 @@ const getDeliveryDate = () => {
                                 <Icon name="ticket" class="w-4 h-4" />
                                 Kupon Kodu Var mı?
                             </div>
-                            <div v-if="appliedCoupon" class="flex items-center justify-between bg-green-50 text-green-700 px-3 py-2 rounded-lg border border-green-200">
-                                <div class="font-bold text-sm">{{ appliedCoupon.code }}</div>
-                                <button @click="removeCoupon" class="text-green-800 hover:text-green-900 text-xs underline font-semibold">İptal</button>
+                            <div v-if="cartStore.appliedCoupon" class="flex items-center justify-between bg-green-50 text-green-700 px-3 py-2 rounded-lg border border-green-200">
+                                <div class="font-bold text-sm">{{ cartStore.appliedCoupon }}</div>
+                                <button @click="cartStore.removeCoupon()" class="text-green-800 hover:text-green-900 text-xs underline font-semibold">İptal</button>
                             </div>
                             <div v-else class="flex gap-2">
                                 <input v-model="couponCode" type="text" placeholder="KUPON KODU" class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#2B7FFF] uppercase" />
-                                <button @click="applyCoupon" :disabled="!couponCode || isApplyingCoupon" class="bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-bold text-sm px-4 py-2 rounded-lg transition-colors">
-                                    {{ isApplyingCoupon ? '...' : 'Uygula' }}
+                                <button @click="applyCoupon" :disabled="!couponCode || cartStore.isApplyingCoupon" class="bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-bold text-sm px-4 py-2 rounded-lg transition-colors">
+                                    {{ cartStore.isApplyingCoupon ? '...' : 'Uygula' }}
                                 </button>
                             </div>
                         </div>
@@ -550,9 +526,9 @@ const getDeliveryDate = () => {
                                 <span>Kargo</span>
                                 <span>{{ shippingCost > 0 ? '₺' + formatPrice(shippingCost) : 'Ücretsiz' }}</span>
                             </div>
-                            <div v-if="appliedCoupon" class="flex justify-between text-[#2B7FFF]">
-                                <span>İndirim ({{ appliedCoupon.code }})</span>
-                                <span>-₺{{ formatPrice(appliedCoupon.discount_amount) }}</span>
+                            <div v-if="cartStore.appliedCoupon" class="flex justify-between text-[#2B7FFF]">
+                                <span>İndirim ({{ cartStore.appliedCoupon }})</span>
+                                <span>-₺{{ formatPrice(cartStore.couponDiscount) }}</span>
                             </div>
                         </div>
                         

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { getCartItemThumbSrc } from '~/utils/cartItemPreview'
 	import { useCartStore } from '~/stores/cart'
+	import { useWishlistStore } from '~/stores/wishlist'
 
 	const props = defineProps<{
 		item: {
@@ -15,10 +16,15 @@
 	}>()
 
 	const cartStore = useCartStore()
+	const wishlistStore = useWishlistStore()
 
 	const thumbSrc = computed(() => {
-		const cached = cartStore.getItemPreview(props.item.id)
-		if (cached) return cached
+		const cachedCart = cartStore.getItemPreview(props.item.id)
+		if (cachedCart) return cachedCart
+
+		const cachedWishlist = wishlistStore.getItemPreview(props.item.id)
+		if (cachedWishlist) return cachedWishlist
+
 		return getCartItemThumbSrc(props.item)
 	})
 </script>
