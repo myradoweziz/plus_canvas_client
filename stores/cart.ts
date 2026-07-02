@@ -110,6 +110,9 @@ export const useCartStore = defineStore('cart', () => {
                 subtotal.value = response.cart.subtotal || 0
                 total.value = response.cart.total || 0
                 shipping.value = response.cart.shipping || 0
+                if (cartItems.value.length === 0 && appliedCoupon.value) {
+                    removeCoupon()
+                }
                 fetchRecommendedProducts()
             }
         } catch (error) {
@@ -240,6 +243,9 @@ export const useCartStore = defineStore('cart', () => {
             delete nextPreviews[itemId]
             itemPreviewById.value = nextPreviews
             saveStoredPreviews()
+            if (cartItems.value.length === 0 && appliedCoupon.value) {
+                removeCoupon()
+            }
             
             // Refetch to get updated totals and recommended
             fetchCart()

@@ -1,6 +1,6 @@
 import type { CollageLayout } from '~/utils/collageLayout'
 import type { CanvasFormat, FrameOption, PrintSizeOption } from '~/utils/productDesignConfig'
-import type { MainCategory } from './category'
+import type { MainCategory, FeaturedCategory, SubCategory } from './category'
 import type { Faq, Image } from './home'
 
 export type ProductFeature = {
@@ -34,11 +34,15 @@ export interface Product {
 	discount: number
 	sku: string
 	image: Image
+	images?: Image[]
+	product_images?: Image[]
 	upload_image_count: number
 	main_category_id: number
 	main_category?: MainCategory
 	category_id: number
+	category?: FeaturedCategory
 	sub_category_id: number
+	sub_category?: SubCategory
 	brand_id: number
 	banner_id: number
 	flag: string

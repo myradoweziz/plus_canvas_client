@@ -59,57 +59,40 @@
 			</nuxt-link>
 		</div>
 
-		<!-- Wishlist Items -->
-		<div v-else class="flex flex-col gap-4">
+		<!-- Wishlist Items Grid -->
+		<div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
 			<div
-				v-for="(item, index) in wishlistStore.wishlistItems"
+				v-for="item in wishlistStore.wishlistItems"
 				:key="item.id"
-				class="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 rounded-2xl bg-white relative group border border-gray-100 shadow-sm"
+				class="bg-white rounded-2xl border border-gray-100 shadow-[0px_4px_15px_0px_#0000000A] overflow-hidden flex flex-col group relative transition-all duration-300 hover:shadow-md hover:border-gray-200 p-3"
 			>
-				<div class="w-[100px] h-[100px] sm:w-[120px] sm:h-[120px] rounded-xl overflow-hidden bg-gray-50 shrink-0 border border-gray-100">
+				<nuxt-link
+					:to="item.canvas_product?.slug ? `/products/${item.canvas_product.slug}` : '#'"
+					class="w-full aspect-[4/5] rounded-xl overflow-hidden relative bg-gray-50 block shrink-0"
+				>
 					<CartItemThumb :item="item" />
-				</div>
+					
+					<!-- Red Heart Button -->
+					<button
+						@click.prevent="confirmDeleteFavorite(item.id)"
+						class="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm hover:bg-white transition-all z-10 hover:scale-110"
+						title="Favoriden Çıkar"
+					>
+						<Icon name="heart" class="w-5 h-5 text-[#FF2B2B] fill-[#FF2B2B]" />
+					</button>
+				</nuxt-link>
 
 				<!-- Info -->
-				<div class="flex-1 flex flex-col min-w-0">
-					<div class="flex justify-between items-start gap-4">
-						<h4 class="font-bold text-gray-900 text-base sm:text-lg leading-snug">
-							<nuxt-link :to="`/products/${item.canvas_product?.slug}`" class="hover:text-[#1853a0] transition-colors">
-								{{ item.canvas_product?.name }}
-							</nuxt-link>
-						</h4>
-						<button
-							@click="confirmDeleteFavorite(item.id)"
-							class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
-							title="Sil"
-						>
-							<Icon name="trash" class="w-4 h-4" />
-						</button>
-					</div>
+				<div class="flex flex-col pt-3 px-1">
+					<nuxt-link
+						:to="item.canvas_product?.slug ? `/products/${item.canvas_product.slug}` : '#'"
+						class="text-base font-bold text-[#101828] truncate block hover:text-[#2B7FFF] transition-colors"
+					>
+						{{ item.canvas_product?.name || 'Ürün' }}
+					</nuxt-link>
 					
-					<div class="text-sm text-gray-500 mt-2 mb-auto flex flex-wrap items-center gap-y-1">
-						<span v-if="item.resolved_options?.canvas_format">Format: {{ item.resolved_options.canvas_format.name }}</span>
-						<span v-if="item.resolved_options?.canvas_size" class="before:content-['•'] before:mx-2 before:text-gray-300">Boyut: {{ item.resolved_options.canvas_size.display_name }}</span>
-						<span v-if="item.resolved_options?.canvas_frame" class="before:content-['•'] before:mx-2 before:text-gray-300">Çerçeve: {{ item.resolved_options.canvas_frame.name }}</span>
-						<span v-else class="before:content-['•'] before:mx-2 before:text-gray-300">Çerçevesiz</span>
-					</div>
-
-					<div class="flex flex-col sm:flex-row sm:items-end justify-between mt-4 gap-4">
-						<div class="font-bold text-gray-900 text-xl sm:text-2xl">
-							{{ formatPrice(item.unit_price || item.canvas_product?.price) }}₺
-							<span class="text-sm font-medium text-gray-400 line-through ml-2" v-if="item.canvas_product?.discount > 0">
-								{{ formatPrice(item.canvas_product.price) }}₺
-							</span>
-						</div>
-						
-						<!-- Add to Cart Button -->
-						<button
-							@click="moveToCart(item)"
-							class="bg-[#1853a0] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#134280] transition-colors flex items-center gap-2 w-fit"
-						>
-							<Icon name="basket" class="w-4 h-4" />
-							Sepete Ekle
-						</button>
+					<div class="text-lg font-bold text-[#101828] mt-1">
+						{{ formatPrice(item.unit_price || item.canvas_product?.price) }}₺
 					</div>
 				</div>
 			</div>

@@ -149,6 +149,7 @@
 			if (ok) {
 				isEditing.value = false
 				syncFormFromUser()
+				window.location.reload()
 			}
 		} finally {
 			isSaving.value = false

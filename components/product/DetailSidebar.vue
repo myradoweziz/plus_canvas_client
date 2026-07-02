@@ -42,6 +42,7 @@
 		(e: 'crop-zoom-in'): void
 		(e: 'crop-zoom-out'): void
 		(e: 'crop-rotate'): void
+		(e: 'scroll-to-reviews'): void
 	}>()
 
 	const onSizeChange = (e: Event) => {
@@ -117,9 +118,9 @@
 	const toastSubMessage = ref('')
 
 	const copyProductCode = async () => {
-		if (!props.product.product_qode) return
+		if (!props.product.sku) return
 		try {
-			await navigator.clipboard.writeText(props.product.product_qode)
+			await navigator.clipboard.writeText(props.product.sku)
 			copied.value = true
 			setTimeout(() => {
 				copied.value = false
@@ -149,7 +150,6 @@
 		const item = wishlistStore.wishlistItems.find(i => i.canvas_product_id === props.product.id)
 		if (item) {
 			await wishlistStore.removeFromWishlist(item.id)
-			triggerToast('Favorilerden Çıkarıldı!', `"${props.product.name}" favori listenizden çıkarıldı.`)
 		} else {
 			const options = {
 				canvas_format_id: props.selectedFormatId,
@@ -159,8 +159,6 @@
 				...(props.cartPreviewSrc?.trim() ? { preview_src: props.cartPreviewSrc.trim() } : {})
 			}
 			await wishlistStore.addToWishlist(props.product.id, options)
-			// triggerToast is not needed as the store shows its own toast, but if we want to show this custom toast:
-			triggerToast('Favorilere Eklendi!', `"${props.product.name}" favori listenize eklendi.`)
 		}
 	}
 
@@ -180,6 +178,16 @@
 		
 		isAddingToCart.value = false
 	}
+
+	const reviewCount = computed(() => {
+		return props.product.comments?.length || 0
+	})
+
+	const averageRating = computed(() => {
+		if (reviewCount.value === 0) return 0
+		const sum = props.product.comments!.reduce((acc, c) => acc + (Number(c.rating) || 0), 0)
+		return sum / reviewCount.value
+	})
 </script>
 
 <template>
@@ -211,11 +219,18 @@
 
 		<h1 class="font-semibold text-2xl sm:text-3xl lg:text-4xl text-gray-950">{{ product.name }}</h1>
 
-		<div class="flex items-center gap-2 mt-3">
-			<Icon name="star" class="w-6 h-6 text-yellow-400" />
+		<div v-if="reviewCount > 0" class="flex items-center gap-2 mt-3">
+			<div class="relative inline-block w-max">
+				<div class="flex text-gray-200">
+					<Icon v-for="i in 5" :key="i" name="star" class="w-6 h-6" />
+				</div>
+				<div class="absolute top-0 left-0 flex text-yellow-400 overflow-hidden whitespace-nowrap" :style="{ width: `${(averageRating / 5) * 100}%` }">
+					<Icon v-for="i in 5" :key="i" name="star" class="w-6 h-6 shrink-0" />
+				</div>
+			</div>
 			<span class="text-[#8e8e8e] font-semibold text-sm">
-				4.8 •
-				<span class="underline hover:text-[#2B7FFF] cursor-pointer transition-colors">22 Değerlendirme</span>
+				{{ averageRating.toFixed(1) }} •
+				<span class="underline hover:text-[#2B7FFF] cursor-pointer transition-colors" @click="emit('scroll-to-reviews')">{{ reviewCount }} Değerlendirme</span>
 			</span>
 		</div>
 
@@ -413,11 +428,12 @@
 			<button
 				type="button"
 				@click="toggleFavorite"
-				class="flex items-center justify-center rounded-full w-[54px] h-[54px] transition-all active:scale-[0.98] cursor-pointer shadow-lg bg-[#2B7FFF] text-white hover:bg-[#2B7FFF]/90 shrink-0 shadow-[#2B7FFF]/20"
+				class="flex items-center justify-center rounded-full w-[54px] h-[54px] transition-all duration-300 active:scale-[0.98] cursor-pointer shadow-lg shrink-0"
+				:class="isFavorited ? 'bg-[#FF2B2B] text-white hover:bg-[#E02020] shadow-[#FF2B2B]/30' : 'bg-[#2B7FFF] text-white hover:bg-[#2B7FFF]/90 shadow-[#2B7FFF]/20'"
 			>
 				<Icon
 					name="favorite"
-					class="w-6 h-6 transition-transform"
+					class="w-6 h-6 transition-transform duration-300"
 					:class="isFavorited ? 'scale-110 fill-current' : ''"
 				/>
 			</button>

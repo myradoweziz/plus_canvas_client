@@ -113,33 +113,34 @@
 						</p>
 					</div>
 
-					<!-- Маленький элемент снизу справа -->
-					<nuxt-link
-						v-if="banner.product"
-						:to="productPagePath(banner.product.slug)"
-						class="hidden md:flex absolute right-4 md:right-[-200px] bottom-8 lg:bottom-12 bg-white rounded-2xl p-3 shadow-2xl gap-4 w-[360px] lg:w-[440px] max-h-[170px] cursor-pointer hover:-translate-y-1 transition-all pointer-events-auto"
-					>
-						<img
-							v-if="getPrimaryProductBackgroundUrl(getBannerProduct(banner))"
-							:src="mediaUrlForCanvas(getPrimaryProductBackgroundUrl(getBannerProduct(banner))!)"
-							:alt="banner.product.name"
-							class="w-full h-full max-w-[190px] max-h-[150px] rounded-xl object-cover shrink-0"
-						/>
-						<div class="flex flex-col pb-2">
-							<span class="text-[#215EA5] font-semibold">{{ banner.product.name }}</span>
-							<div class="flex-1">
-								<p class="text-sm text-[#313131] mt-1 line-clamp-4 text-ellipsis overflow-hidden">
-									{{ banner.product.description }}
-								</p>
-							</div>
-							<span class="text-[#215EA5] text-sm mt-1 lg:mt-2 flex items-center gap-2"
-								>satın al
-
-								<Icon name="arrowRight" class="w-4 h-4" />
-							</span>
-						</div>
-					</nuxt-link>
 				</div>
+
+				<!-- Маленький элемент снизу справа (Ekranın en sağında) -->
+				<nuxt-link
+					v-if="banner.product"
+					:to="productPagePath(banner.product.slug)"
+					class="flex absolute z-20 right-4 md:right-6 lg:right-10 bottom-4 md:bottom-8 lg:bottom-12 bg-white rounded-2xl p-2 md:p-3 shadow-2xl gap-2 md:gap-4 w-[280px] sm:w-[360px] lg:w-[440px] max-h-[120px] md:max-h-[170px] cursor-pointer hover:-translate-y-1 transition-all pointer-events-auto"
+				>
+					<img
+						v-if="getPrimaryProductBackgroundUrl(getBannerProduct(banner))"
+						:src="mediaUrlForCanvas(getPrimaryProductBackgroundUrl(getBannerProduct(banner))!)"
+						:alt="banner.product.name"
+						class="w-full h-full max-w-[100px] md:max-w-[190px] max-h-[100px] md:max-h-[150px] rounded-xl object-cover shrink-0"
+					/>
+					<div class="flex flex-col pb-1 md:pb-2 overflow-hidden">
+						<span class="text-[#215EA5] font-semibold text-xs md:text-base truncate">{{ banner.product.name }}</span>
+						<div class="flex-1 hidden md:block">
+							<p class="text-sm text-[#313131] mt-1 line-clamp-4 text-ellipsis overflow-hidden">
+								{{ banner.product.description }}
+							</p>
+						</div>
+						<span class="text-[#215EA5] text-xs md:text-sm mt-auto md:mt-1 lg:mt-2 flex items-center gap-2"
+							>satın al
+
+							<Icon name="arrowRight" class="w-3 h-3 md:w-4 md:h-4" />
+						</span>
+					</div>
+				</nuxt-link>
 			</div>
 		</SwiperSlide>
 

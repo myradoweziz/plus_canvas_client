@@ -74,22 +74,57 @@
 		profileMenu.value = null
 	})
 
-	const openProfileMenu = (index: number) => {
-		if (index === 0) {
-			showProfileMenu.value = !showProfileMenu.value
+	const handleProfileClick = () => {
+		showProfileMenu.value = false
+		if (tokenCookie.value) {
+			navigateTo('/profile')
 		} else {
-			showProfileMenu.value = false
+			navigateTo('/login')
 		}
 	}
 </script>
 
 <template>
 	<div class="flex items-center gap-4 md:gap-5 relative" ref="profileContainer">
-		<Icon
-			name="profile"
-			@click="openProfileMenu(0)"
-			class="hidden md:block hover:text-[#215EA5] transition-all duration-300"
-		/>
+		<div 
+			class="relative flex items-center h-full group py-2"
+			@mouseenter="showProfileMenu = true"
+			@mouseleave="showProfileMenu = false"
+		>
+			<Icon
+				name="profile"
+				@click="handleProfileClick"
+				class="hidden md:block hover:text-[#215EA5] transition-all duration-300"
+			/>
+			
+			<nav
+				ref="profileMenu"
+				v-show="showProfileMenu"
+				class="absolute top-10 -left-10 md:-left-4 bg-white min-w-[160px] px-5 py-6 shadow-[0px_4px_4px_0px_#D5D2CD40] rounded-[14px] text-sm text-[#101828] z-[60]"
+			>
+				<ul class="flex flex-col gap-6">
+					<li v-for="(profileItem, index) in profileItems" :key="index" class="cursor-pointer">
+						<button
+							v-if="profileItem.isLogout"
+							type="button"
+							class="flex items-center gap-3 w-full text-left hover:underline hover:text-[#215EA5] transition-all duration-300"
+							@click="handleLogout"
+						>
+							<Icon v-if="profileItem.icon" :name="profileItem.icon" />
+							{{ profileItem.title }}
+						</button>
+						<nuxt-link
+							v-else
+							:to="profileItem.link || '#'"
+							class="flex items-center gap-3 hover:underline hover:text-[#215EA5] transition-all duration-300"
+						>
+							<Icon v-if="profileItem.icon" :name="profileItem.icon" />
+							{{ profileItem.title }}
+						</nuxt-link>
+					</li>
+				</ul>
+			</nav>
+		</div>
 
 		<!-- Wishlist Icon -->
 		<div class="relative cursor-pointer group" @click="navigateTo('/profile/favorites')">
@@ -113,33 +148,6 @@
 			</span>
 		</div>
 
-		<nav
-			ref="profileMenu"
-			v-show="showProfileMenu"
-			class="absolute top-10 -left-10 bg-white min-w-[160px] px-5 py-6 shadow-[0px_4px_4px_0px_#D5D2CD40] rounded-[14px] text-sm text-[#101828]"
-		>
-			<ul class="flex flex-col gap-6">
-				<li v-for="(profileItem, index) in profileItems" :key="index" class="cursor-pointer">
-					<button
-						v-if="profileItem.isLogout"
-						type="button"
-						class="flex items-center gap-3 w-full text-left hover:underline hover:text-[#215EA5] transition-all duration-300"
-						@click="handleLogout"
-					>
-						<Icon v-if="profileItem.icon" :name="profileItem.icon" />
-						{{ profileItem.title }}
-					</button>
-					<nuxt-link
-						v-else
-						:to="profileItem.link || '#'"
-						class="flex items-center gap-3 hover:underline hover:text-[#215EA5] transition-all duration-300"
-					>
-						<Icon v-if="profileItem.icon" :name="profileItem.icon" />
-						{{ profileItem.title }}
-					</nuxt-link>
-				</li>
-			</ul>
-		</nav>
 	</div>
 </template>
 

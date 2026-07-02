@@ -30,8 +30,108 @@ const orderResult = ref<any>(null)
 const paytrToken = ref<string | null>(null)
 
 const couponCode = ref('')
+const savedAddresses = ref<any[]>([])
+const selectedAddressId = ref<number | string>('new')
+const saveNewAddressToProfile = ref(true)
+
+const selectSavedAddress = (addr: any) => {
+    if (addr === 'new') {
+        selectedAddressId.value = 'new'
+        form.address = ''
+        form.city = ''
+        form.district = ''
+        form.postal_code = ''
+        form.address_note = ''
+        saveNewAddressToProfile.value = true
+        return
+    }
+    selectedAddressId.value = addr.id
+    if (addr.first_name) form.first_name = addr.first_name
+    if (addr.last_name) form.last_name = addr.last_name
+    if (addr.phone_number) form.phone = addr.phone_number
+    if (addr.email) form.email = addr.email
+    if (addr.city) form.city = addr.city
+    
+    form.address = addr.address || ''
+    form.district = ''
+    saveNewAddressToProfile.value = false
+}
+
+const isSavingAddress = ref(false)
+
+const saveAddressNow = async () => {
+    const { $toast, $customFetch } = useNuxtApp()
+    if (!form.first_name || !form.last_name || !form.city || !form.address) {
+        if ($toast) $toast.error('Lütfen ad, soyad, şehir ve adres alanlarını doldurunuz.')
+        return
+    }
+    isSavingAddress.value = true
+    try {
+        const headers: any = {}
+        if (cartStore.sessionId) headers['X-Session-ID'] = cartStore.sessionId
+
+        const newAddr: any = await $customFetch('/api/user/addresses', {
+            method: 'POST',
+            body: {
+                first_name: form.first_name,
+                last_name: form.last_name,
+                email: form.email,
+                phone_number: form.phone,
+                city: form.city,
+                address: form.district ? `${form.district}, ${form.address}` : form.address,
+                is_default: savedAddresses.value.length === 0
+            },
+            headers
+        })
+        if (newAddr) {
+            const addrRes: any = await $customFetch('/api/user/addresses', { headers })
+            if (addrRes && addrRes.data) {
+                savedAddresses.value = addrRes.data
+                const added = savedAddresses.value.find((a: any) => a.id === newAddr.id) || savedAddresses.value[savedAddresses.value.length - 1]
+                if (added) selectSavedAddress(added)
+            }
+            if ($toast) $toast.success('Adres başarıyla profilinize eklendi!')
+        }
+    } catch (err: any) {
+        if ($toast) $toast.error(err?.response?._data?.message || 'Adres eklenirken bir hata oluştu.')
+    } finally {
+        isSavingAddress.value = false
+    }
+}
 
 onMounted(async () => {
+    const route = useRoute()
+    if (route.query.payment === 'success') {
+        const { $customFetch } = useNuxtApp()
+        if (route.query.order) {
+            orderResult.value = {
+                order_number: route.query.order as string,
+                payment_method: 'credit_card',
+                total: 0
+            }
+            try {
+                const res: any = await $customFetch('/api/orders')
+                if (res && Array.isArray(res)) {
+                    const found = res.find((o: any) => o.order_number === route.query.order)
+                    if (found) orderResult.value = found
+                }
+            } catch (e) {
+                console.error('Error fetching order details', e)
+            }
+        }
+        cartStore.cartItems = []
+        cartStore.subtotal = 0
+        cartStore.total = 0
+        cartStore.removeCoupon()
+        currentStep.value = 3
+        return
+    }
+    if (route.query.payment === 'fail') {
+        const { $toast } = useNuxtApp()
+        if ($toast) $toast.error('Ödeme işleminiz başarısız oldu veya iptal edildi. Lütfen tekrar deneyiniz.')
+        currentStep.value = 2
+    }
+
     if (!cartStore.cartItems.length) {
         await cartStore.fetchCart()
     }
@@ -42,6 +142,20 @@ onMounted(async () => {
         form.last_name = names.slice(1).join(' ') || ''
         form.email = authStore.user?.email || ''
         form.phone = (authStore.user as any)?.phone_number || ''
+        
+        try {
+            const { $customFetch } = useNuxtApp()
+            const addrRes: any = await $customFetch('/api/user/addresses')
+            if (addrRes && addrRes.data) {
+                savedAddresses.value = addrRes.data
+                if (savedAddresses.value.length > 0) {
+                    const defaultAddr = savedAddresses.value.find((a: any) => a.is_default) || savedAddresses.value[0]
+                    selectSavedAddress(defaultAddr)
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load saved addresses', e)
+        }
     }
     
     // Add PayTR iframe resizer script
@@ -137,22 +251,40 @@ const submitOrder = async () => {
         if (res && res.success) {
             orderResult.value = res.order
             
-            // If paytr token is returned, show iframe
-            if (res.paytr_token) {
-                paytrToken.value = res.paytr_token
-                // Wait for Vue to render iframe, then init resizer
-                setTimeout(() => {
-                    if ((window as any).iFrameResize) {
-                        (window as any).iFrameResize({}, '#paytriframe')
-                    }
-                }, 500)
-            } else {
-                // Clear cart
-                cartStore.cartItems = []
-                cartStore.subtotal = 0
-                cartStore.total = 0
-                currentStep.value = 3
+            // If user checked "save address to profile", save it now
+            if (authStore.user && selectedAddressId.value === 'new' && saveNewAddressToProfile.value) {
+                try {
+                    await $customFetch('/api/user/addresses', {
+                        method: 'POST',
+                        body: {
+                            first_name: form.first_name,
+                            last_name: form.last_name,
+                            email: form.email,
+                            phone_number: form.phone,
+                            city: form.city,
+                            address: form.district ? `${form.district}, ${form.address}` : form.address,
+                            is_default: savedAddresses.value.length === 0
+                        },
+                        headers
+                    })
+                } catch (err) {
+                    console.error('Failed to save new address to profile', err)
+                }
             }
+            
+            if (form.payment_method === 'credit_card') {
+                const bankUrl = res.paytr_token ? ('https://www.paytr.com/odeme/guvenli/' + res.paytr_token) : 'https://www.paytr.com/'
+                window.location.href = bankUrl
+                return
+            }
+            
+            // Clear cart & coupon
+            cartStore.cartItems = []
+            cartStore.subtotal = 0
+            cartStore.total = 0
+            cartStore.removeCoupon()
+            
+            currentStep.value = 3
         } else {
             if ($toast) $toast.error(res?.message || 'Sipariş oluşturulamadı.')
         }
@@ -243,6 +375,46 @@ const getDeliveryDate = () => {
                     <div v-if="currentStep === 1" class="bg-white rounded-2xl p-6 shadow-sm">
                         <h2 class="text-2xl font-bold text-gray-900 mb-6">Teslimat Bilgileri</h2>
                         
+                        <!-- Saved Addresses Selector -->
+                        <div v-if="authStore.user" class="mb-6">
+                            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">Kayıtlı Adreslerim</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                <div 
+                                    v-for="addr in savedAddresses" 
+                                    :key="addr.id"
+                                    @click="selectSavedAddress(addr)"
+                                    class="py-2.5 px-3 border rounded-lg cursor-pointer transition-all flex items-center justify-between gap-2 relative text-left"
+                                    :class="selectedAddressId === addr.id ? 'border-[#2B7FFF] bg-[#2B7FFF]/5 shadow-sm ring-1 ring-[#2B7FFF]' : 'border-gray-200 hover:border-gray-300 bg-white'"
+                                >
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-1.5 mb-0.5">
+                                            <span class="font-bold text-gray-900 text-xs truncate">{{ addr.city || 'Adres' }}</span>
+                                            <span v-if="addr.is_default" class="text-[9px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded shrink-0">Varsayılan</span>
+                                        </div>
+                                        <p class="text-[11px] text-gray-600 font-medium truncate">{{ addr.first_name }} {{ addr.last_name }} • {{ addr.phone_number }}</p>
+                                        <p class="text-[10px] text-gray-500 truncate mt-0.5">{{ addr.address }}</p>
+                                    </div>
+                                    <div class="shrink-0 flex items-center">
+                                        <div class="w-4 h-4 rounded-full border flex items-center justify-center" :class="selectedAddressId === addr.id ? 'border-[#2B7FFF] bg-[#2B7FFF]' : 'border-gray-300'">
+                                            <span v-if="selectedAddressId === addr.id" class="text-white text-[9px] leading-none font-bold">✓</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Add New Address Option -->
+                                <div 
+                                    @click="selectSavedAddress('new')"
+                                    class="py-2.5 px-3 border border-dashed rounded-lg cursor-pointer transition-all flex items-center justify-center gap-2 text-center min-h-[64px]"
+                                    :class="selectedAddressId === 'new' ? 'border-[#2B7FFF] bg-[#2B7FFF]/5 text-[#2B7FFF] font-bold' : 'border-gray-300 hover:border-gray-400 text-gray-600 hover:text-gray-900 bg-gray-50/50'"
+                                >
+                                    <div class="w-5 h-5 rounded-full bg-white shadow-sm flex items-center justify-center border border-current shrink-0">
+                                        <span class="text-xs leading-none font-bold">+</span>
+                                    </div>
+                                    <span class="text-xs font-bold">Yeni Adres Ekle</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="space-y-5">
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Ad Soyad <span class="text-red-500">*</span></label>
@@ -287,6 +459,24 @@ const getDeliveryDate = () => {
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Adres Notu <span class="text-gray-400 font-normal">(Opsiyonel)</span></label>
                                 <input v-model="form.address_note" type="text" placeholder="Kapı kodu, bina adı vb." class="w-full border border-gray-200 rounded-lg px-4 py-3 outline-none focus:border-[#2B7FFF] transition-colors" />
                             </div>
+
+                            <div v-if="authStore.user && selectedAddressId === 'new'" class="pt-2 flex items-center justify-between flex-wrap gap-3 bg-blue-50/60 p-3.5 rounded-xl border border-blue-100">
+                                <label class="flex items-center gap-2.5 cursor-pointer group w-fit">
+                                    <input v-model="saveNewAddressToProfile" type="checkbox" class="w-4 h-4 text-[#2B7FFF] rounded border-gray-300 focus:ring-[#2B7FFF]" />
+                                    <span class="text-xs font-semibold text-gray-700 group-hover:text-gray-900 transition-colors">Bu adresi profilime "Kayıtlı Adres" olarak kaydet</span>
+                                </label>
+                                
+                                <button 
+                                    @click.prevent="saveAddressNow" 
+                                    type="button" 
+                                    class="text-xs bg-[#2B7FFF] text-white font-bold px-3.5 py-2 rounded-lg hover:bg-blue-600 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                    :disabled="isSavingAddress"
+                                >
+                                    <Icon v-if="!isSavingAddress" name="plus" class="w-3.5 h-3.5 shrink-0" />
+                                    <span v-else class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full shrink-0"></span>
+                                    <span>Adresi Şimdi Ekle</span>
+                                </button>
+                            </div>
                         </div>
 
                         <h3 class="text-lg font-bold text-gray-900 mt-10 mb-4">Teslimat Seçenekleri</h3>
@@ -330,11 +520,7 @@ const getDeliveryDate = () => {
                             <h2 class="text-2xl font-bold text-gray-900">Ödeme Yöntemi</h2>
                         </div>
                         
-                        <div v-if="paytrToken" class="mt-4 animate-fade-in">
-                            <iframe :src="'https://www.paytr.com/odeme/guvenli/' + paytrToken" id="paytriframe" frameborder="0" scrolling="no" style="width: 100%;"></iframe>
-                        </div>
-
-                        <div v-else class="space-y-3 mb-8">
+                        <div class="space-y-3 mb-8">
                             <label @click="form.payment_method = 'credit_card'" class="flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-colors"
                                 :class="form.payment_method === 'credit_card' ? 'border-[#2B7FFF] bg-[#2B7FFF]/5' : 'border-gray-200 hover:border-gray-300'">
                                 <div class="flex items-center gap-4">
@@ -378,12 +564,12 @@ const getDeliveryDate = () => {
                             </label>
                         </div>
 
-                        <div v-if="!paytrToken && form.payment_method === 'credit_card'" class="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-fade-in text-center">
+                        <div v-if="form.payment_method === 'credit_card'" class="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-fade-in text-center">
                             <Icon name="shieldCheck" class="w-12 h-12 text-[#2B7FFF] mx-auto mb-3" />
                             <p class="text-sm text-blue-800 font-medium">Siparişi Tamamla butonuna tıkladığınızda 256-bit SSL sertifikalı güvenli PayTR ödeme sayfasına yönlendirileceksiniz.</p>
                         </div>
                         
-                        <div v-else-if="!paytrToken && form.payment_method === 'bank_transfer'" class="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-fade-in">
+                        <div v-else-if="form.payment_method === 'bank_transfer'" class="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-fade-in">
                             <p class="text-sm text-blue-800">Siparişi tamamladıktan sonra banka hesap bilgilerimiz ekranda gösterilecek ve e-posta adresinize gönderilecektir. Havale işleminiz onaylandığında siparişiniz işleme alınacaktır.</p>
                         </div>
                         
@@ -541,7 +727,7 @@ const getDeliveryDate = () => {
                         <button v-if="currentStep === 1" @click="goToPayment" class="w-full bg-[#2B7FFF] hover:bg-blue-600 text-white font-bold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2">
                             Ödemeye Geç
                         </button>
-                        <button v-if="currentStep === 2 && !paytrToken" @click="submitOrder" :disabled="isSubmitting" class="w-full bg-[#2B7FFF] hover:bg-blue-600 text-white font-bold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
+                        <button v-if="currentStep === 2" @click="submitOrder" :disabled="isSubmitting" class="w-full bg-[#2B7FFF] hover:bg-blue-600 text-white font-bold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
                             {{ isSubmitting ? 'İşleniyor...' : 'Siparişi Tamamla' }}
                         </button>
 

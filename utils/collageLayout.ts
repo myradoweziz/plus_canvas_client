@@ -58,16 +58,16 @@ export function getProductImageEntry(product: unknown): Image | null {
 	return null
 }
 
-/** Product: одно поле `image`; категории: массив `images`. */
 export function getProductImagesList(product: unknown): Image[] {
-	const single = getProductImageEntry(product)
-	if (single) return [single]
-
 	if (!product || typeof product !== 'object') return []
 	const row = product as Record<string, unknown>
 	const list = row.images ?? row.product_images
-	if (!Array.isArray(list)) return []
-	return list as Image[]
+	if (Array.isArray(list) && list.length > 0) {
+		return list as Image[]
+	}
+	const single = getProductImageEntry(product)
+	if (single) return [single]
+	return []
 }
 
 export function isProductMockupImage(img: Image | Record<string, unknown>): boolean {
@@ -95,7 +95,7 @@ export function getProductMockupImages(product: unknown): Image[] {
 	const mockups = list.filter((img) => isProductMockupImage(img))
 	if (mockups.length) return mockups
 
-	return [list[0]]
+	return list
 }
 
 export function extractProductImageUrls(product: unknown): string[] {

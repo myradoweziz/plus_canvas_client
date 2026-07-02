@@ -16,14 +16,42 @@
 
 	const productSessionKey = productSlug
 
-	const breadcrumbs = computed(
-		() =>
-			[
-				{ label: 'Kategoriler', link: '/products' },
-				{ label: 'Ürünler', link: `/products` },
-				{ label: 'Ürün Detayı', link: productPagePath(productSlug.value) }
-			] as BreadcrumbItem[]
-	)
+	const breadcrumbs = computed(() => {
+		const crumbs: BreadcrumbItem[] = []
+		
+		if (product.value?.main_category) {
+			crumbs.push({
+				label: product.value.main_category.name,
+				link: `/products?mainCategory=${product.value.main_category.slug}`
+			})
+		}
+		
+		if (product.value?.category) {
+			crumbs.push({
+				label: product.value.category.name,
+				link: `/products?category=${product.value.category.slug}`
+			})
+		}
+		
+		if (product.value?.sub_category) {
+			crumbs.push({
+				label: product.value.sub_category.name,
+				link: `/products?subcategory=${product.value.sub_category.slug}`
+			})
+		}
+		
+		if (product.value?.name) {
+			crumbs.push({
+				label: product.value.name,
+				link: productPagePath(productSlug.value)
+			})
+		} else {
+			if (crumbs.length === 0) crumbs.push({ label: 'Kategoriler', link: '/products' })
+			crumbs.push({ label: 'Ürün Detayı', link: productPagePath(productSlug.value) })
+		}
+		
+		return crumbs
+	})
 
 	const lastDesign = ref<ProductDesignPayload | null>(null)
 	const onDesignUpdate = (payload: ProductDesignPayload) => {
@@ -203,6 +231,15 @@
 			relatedSwiperEnd.value = swiper.isEnd
 		})
 	}
+
+	const scrollToReviews = () => {
+		const el = document.getElementById('reviews-section')
+		if (el) {
+			const offset = 80
+			const top = el.getBoundingClientRect().top + window.scrollY - offset
+			window.scrollTo({ top, behavior: 'smooth' })
+		}
+	}
 </script>
 
 <template>
@@ -265,6 +302,7 @@
 						@format-change="applyFormatById"
 						@size-change="applySizeById"
 						@frame-select="applyFrameByIndex"
+						@scroll-to-reviews="scrollToReviews"
 					/>
 				</div>
 			</div>
@@ -275,7 +313,7 @@
 
 			<ProductFeatures />
 
-			<ProductRatingReviews :comments="product?.comments ?? []" />
+			<ProductRatingReviews id="reviews-section" :comments="product?.comments ?? []" />
 		</section>
 		<section class="mt-10 sm:mt-16 md:mt-20 bg-white">
 			<div class="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-10 py-8 sm:py-10 md:py-16">
@@ -366,6 +404,8 @@
 		background-color: #f5f2ed;
 		position: relative;
 		display: block;
+		border-radius: 20px;
+		box-shadow: -10px -10px 20px #ffffff, 10px 10px 20px rgba(0, 0, 0, 0.08);
 
 		@media (min-width: 640px) {
 			height: clamp(360px, 58vw, 520px);

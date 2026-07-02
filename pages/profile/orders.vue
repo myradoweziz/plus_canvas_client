@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { ref, onMounted } from 'vue'
 	import Icon from '~/utils/ui/Icon.vue'
+	import CartItemThumb from '~/components/cart/CartItemThumb.vue'
 
 	definePageMeta({
 		layout: 'account'
@@ -14,9 +15,12 @@
 		quantity: number
 		price: number
 		total: number
+		preview_url?: string | null
+		options?: Record<string, unknown> | null
 		canvas_product: {
 			name: string
-			image: any
+			slug?: string
+			image?: any
 		}
 	}
 
@@ -105,46 +109,43 @@
 			</nuxt-link>
 		</div>
 
-		<section v-else class="flex flex-col gap-6">
-			<div v-for="order in orders" :key="order.id" class="border border-gray-100 shadow-[0px_4px_15px_0px_#00000014] rounded-2xl overflow-hidden transition-all duration-300 hover:border-gray-200">
-				<div class="p-6 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4">
-					<div class="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
-						<div>
-							<p class="text-[#6A7282] text-xs font-medium uppercase tracking-wider mb-1">Sipariş No</p>
-							<p class="text-[#101828] text-sm font-bold">#{{ order.order_number }}</p>
-						</div>
-						<div class="hidden sm:block w-px h-8 bg-gray-200"></div>
-						<div>
-							<p class="text-[#6A7282] text-xs font-medium uppercase tracking-wider mb-1">Tarih</p>
-							<p class="text-[#101828] text-sm font-bold">{{ formatDate(order.created_at) }}</p>
-						</div>
-						<div class="hidden sm:block w-px h-8 bg-gray-200"></div>
-						<div>
-							<p class="text-[#6A7282] text-xs font-medium uppercase tracking-wider mb-1">Tutar</p>
-							<p class="text-[#101828] text-sm font-bold">{{ formatPrice(order.total) }}₺</p>
-						</div>
+		<section v-else class="flex flex-col gap-5">
+			<div v-for="order in orders" :key="order.id" class="border border-gray-200/80 rounded-2xl overflow-hidden transition-all duration-300 hover:border-gray-300 bg-white shadow-sm">
+				<div class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+					<div class="flex flex-col gap-1">
+						<p class="text-[#4A5565] text-sm font-medium">Sipariş No: #{{ order.order_number }}</p>
+						<p class="text-[#8E8E8E] text-xs">{{ formatDate(order.created_at) }}</p>
 					</div>
 
-					<div class="flex flex-col sm:flex-row items-center gap-4">
+					<div class="flex items-center">
 						<span 
-							class="text-xs font-bold px-3 py-1.5 rounded-full" 
+							class="text-xs font-bold px-3.5 py-1 rounded-full" 
 							:class="orderStatusClass(order.order_status === 'cancelled' ? 'cancelled' : order.delivery_status)"
 						>
 							{{ OrderStatusMap[order.order_status === 'cancelled' ? 'cancelled' : order.delivery_status] || order.delivery_status }}
 						</span>
-						
-						<button
-							@click="toggleOrder(order)"
-							class="w-full sm:w-auto font-semibold px-5 py-2.5 rounded-full bg-[#155DFC1A] text-[#2B7FFF] flex items-center justify-center gap-2 hover:bg-[#2B7FFF] hover:text-white transition-all group"
-						>
-							Detaylar
-							<Icon 
-								name="chevronDown" 
-								class="w-4 h-4 transition-transform duration-300" 
-								:class="{ 'rotate-180': order.expanded, 'group-hover:text-white': true }"
-							/>
-						</button>
 					</div>
+				</div>
+
+				<div class="border-t border-gray-100 mx-6"></div>
+
+				<div class="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+					<div>
+						<p class="text-[#6A7282] text-xs font-medium mb-1">{{ order.items?.reduce((sum, i) => sum + i.quantity, 0) || order.items?.length || 1 }} Ürün</p>
+						<p class="text-[#101828] text-lg font-bold">{{ formatPrice(order.total) }}₺</p>
+					</div>
+
+					<button
+						@click="toggleOrder(order)"
+						class="w-full sm:w-auto font-semibold px-5 py-2.5 rounded-full bg-[#2B7FFF] text-white flex items-center justify-center gap-1.5 hover:bg-[#1853a0] transition-all shadow-sm text-sm"
+					>
+						<span>Siparişi Görüntüle</span>
+						<Icon 
+							name="chevronRight" 
+							class="w-4 h-4 transition-transform duration-300 shrink-0" 
+							:class="{ 'rotate-90': order.expanded }"
+						/>
+					</button>
 				</div>
 
 				<!-- Order Items Dropdown -->
@@ -157,17 +158,21 @@
 						:key="item.id" 
 						class="flex gap-4 items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm"
 					>
-						<div class="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
-							<Icon v-if="!item.canvas_product" name="image" class="w-6 h-6 text-gray-400" />
-							<div v-else class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300">
-								<!-- We would put item preview here if we had item options preview handling -->
-							</div>
-						</div>
+						<nuxt-link 
+							:to="item.canvas_product?.slug ? `/products/${item.canvas_product.slug}` : '#'"
+							class="w-16 h-16 rounded-lg bg-[#f3f4f6] flex items-center justify-center overflow-hidden shrink-0 border border-gray-100 hover:opacity-80 transition-opacity"
+						>
+							<CartItemThumb v-if="item.canvas_product" :item="item" />
+							<Icon v-else name="image" class="w-6 h-6 text-gray-400" />
+						</nuxt-link>
 						
 						<div class="flex-1 min-w-0">
-							<h4 class="text-sm font-bold text-gray-900 truncate">
+							<nuxt-link 
+								:to="item.canvas_product?.slug ? `/products/${item.canvas_product.slug}` : '#'"
+								class="text-sm font-bold text-gray-900 hover:text-[#2B7FFF] transition-colors truncate block"
+							>
 								{{ item.canvas_product?.name || 'Ürün' }}
-							</h4>
+							</nuxt-link>
 							<p class="text-xs text-gray-500 mt-1">
 								Adet: {{ item.quantity }} x {{ formatPrice(item.price) }}₺
 							</p>

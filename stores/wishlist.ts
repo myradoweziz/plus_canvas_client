@@ -160,7 +160,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
 
     const removeFromWishlist = async (itemId: number) => {
         try {
-            const { $customFetch } = useNuxtApp()
+            const { $customFetch, $toast } = useNuxtApp()
             const headers: any = {}
             if (sessionId.value) {
                 headers['X-Session-ID'] = sessionId.value
@@ -180,6 +180,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
             
             // Refetch to get updated list
             fetchWishlist()
+            $toast.success('Ürün favorilerinizden çıkarıldı.')
         } catch (error) {
             console.error('Failed to remove item:', error)
         }
